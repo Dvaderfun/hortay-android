@@ -30,7 +30,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.runtime.saveable.rememberSaveable
-import dev.lyo.hortay.BuildConfig
+import dev.lyo.hortay.AppConfig
 import dev.lyo.hortay.R
 import dev.lyo.hortay.data.AutoDownloadStore
 import dev.lyo.hortay.data.ChannelActionsRepository
@@ -464,10 +464,10 @@ private fun SettingsMain(
                                 .build()
                                 .launchUrl(
                                     context,
-                                    android.net.Uri.parse(dev.lyo.hortay.BuildConfig.CHILD_SAFETY_POLICY_URL),
+                                    android.net.Uri.parse(dev.lyo.hortay.AppConfig.childSafetyPolicyUrl),
                                 )
                         } catch (_: android.content.ActivityNotFoundException) {
-                            uriHandler.openUri(dev.lyo.hortay.BuildConfig.CHILD_SAFETY_POLICY_URL)
+                            uriHandler.openUri(dev.lyo.hortay.AppConfig.childSafetyPolicyUrl)
                         }
                     },
                 )
@@ -484,10 +484,10 @@ private fun SettingsMain(
                                 .build()
                                 .launchUrl(
                                     context,
-                                    android.net.Uri.parse(dev.lyo.hortay.BuildConfig.PRIVACY_POLICY_URL),
+                                    android.net.Uri.parse(dev.lyo.hortay.AppConfig.privacyPolicyUrl),
                                 )
                         } catch (_: android.content.ActivityNotFoundException) {
-                            uriHandler.openUri(dev.lyo.hortay.BuildConfig.PRIVACY_POLICY_URL)
+                            uriHandler.openUri(dev.lyo.hortay.AppConfig.privacyPolicyUrl)
                         }
                     },
                 )
@@ -533,7 +533,7 @@ private fun SettingsMain(
                 SettingsRow(
                     symbol = "info",
                     title = stringResource(R.string.settings_version),
-                    subtitle = "${BuildConfig.VERSION_NAME} · build ${BuildConfig.VERSION_CODE}",
+                    subtitle = "${AppConfig.versionName} · build ${AppConfig.versionCode}",
                     index = 1,
                     count = 2,
                 )

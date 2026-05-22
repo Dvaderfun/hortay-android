@@ -15,10 +15,10 @@ import dev.lyo.hortay.data.VideoQualities
 import dev.lyo.hortay.data.VideoQuality
 import dev.lyo.hortay.data.WebPreview as TdWebPreview
 import dev.lyo.hortay.data.WebPreviewKind
-import org.jsoup.Jsoup
-import org.jsoup.nodes.Element
-import org.jsoup.nodes.Node
-import org.jsoup.nodes.TextNode
+import com.fleeksoft.ksoup.Ksoup
+import com.fleeksoft.ksoup.nodes.Element
+import com.fleeksoft.ksoup.nodes.Node
+import com.fleeksoft.ksoup.nodes.TextNode
 import java.time.OffsetDateTime
 
 /**
@@ -279,7 +279,7 @@ object WebPostAdapter {
 
     /** Phase 1 — see [htmlToFormatted]. */
     private fun emitVerbatim(html: String): RawWalk {
-        val doc = Jsoup.parseBodyFragment(html)
+        val doc = Ksoup.parseBodyFragment(html)
         val text = StringBuilder()
         val spans = mutableListOf<FormattedText.Span>()
 

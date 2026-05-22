@@ -4,7 +4,7 @@ plugins {
 
 android {
     namespace = "org.drinkless.tdlib"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 26
@@ -15,8 +15,8 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
     }
 
     // Dual jniLibs source: ALWAYS include the committed stripped libs from
@@ -43,12 +43,14 @@ android {
     // KEEP_DEBUG=1) → unstripped libs land in build/tdlib-unstripped/ →
     // `bundleRelease` picks them up → AAB ships full symbols → Play Console
     // gets correctly symbolicated native crash / ANR stacks for libtdjni.so.
+    // AGP 9 forbids duplicate .so across srcDirs. Pick unstripped overlay (full
+    // debug symbols for release AAB) when present, else committed stripped libs.
     sourceSets {
         getByName("main") {
-            jniLibs.srcDirs(
-                "src/main/jniLibs",
-                "build/tdlib-unstripped",
-            )
+            val unstripped = file("build/tdlib-unstripped")
+            val hasUnstripped = unstripped.exists() &&
+                unstripped.walkTopDown().any { it.name == "libtdjni.so" }
+            jniLibs.srcDirs(if (hasUnstripped) "build/tdlib-unstripped" else "src/main/jniLibs")
         }
     }
 }

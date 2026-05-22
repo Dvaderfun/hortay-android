@@ -9,6 +9,7 @@ import coil3.disk.DiskCache
 import coil3.disk.directory
 import coil3.memory.MemoryCache
 import coil3.request.crossfade
+import dev.lyo.hortay.app.BuildConfig
 import dev.lyo.hortay.data.LocaleStore
 
 class HortayApp : Application(), SingletonImageLoader.Factory {
@@ -16,17 +17,19 @@ class HortayApp : Application(), SingletonImageLoader.Factory {
     lateinit var graph: AppGraph
         private set
 
-    // Wrap application context with the user-picked locale on API 26-32. Strings reached
-    // through `applicationContext.resources` (TDLib error toasts, Coil error messages,
-    // some Compose stringResource calls that resolve via the application config) need
-    // this wrap; without it, only the activity-scoped lookups would localise. No-op on
-    // API 33+ — see [LocaleStore].
     override fun attachBaseContext(base: Context) {
         super.attachBaseContext(LocaleStore.wrap(base))
     }
 
     override fun onCreate() {
         super.onCreate()
+        AppConfig.telegramApiId = BuildConfig.TELEGRAM_API_ID
+        AppConfig.telegramApiHash = BuildConfig.TELEGRAM_API_HASH
+        AppConfig.childSafetyPolicyUrl = BuildConfig.CHILD_SAFETY_POLICY_URL
+        AppConfig.privacyPolicyUrl = BuildConfig.PRIVACY_POLICY_URL
+        AppConfig.debug = BuildConfig.DEBUG
+        AppConfig.versionName = BuildConfig.VERSION_NAME
+        AppConfig.versionCode = BuildConfig.VERSION_CODE
         graph = AppGraph(this)
     }
 

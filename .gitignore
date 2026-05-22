@@ -52,6 +52,13 @@ Desktop.ini
 *.tmp
 *.swp
 *~
+tdlog.txt
+
+# --- Codegraph MCP index (per-machine, regeneratable) ---
+.codegraph/
+
+# --- Gradle daemon JVM config (auto-generated per-machine) ---
+gradle/gradle-daemon-jvm.properties
 
 # --- Keystores (never commit signing keys) ---
 *.jks

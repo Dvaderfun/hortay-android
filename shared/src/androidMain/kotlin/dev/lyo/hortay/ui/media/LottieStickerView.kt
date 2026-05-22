@@ -1,7 +1,6 @@
 package dev.lyo.hortay.ui.media
 
-import android.graphics.PorterDuff
-import android.graphics.PorterDuffColorFilter
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -11,41 +10,70 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.airbnb.lottie.LottieComposition
-import com.airbnb.lottie.LottieProperty
-import com.airbnb.lottie.compose.LottieAnimation
-import com.airbnb.lottie.compose.LottieClipSpec
-import com.airbnb.lottie.compose.LottieConstants
-import com.airbnb.lottie.compose.LottieDynamicProperties
-import com.airbnb.lottie.compose.animateLottieCompositionAsState
-import com.airbnb.lottie.compose.rememberLottieDynamicProperties
-import com.airbnb.lottie.compose.rememberLottieDynamicProperty
+import io.github.alexzhirkevich.compottie.Compottie
+import io.github.alexzhirkevich.compottie.LottieComposition as CompottieComposition
+import io.github.alexzhirkevich.compottie.LottieCompositionSpec
+import io.github.alexzhirkevich.compottie.animateLottieCompositionAsState
+import io.github.alexzhirkevich.compottie.rememberLottiePainter
+import io.ktor.client.HttpClient
+import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.client.statement.bodyAsBytes
+import io.ktor.http.HttpHeaders
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import dev.lyo.hortay.data.DownloadPriority
 import dev.lyo.hortay.data.TdMedia
+import java.io.ByteArrayOutputStream
+import java.io.FileInputStream
+import java.util.zip.GZIPInputStream
 
 /**
- * Plays a Telegram TGS (gzipped Lottie) sticker. Pipeline:
+ * Plays a Telegram TGS (gzipped Lottie) sticker via Compottie. Pipeline:
  *
  *   1. Ask [MediaCache] to download the .tgs file at the given priority.
  *   2. Underlay the [thumb] (TDLib-served WEBP/PNG) — instant preview while bytes land.
- *   3. Once the file is `Ready`, decompress + parse via [LottieCompositionStore].
- *   4. Hand the composition to Compose's [LottieAnimation] — GPU-accelerated, cheap.
+ *   3. Once the file is `Ready`, decompress + parse into Compottie's
+ *      [CompottieComposition].
+ *   4. Hand the composition to Compose's [Image] with [rememberLottiePainter] —
+ *      Compottie's pure-Kotlin renderer, KMP-ready.
  *
- * Lifecycle / battery: animation pauses while the host lifecycle is below STARTED (app
- * backgrounded, screen off). Off-screen items in a LazyColumn are disposed by the
- * column itself, which tears down this composable and stops drawing entirely; we don't
- * need extra plumbing to handle that case.
+ * # Why Compottie here, Airbnb Lottie in [CustomEmojiAnimator]
  *
- * `repaintColor` honours TDLib's `StickerFullTypeCustomEmoji.needsRepainting` flag —
- * monochrome custom emojis must take the surrounding text colour. Lottie's
- * COLOR_FILTER dynamic property recolours the layers at draw time without re-parsing
- * the composition (so the cache hit is preserved across light/dark theme swaps).
+ * Two Lottie code paths coexist during the KMP migration:
+ *   - **This file (LottieStickerView):** full-size stickers in PostBody / comments.
+ *     One renderer per visible sticker; per-frame cost manageable. Uses Compottie's
+ *     `Image(painter = rememberLottiePainter(...))` — works on Android + iOS.
+ *   - **[CustomEmojiAnimator] + [InlineCustomEmojiRenderer]:** inline custom emoji
+ *     inside formatted text. 30+ active simultaneously on a busy feed; needs the
+ *     bitmap-bg-rasterisation double-buffer architecture which is bound to Airbnb's
+ *     `LottieDrawable.draw(canvas)` API. Compottie has no drawable equivalent
+ *     (renderer is Composable-only). Migration of that path is a separate ticket.
+ *
+ * The architecture-level rationale belongs in `ARCHITECTURE.md` once the dual-path
+ * split is durable.
+ *
+ * # Recoloring (`repaintColor`)
+ *
+ * TDLib's `StickerFullTypeCustomEmoji.needsRepainting` flag marks monochrome emojis
+ * that must take the surrounding text colour. Airbnb's path used
+ * `PorterDuffColorFilter(argb, PorterDuff.Mode.SRC_ATOP)` as a `LottieDynamicProperty`.
+ * Compottie's renderer respects Compose's [ColorFilter] on the surrounding [Image] —
+ * `ColorFilter.tint(color, blendMode = BlendMode.SrcAtop)` is the KMP-friendly
+ * equivalent. No per-layer dynamic-property DSL needed.
+ *
+ * # Lifecycle / battery
+ *
+ * Animation pauses while the host lifecycle is below STARTED (app backgrounded,
+ * screen off). Off-screen items in a LazyColumn are disposed by the column itself,
+ * which tears down this composable and stops drawing entirely.
  */
 @Composable
 fun LottieStickerView(
@@ -58,42 +86,27 @@ fun LottieStickerView(
     repaintColor: Color? = null,
     /**
      * Web-mode TGS payload URL. When [fileId] is null and [remoteUrl] is set, we
-     * bypass the [dev.lyo.hortay.data.MediaCache] / TDLib pathway entirely and
-     * fetch the .tgs (or pre-decompressed JSON) bytes via [LottieUrlStore]. Lets
-     * guest-mode custom emoji animate through the same Lottie Composable that
-     * TDLib mode uses — same animation engine, same recolour, same lifecycle.
+     * bypass [dev.lyo.hortay.data.MediaCache] / TDLib entirely and fetch the .tgs
+     * (or pre-decompressed JSON) bytes via [LocalWebHttpClient].
      */
     remoteUrl: String? = null,
 ) {
     val httpClient = LocalWebHttpClient.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    // Observe lifecycle state via Flow rather than a snapshot read so Compose
-    // recomposes when the host moves between STARTED / RESUMED / PAUSED. The
-    // earlier `lifecycle.currentState.isAtLeast(...)` form was a single-shot
-    // read that froze the playback gate at composition time, so a backgrounded
-    // sticker would keep animating until next recomposition (battery hit on
-    // long timelines with many TGS emojis).
     val lifecycleState by lifecycle.currentStateFlow.collectAsStateWithLifecycle()
     val isRemote = fileId == null && remoteUrl != null
 
-    // Centralised observe / ensure / cancelDeferred — see [rememberMediaBinding].
-    // Earlier this Composable owned its own copy of the four-step contract; the
-    // hook now holds it once for every TDLib renderer.
     val binding = rememberMediaBinding(fileId = fileId, priority = priority, isRemote = isRemote)
 
-    var composition by remember(fileId, remoteUrl) { mutableStateOf<LottieComposition?>(null) }
+    var composition by remember(fileId, remoteUrl) { mutableStateOf<CompottieComposition?>(null) }
     val readyPath = binding.readyPath
     LaunchedEffect(readyPath, remoteUrl, isRemote) {
         if (isRemote) {
             val url = remoteUrl ?: return@LaunchedEffect
-            composition = LottieUrlStore.load(url, httpClient)
+            composition = loadCompottieFromUrl(url, httpClient)
         } else {
-            // [MediaBinding.readyPath] returns null for both "not Ready" and
-            // "Ready but path empty" (TDLib's transient post-completion-rename
-            // snapshot), so the single null-check covers both cases — no
-            // separate isEmpty guard needed.
             val path = readyPath ?: return@LaunchedEffect
-            composition = LottieCompositionStore.load(path)
+            composition = loadCompottieFromPath(path)
         }
     }
 
@@ -102,26 +115,11 @@ fun LottieStickerView(
 
     val progress by animateLottieCompositionAsState(
         composition = composition,
-        iterations = if (iterate) LottieConstants.IterateForever else 1,
+        iterations = if (iterate) Compottie.IterateForever else 1,
         isPlaying = isPlaying,
-        clipSpec = LottieClipSpec.Progress(0f, 1f),
     )
 
-    val dynamicProperties: LottieDynamicProperties? = repaintColor?.let { color ->
-        val argb = color.toArgb()
-        rememberLottieDynamicProperties(
-            rememberLottieDynamicProperty(
-                property = LottieProperty.COLOR_FILTER,
-                value = PorterDuffColorFilter(argb, PorterDuff.Mode.SRC_ATOP),
-                keyPath = arrayOf("**"),
-            ),
-        )
-    }
-
     Box(modifier = modifier) {
-        // Underlay the static thumbnail until the composition is ready. We hide it once
-        // Lottie has frames so transparent areas of the sticker don't reveal the static
-        // thumb behind them (which would look like a doubled silhouette).
         if (thumb != null && composition == null) {
             TdMediaImage(
                 media = thumb,
@@ -134,12 +132,89 @@ fun LottieStickerView(
             )
         }
         composition?.let { comp ->
-            LottieAnimation(
-                composition = comp,
-                progress = { progress },
+            Image(
+                painter = rememberLottiePainter(
+                    composition = comp,
+                    progress = { progress },
+                ),
+                contentDescription = contentDescription,
                 modifier = Modifier.fillMaxSize(),
-                dynamicProperties = dynamicProperties,
+                colorFilter = repaintColor?.let {
+                    ColorFilter.tint(color = it, blendMode = BlendMode.SrcAtop)
+                },
             )
         }
     }
 }
+
+/**
+ * Load a TGS file from disk into a Compottie composition. Mirrors the gunzip + parse
+ * semantics of [LottieCompositionStore] but returns Compottie's composition type.
+ * Stays Android-only because `FileInputStream` + `GZIPInputStream` use java.io;
+ * iOS would need okio equivalents when this moves to commonMain.
+ */
+private suspend fun loadCompottieFromPath(path: String): CompottieComposition? =
+    withContext(Dispatchers.IO) {
+        val json = decompressTgsSafely(path) ?: return@withContext null
+        runCatching { LottieCompositionSpec.JsonString(json).load() }.getOrNull()
+    }
+
+private suspend fun loadCompottieFromUrl(url: String, http: HttpClient): CompottieComposition? =
+    withContext(Dispatchers.IO) {
+        val response = runCatching {
+            http.get(url) { header(HttpHeaders.UserAgent, COMPOTTIE_USER_AGENT) }
+        }.getOrNull() ?: return@withContext null
+        if (response.status.value !in 200..299) return@withContext null
+        val bytes = response.bodyAsBytes()
+        val json = decompressIfTgs(bytes) ?: return@withContext null
+        runCatching { LottieCompositionSpec.JsonString(json).load() }.getOrNull()
+    }
+
+private fun decompressTgsSafely(path: String): String? = try {
+    val out = ByteArrayOutputStream(64 * 1024)
+    FileInputStream(path).use { fis ->
+        GZIPInputStream(fis, 16 * 1024).use { gis ->
+            val buf = ByteArray(16 * 1024)
+            var total = 0L
+            while (true) {
+                val read = gis.read(buf)
+                if (read < 0) break
+                total += read
+                if (total > COMPOTTIE_MAX_DECOMPRESSED_BYTES) return null
+                out.write(buf, 0, read)
+            }
+        }
+    }
+    out.toString(Charsets.UTF_8.name())
+} catch (t: Throwable) {
+    if (t is kotlin.coroutines.cancellation.CancellationException) throw t
+    null
+}
+
+private fun decompressIfTgs(bytes: ByteArray): String? {
+    if (bytes.size > COMPOTTIE_MAX_DECOMPRESSED_BYTES) return null
+    val isGzip = bytes.size >= 2 && bytes[0] == 0x1F.toByte() && bytes[1] == 0x8B.toByte()
+    if (!isGzip) return String(bytes, Charsets.UTF_8)
+    return try {
+        val out = ByteArrayOutputStream(64 * 1024)
+        GZIPInputStream(bytes.inputStream(), 16 * 1024).use { gis ->
+            val buf = ByteArray(16 * 1024)
+            var total = 0L
+            while (true) {
+                val read = gis.read(buf)
+                if (read < 0) break
+                total += read
+                if (total > COMPOTTIE_MAX_DECOMPRESSED_BYTES) return null
+                out.write(buf, 0, read)
+            }
+        }
+        out.toString(Charsets.UTF_8.name())
+    } catch (t: Throwable) {
+        if (t is kotlin.coroutines.cancellation.CancellationException) throw t
+        null
+    }
+}
+
+private const val COMPOTTIE_MAX_DECOMPRESSED_BYTES = 5L * 1024L * 1024L
+private const val COMPOTTIE_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) " +
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"

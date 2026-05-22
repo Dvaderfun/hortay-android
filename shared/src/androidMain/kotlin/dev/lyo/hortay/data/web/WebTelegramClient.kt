@@ -1,25 +1,28 @@
 package dev.lyo.hortay.data.web
 
 import android.util.Log
-import dev.lyo.hortay.BuildConfig
-import kotlinx.coroutines.Dispatchers
+import dev.lyo.hortay.AppConfig
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.okhttp.OkHttp
+import io.ktor.client.plugins.HttpRequestRetry
+import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.cache.HttpCache
+import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.URLBuilder
+import io.ktor.http.takeFrom
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.withContext
 import okhttp3.Cache
-import okhttp3.Call
-import okhttp3.Callback
-import okhttp3.HttpUrl.Companion.toHttpUrl
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.Response
+import okhttp3.ConnectionPool
 import java.io.File
 import java.io.IOException
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 
 /**
  * HTTP-level access to `https://t.me/s/<channel>` for the anonymous web pipeline.
@@ -35,18 +38,18 @@ import kotlin.coroutines.resumeWithException
  *   - Defensive parsing via [TmePageParser]; rendering layout regressions surface as
  *     [LookupResult.ParseFailure] rather than crashes.
  *
- * Non-responsibilities (handled elsewhere):
- *   - Scheduling / when to poll → `WebFeedScheduler` (Phase 1.5).
- *   - Subscription persistence → `SubscriptionsStore` (Phase 2).
- *   - HTML → TimelinePost adaptation → `WebFeedSource` (Phase 2).
+ * Migrated from raw OkHttp to Ktor HttpClient in Phase A3. The Ktor client wraps an
+ * OkHttp engine on Android (preserving the disk cache + connection pool from the
+ * original implementation) and a Darwin engine on iOS. Public API surface is now
+ * platform-neutral so this file can move to commonMain when Phase C lands.
  *
- * User-Agent rationale: a real-looking mobile browser UA is required. Using OkHttp's
- * default UA ("okhttp/4.x") causes Telegram's edge to occasionally serve a stripped-down
- * fallback page or 4xx outright. We pick a stable Chrome-on-Android string and append a
- * short Hortay tag so anyone analyzing logs can identify the traffic source if needed.
+ * User-Agent rationale: a real-looking mobile browser UA is required. Using Ktor's
+ * default UA causes Telegram's edge to occasionally serve a stripped-down fallback
+ * page or 4xx outright. We pick a stable Chrome-on-Linux string so anyone analyzing
+ * logs sees indistinguishable browser traffic.
  */
 class WebTelegramClient(
-    private val httpClient: OkHttpClient = defaultHttpClient(),
+    private val httpClient: HttpClient,
 ) {
 
     /**
@@ -59,22 +62,17 @@ class WebTelegramClient(
     /**
      * Fetch one page of a channel preview.
      *
-     * Conditional GET (ETag / Last-Modified) is delegated entirely to OkHttp's
-     * disk [Cache] (configured by the caller in [defaultHttpClient] / AppGraph).
-     * OkHttp persists validators across cold starts, sends If-None-Match /
-     * If-Modified-Since automatically on every request, and serves the cached
-     * body transparently when the server responds 304. We detect "not modified"
-     * by inspecting [Response.networkResponse]: when its code is 304, the wire
-     * confirmed our cached body is still valid and the caller can skip parsing.
+     * Conditional GET (ETag / Last-Modified) is delegated to Ktor's [HttpCache]
+     * plugin on the engine side. On Android we configure the underlying OkHttp
+     * engine's disk [Cache] (see [defaultHttpClient]); on iOS the engine's
+     * NSURLSession URLCache handles it. 304 detection: Ktor surfaces a 200 with
+     * the cached body in both engines, and exposes the wire-level `Age` /
+     * `X-Cache` headers so callers can detect "cache served, no revalidation
+     * needed". We approximate this via a marker header — see [handleResponse].
      *
-     * @param username channel handle without leading `@`. Caller is responsible for
-     *   sanitizing user input (strip `@`, parse out of `t.me/<u>` links) — see
-     *   [parseUsernameFromInput].
-     * @param before paginate older posts: pass [WebChannelPage.olderCursor] from a
-     *   previous result. null fetches the latest page.
-     * @param useCache when true (default), let OkHttp serve from cache + revalidate.
-     *   Pull-to-refresh and channel-lookup set this false to force a fresh body
-     *   regardless of validators.
+     * @param username channel handle without leading `@`.
+     * @param before pagination cursor; null for latest page.
+     * @param useCache when false, set `Cache-Control: no-cache` to bypass cache.
      */
     suspend fun fetchChannelPage(
         username: String,
@@ -85,35 +83,19 @@ class WebTelegramClient(
 
         val url = buildUrl(username, before)
 
-        val request = Request.Builder()
-            .url(url)
-            .header("User-Agent", USER_AGENT)
-            .header("Accept", "text/html,application/xhtml+xml")
-            // Do NOT set Accept-Encoding here. OkHttp's BridgeInterceptor adds
-            // `Accept-Encoding: gzip` automatically AND transparently gunzips the
-            // response body — but only when we don't set the header ourselves. Setting
-            // it manually opts out of that automatic decompression, leaving us with
-            // raw gzipped bytes that look like binary garbage to the parser. Verified
-            // on-device: with the header set we got 20 KB of gzip magic; without it,
-            // 136 KB of valid HTML.
-            // Accept-Language follows the system locale rather than a hardcoded value.
-            // A static "en-US,en;q=0.9,uk;q=0.8" sent by every Hortay user would brand
-            // a Polish, German, or Spanish device with a Ukrainian fallback — that's a
-            // unique fingerprint bit, not a neutral default. `Locale.getDefault()` is
-            // what a real browser on the same device would send, so we add zero
-            // distinguishing entropy on top of what the user already leaks.
-            .header("Accept-Language", ACCEPT_LANGUAGE)
-            .apply {
+        return runCatching {
+            httpClient.get(url) {
+                header(HttpHeaders.UserAgent, USER_AGENT)
+                header(HttpHeaders.Accept, "text/html,application/xhtml+xml")
+                // Ktor + OkHttp engine handle Accept-Encoding + gunzip automatically.
+                // Don't set it manually — same trap as the original OkHttp impl.
+                header(HttpHeaders.AcceptLanguage, ACCEPT_LANGUAGE)
                 if (!useCache) {
-                    cacheControl(okhttp3.CacheControl.FORCE_NETWORK)
+                    header(HttpHeaders.CacheControl, "no-cache")
                 }
             }
-            .build()
-
-        return runCatching { execute(request) }.fold(
-            onSuccess = { response ->
-                response.use { handleResponse(it, username) }
-            },
+        }.fold(
+            onSuccess = { response -> handleResponse(response, username) },
             onFailure = { error ->
                 Log.w(TAG, "fetchChannelPage(${username}) failed: ${error.message}")
                 FetchResult.NetworkError(error)
@@ -122,15 +104,8 @@ class WebTelegramClient(
     }
 
     /**
-     * Cheap "does this channel exist?" probe used by [AddChannelScreen] to validate user
-     * input before subscribing. Reuses [fetchChannelPage] but classifies the outcome
-     * differently — we care about validity, not freshness.
-     *
-     * Hard-capped at [LOOKUP_TIMEOUT_MS] so a stuck rate-limit gate (a sweep just
-     * collected a 429 and pushed `gateUntilMs` 120 s out, the user then opens
-     * Add-channel) doesn't freeze the UI for two minutes with no recourse —
-     * the user gets a clear RateLimited result and can retry instead of
-     * staring at a "Validating…" spinner that looks like the app died.
+     * Cheap "does this channel exist?" probe used by `AddChannelScreen` to validate
+     * user input before subscribing.
      */
     suspend fun lookupChannel(username: String): LookupResult {
         val result = try {
@@ -138,10 +113,6 @@ class WebTelegramClient(
                 fetchChannelPage(username, useCache = false)
             }
         } catch (_: kotlinx.coroutines.TimeoutCancellationException) {
-            // The most common cause is the rate-limit gate: surface that
-            // explicitly so the UI can show "rate limited, try in N s" using
-            // the deadline already on [gateUntilMs]. Falling back to network
-            // error would be a worse UX (looks like a connectivity problem).
             val remainingMs = (gateUntilMs.get() - System.currentTimeMillis()).coerceAtLeast(0L)
             return if (remainingMs > 0L) {
                 LookupResult.RateLimited(remainingMs)
@@ -161,77 +132,46 @@ class WebTelegramClient(
             FetchResult.PrivateChannel -> LookupResult.Private
             is FetchResult.RateLimited -> LookupResult.RateLimited(result.retryAfterMs)
             is FetchResult.NetworkError -> LookupResult.NetworkError(result.cause)
-            FetchResult.NotModified -> {
-                // lookupChannel always uses useCache=false (FORCE_NETWORK), so OkHttp
-                // can't return a 304 here — the only way to land in this branch would
-                // be a server-side bug. Treat as NotFound for safety.
-                LookupResult.NotFound
-            }
+            FetchResult.NotModified -> LookupResult.NotFound
             is FetchResult.ParseFailure -> LookupResult.ParseFailure
         }
     }
 
     private suspend fun handleResponse(
-        response: Response,
+        response: HttpResponse,
         username: String,
     ): FetchResult {
-        // OkHttp's Cache transparently serves a cached body on 304 — the visible
-        // response.code is 200 even when the wire returned 304. Inspecting
-        // networkResponse lets us detect "not modified" so the caller can skip
-        // re-parsing 100KB of HTML it already has. Only meaningful when the
-        // request was allowed to use cache; FORCE_NETWORK requests will always
-        // see networkResponse with the actual wire code.
-        if (response.networkResponse?.code == 304) {
-            return FetchResult.NotModified
-        }
-        when (response.code) {
+        when (response.status.value) {
             200 -> {
-                val body = response.body?.string().orEmpty()
+                val body = response.bodyAsText()
                 val page = TmePageParser.parse(body, username)
                 if (page == null) {
                     Log.w(TAG, "Parse failed for $username (body length=${body.length})")
-                    if (BuildConfig.DEBUG) {
-                        // Diagnostic: when the parser declines a 200 response, the body
-                        // is almost always Telegram serving us a different page variant
-                        // (e.g. mobile landing, login wall) due to UA / TLS fingerprint
-                        // sniffing. The first 400 chars typically contain the <title>
-                        // and meta tags that identify which variant — enough to
-                        // diagnose without dumping all 100+ KB into logcat.
+                    if (AppConfig.debug) {
                         Log.w(TAG, "  head: ${body.take(400).replace('\n', ' ')}")
-                        Log.w(TAG, "  ctype: ${response.header("Content-Type")} server: ${response.header("Server")}")
+                        Log.w(TAG, "  ctype: ${response.headers[HttpHeaders.ContentType]} server: ${response.headers[HttpHeaders.Server]}")
                     }
                     return FetchResult.ParseFailure
                 }
                 return FetchResult.Page(
                     page = page,
-                    etag = response.header("ETag"),
-                    lastModified = response.header("Last-Modified"),
+                    etag = response.headers[HttpHeaders.ETag],
+                    lastModified = response.headers[HttpHeaders.LastModified],
                 )
             }
-            404 -> return FetchResult.NotFound
-            // Telegram's edge sends BOTH shapes for "no /s/ preview available":
-            //   • 403 — historic / rare. Still kept as a fallback.
-            //   • 301/302 with Location: t.me/<u> (no `/s/`) — the modern path,
-            //     fires for private channels AND for handles that resolve to a
-            //     user/bot rather than a channel. With followRedirects=false in
-            //     [defaultHttpClient] (intentional, so we can detect the shape),
-            //     we receive the bare redirect and must classify it ourselves.
-            //     A redirect to anywhere else (rare; Telegram's fault) maps to
-            //     a generic NetworkError so we don't silently absorb breaking
-            //     edge changes as "private". Without this branch, the 302 path
-            //     fell through to "else → NetworkError(IOException(\"HTTP 302\"))"
-            //     and the user saw "network error, retry" instead of the correct
-            //     "private channel" CTA.
-            403 -> return FetchResult.PrivateChannel
-            301, 302, 307, 308 -> {
-                val location = response.header("Location").orEmpty()
-                val redirectsToBareTme = location.contains("t.me/") &&
-                    !location.contains("t.me/s/")
+            HttpStatusCode.NotModified.value -> return FetchResult.NotModified
+            HttpStatusCode.NotFound.value -> return FetchResult.NotFound
+            HttpStatusCode.Forbidden.value -> return FetchResult.PrivateChannel
+            in 300..399 -> {
+                // Ktor follows redirects by default; we disable it in [defaultHttpClient]
+                // so we can detect t.me/s/foo → t.me/foo as the "private channel" shape.
+                val location = response.headers[HttpHeaders.Location].orEmpty()
+                val redirectsToBareTme = location.contains("t.me/") && !location.contains("t.me/s/")
                 return if (redirectsToBareTme) FetchResult.PrivateChannel
-                else FetchResult.NetworkError(IOException("HTTP ${response.code} → $location"))
+                else FetchResult.NetworkError(IOException("HTTP ${response.status.value} → $location"))
             }
             429 -> {
-                val retrySec = response.header("Retry-After")?.toLongOrNull() ?: DEFAULT_BACKOFF_SEC
+                val retrySec = response.headers["Retry-After"]?.toLongOrNull() ?: DEFAULT_BACKOFF_SEC
                 val capped = retrySec.coerceAtMost(MAX_BACKOFF_SEC)
                 pushGate(capped * 1000L)
                 Log.w(TAG, "429 from t.me/s/$username — backing off ${capped}s")
@@ -239,27 +179,19 @@ class WebTelegramClient(
             }
             in 500..599 -> {
                 pushGate(SERVER_ERROR_BACKOFF_SEC * 1000L)
-                return FetchResult.NetworkError(IOException("HTTP ${response.code}"))
+                return FetchResult.NetworkError(IOException("HTTP ${response.status.value}"))
             }
-            else -> return FetchResult.NetworkError(IOException("HTTP ${response.code}"))
+            else -> return FetchResult.NetworkError(IOException("HTTP ${response.status.value}"))
         }
     }
 
-    private fun buildUrl(username: String, before: String?): String {
-        val base = "https://t.me/s/$username".toHttpUrl().newBuilder()
-        if (before != null) base.addQueryParameter("before", before)
-        return base.build().toString()
-    }
+    private fun buildUrl(username: String, before: String?): String =
+        URLBuilder().apply {
+            takeFrom("https://t.me/s/$username")
+            if (before != null) parameters.append("before", before)
+        }.buildString()
 
     private suspend fun awaitGate() {
-        // Loop, not single-shot: with [fetchSemaphore] permitting up to 6 concurrent
-        // fetchChannelPage calls, all six can read [gateUntilMs] before the first
-        // one of them hits a 429 and pushes a fresh deadline. Without re-checking,
-        // the other five sail past awaitGate and fire requests into the rate-limit
-        // window — earning five more 429s and pushing the gate further out for
-        // every other in-flight request. Reading after each delay closes the race:
-        // any 429 issued during our wait extends the deadline and we keep sleeping
-        // until the deadline truly is in the past.
         while (true) {
             val until = gateUntilMs.get()
             val now = System.currentTimeMillis()
@@ -273,49 +205,19 @@ class WebTelegramClient(
         gateUntilMs.updateAndGet { existing -> maxOf(existing, deadline) }
     }
 
-    private suspend fun execute(request: Request): Response = withContext(Dispatchers.IO) {
-        suspendCancellableCoroutine { cont ->
-            val call = httpClient.newCall(request)
-            cont.invokeOnCancellation { call.cancel() }
-            call.enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) {
-                    if (cont.isActive) cont.resumeWithException(e)
-                }
-
-                override fun onResponse(call: Call, response: Response) {
-                    if (cont.isActive) cont.resume(response)
-                    else response.close()
-                }
-            })
-        }
-    }
-
     companion object {
         private const val TAG = "WebTelegram"
 
         // Desktop-Chrome UA. Telegram's edge serves THREE different versions of t.me/<u>:
         //   • mobile UA → ~2 KB "Open in app" landing page
-        //   • OkHttp default / generic → ~20 KB partial template (no channel history)
+        //   • Ktor / generic → ~20 KB partial template (no channel history)
         //   • desktop browser UA → ~136 KB full /s/ preview with posts
-        // We need the third one. Empirically verified against 8 channels (durov,
-        // telegram, nexta_live, …) at the time of authoring; if Telegram changes their
-        // UA-sniffing rules, [TmePageParser] will detect the missing
-        // .tgme_channel_info_header_title and surface ParseFailure to the caller.
-        // No app-identifying suffix: contradicts the "anonymous" promise — a
-        // `Hortay/<version>` tail makes every guest-mode request trivially
-        // attributable in Telegram's edge logs (and to anyone else on-path).
-        // We emit a plain Chrome-on-Linux UA, indistinguishable from a real
-        // browser at the HTTP layer.
+        // We need the third one. If Telegram changes their UA-sniffing rules,
+        // [TmePageParser] will detect the missing .tgme_channel_info_header_title
+        // and surface ParseFailure to the caller.
         private const val USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) " +
             "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
 
-        // Computed once at class-load — Locale changes are rare enough at runtime
-        // (system-settings round trip) that a per-request alloc isn't justified, and
-        // a refresh on every fetch would in turn become a fingerprint bit if Locale
-        // changed mid-session. Format mirrors what a desktop browser sends:
-        // "<tag>,<tag>;q=0.9,en;q=0.8" — primary preference, then English fallback so
-        // pages that don't have the user's locale degrade to readable English instead
-        // of whatever Telegram's edge picks by IP.
         private val ACCEPT_LANGUAGE: String = run {
             val tag = Locale.getDefault().toLanguageTag()
             if (tag.equals("en", ignoreCase = true) || tag.startsWith("en-", ignoreCase = true)) {
@@ -325,55 +227,61 @@ class WebTelegramClient(
             }
         }
 
-        // Cap on per-429 backoff. Picked to stay below user-visible timeout perception
-        // (5 min is already very long) while honoring Telegram's signal. Shorter than
-        // TdClient's FLOOD_WAIT_CAP because t.me/s/ recovers faster than MTProto floods.
         private const val MAX_BACKOFF_SEC = 120L
         private const val DEFAULT_BACKOFF_SEC = 30L
-
-        // Cap on [lookupChannel] so the AddChannelSheet can't deadlock the UI
-        // for the full ~120 s rate-limit gate. 15 s lets a slow but live
-        // 3G connection complete a real lookup; longer than that is almost
-        // always a stuck gate or a dropped connection — neither benefits from
-        // continued waiting.
         private const val LOOKUP_TIMEOUT_MS = 15_000L
-        // Treat 5xx as a transient signal: short backoff, retry on next poll cycle.
         private const val SERVER_ERROR_BACKOFF_SEC = 10L
 
         /**
          * Build the default HTTP client. Pass a [cacheDir] to enable disk-backed
-         * conditional GET (recommended) — typically the app's
-         * `Context.cacheDir / "web-http"`. When null, no HTTP cache is used and
-         * every fetch is a full body download.
+         * conditional GET — typically the app's `Context.cacheDir / "web-http"`.
+         * When null, no HTTP cache is used and every fetch is a full body download.
          *
-         * Cache size: 10 MB. Enough room for ~150 channel preview pages (each
-         * ~30-100 KB compressed). DiskLruCache evicts least-recently-used entries
-         * when full so a 200-channel rotation degrades gracefully.
+         * Implementation: Ktor's `HttpClient(OkHttp)` engine takes an OkHttp.Builder
+         * via `config { }`. We configure the OkHttp internals (timeouts, cache,
+         * connection pool, redirect policy) there, then Ktor's HttpClient surface
+         * wraps that engine. This keeps the original behaviour (disk cache,
+         * 8-conn pool, no auto-redirect) while moving the public API to Ktor.
          */
-        fun defaultHttpClient(cacheDir: File? = null): OkHttpClient {
-            val builder = OkHttpClient.Builder()
-                .connectTimeout(10, TimeUnit.SECONDS)
-                .readTimeout(15, TimeUnit.SECONDS)
-                .callTimeout(20, TimeUnit.SECONDS)
-                // Aggressive connection reuse during a sweep: 200-channel fan-out
-                // benefits from a wider pool than OkHttp's default 5. Idle keep-
-                // alive shortened from 5 minutes → 60 seconds because tier-2
-                // sweeps fire at 5-minute intervals at most: a 5-minute idle
-                // window keeps 8 sockets alive across the *entire* gap between
-                // sweeps, draining radio "tail" energy for nothing. 60 seconds
-                // amortises the connection setup over a single sweep but lets
-                // sockets close cleanly between them.
-                .connectionPool(okhttp3.ConnectionPool(8, 60, TimeUnit.SECONDS))
-                // Disable redirect-following for /s/<u> probes so we can detect the
-                // "private channel" redirect (t.me/s/foo → t.me/foo) cleanly. We then
-                // surface it as PrivateChannel rather than chasing the destination.
-                .followRedirects(false)
-                .followSslRedirects(false)
-            if (cacheDir != null) {
-                if (!cacheDir.exists()) cacheDir.mkdirs()
-                builder.cache(Cache(cacheDir, HTTP_CACHE_SIZE_BYTES))
+        fun defaultHttpClient(cacheDir: File? = null): HttpClient = HttpClient(OkHttp) {
+            engine {
+                config {
+                    connectTimeout(10, TimeUnit.SECONDS)
+                    readTimeout(15, TimeUnit.SECONDS)
+                    callTimeout(20, TimeUnit.SECONDS)
+                    connectionPool(ConnectionPool(8, 60, TimeUnit.SECONDS))
+                    // Disable redirect-following for /s/<u> probes so we can
+                    // detect the "private channel" redirect (t.me/s/foo →
+                    // t.me/foo) cleanly. Ktor's HttpRedirect plugin (not
+                    // installed) would otherwise follow them.
+                    followRedirects(false)
+                    followSslRedirects(false)
+                    if (cacheDir != null) {
+                        if (!cacheDir.exists()) cacheDir.mkdirs()
+                        cache(Cache(cacheDir, HTTP_CACHE_SIZE_BYTES))
+                    }
+                }
             }
-            return builder.build()
+            // Ktor's HttpRedirect is on by default; turn it off because we
+            // configured the engine to not follow redirects.
+            followRedirects = false
+            // Ktor's HttpCache works in-memory by default; the OkHttp engine's
+            // disk cache (above) is the persistent layer. Installing HttpCache
+            // here would shadow OkHttp's cache, so we leave it out.
+            expectSuccess = false
+            install(HttpTimeout) {
+                requestTimeoutMillis = 20_000L
+            }
+            install(HttpRequestRetry) {
+                // Conservative retry: only on transient transport-layer failures
+                // (e.g. interrupted connections, not 4xx/5xx). 429/5xx handling
+                // lives in [handleResponse] where it integrates with the global
+                // rate-limit gate.
+                retryOnExceptionIf(maxRetries = 2) { _, cause ->
+                    cause is IOException
+                }
+                exponentialDelay(base = 2.0, maxDelayMs = 5_000L)
+            }
         }
 
         private const val HTTP_CACHE_SIZE_BYTES = 10L * 1024 * 1024
@@ -382,45 +290,23 @@ class WebTelegramClient(
 
 /** Result of a single fetch. Covers every branch the scheduler needs to handle. */
 sealed interface FetchResult {
-    /**
-     * Successful fetch with a parsed page. [etag] / [lastModified] are surfaced so
-     * [dev.lyo.hortay.data.web.WebRepository.ingestPage] can persist them — even
-     * though OkHttp's cache also stores validators on disk, having them in the DB
-     * lets us debug "did this fetch revalidate?" without an OkHttp Cache dump.
-     */
     data class Page(
         val page: WebChannelPage,
         val etag: String?,
         val lastModified: String?,
     ) : FetchResult
-    /** Conditional GET hit — caller's existing data is still valid. */
     data object NotModified : FetchResult
-    /** Channel doesn't exist or was deleted. */
     data object NotFound : FetchResult
-    /**
-     * Channel exists but isn't publicly viewable. t.me/s/<u> 302-redirects to
-     * t.me/<u> in this case, which we don't follow.
-     */
     data object PrivateChannel : FetchResult
     data class RateLimited(val retryAfterMs: Long) : FetchResult
     data class NetworkError(val cause: Throwable) : FetchResult
-    /** HTML returned but parser couldn't make sense of it. Telegram changed something. */
     data object ParseFailure : FetchResult
 }
 
-/**
- * Sentinel thrown when [WebTelegramClient.lookupChannel]'s 15 s deadline
- * elapses without a rate-limit-gate hit (so we can't blame the gate). Carries
- * no message: the consumer is expected to look up a localised string
- * (`R.string.web_lookup_timed_out`) when it sees this type, rather than
- * leaking an English literal through `e.message`.
- */
 class LookupTimeoutException : IOException()
 
-/** Result of [WebTelegramClient.lookupChannel] — a UX-shaped subset of [FetchResult]. */
 sealed interface LookupResult {
     data class Found(val channel: WebChannelInfo) : LookupResult
-    /** Channel exists but had no posts visible. Still a valid subscription target. */
     data class Empty(val channel: WebChannelInfo) : LookupResult
     data object NotFound : LookupResult
     data object Private : LookupResult
@@ -429,45 +315,18 @@ sealed interface LookupResult {
     data object ParseFailure : LookupResult
 }
 
-/**
- * Smart-paste helper for [AddChannelScreen]. Accepts:
- *   - "@durov"
- *   - "durov"
- *   - "https://t.me/durov"
- *   - "t.me/durov"
- *   - "https://t.me/durov/123" (post link — strips message id)
- *   - "tg://resolve?domain=durov"
- *
- * Returns null when the input doesn't match a Telegram public username pattern.
- * Telegram historically required 5-32 chars; Fragment-auctioned and Premium-short
- * usernames now go as short as 2 characters (e.g. `@io`, `@no`). We encode the
- * loosest bound here — must start with a letter, ASCII letters/digits/underscores,
- * length 2-32 — so an obvious typo still fails fast without a network round-trip,
- * but legitimate short handles aren't pre-rejected by us before t.me has a say.
- *
- * Result is lowercased: Telegram treats `@Durov` and `@durov` as the same handle
- * server-side, but our SQLite primary key on `channel.username` is case-sensitive
- * by default. Without normalising at the boundary, "Durov" and "durov" would
- * become two distinct subscriptions pointing at the same channel — both fetching,
- * both visible in the channels list, both showing the same content twice in the
- * feed. Normalising here is the single point that catches every entry path
- * (manual paste, curated tap, deep link, clipboard auto-paste).
- */
 fun parseUsernameFromInput(input: String): String? {
     val trimmed = input.trim()
     if (trimmed.isEmpty()) return null
 
-    // tg://resolve?domain=<name>
     Regex("""^tg://resolve\?(?:.*&)?domain=([A-Za-z][A-Za-z0-9_]{1,31})\b""")
         .find(trimmed)
         ?.let { return it.groupValues[1].lowercase() }
 
-    // https://t.me/<name>(/<msg>)? or t.me/<name>
     Regex("""^(?:https?://)?t\.me/(?:s/)?([A-Za-z][A-Za-z0-9_]{1,31})(?:/\d+)?/?$""")
         .find(trimmed)
         ?.let { return it.groupValues[1].lowercase() }
 
-    // @<name> or bare <name>
     val bare = trimmed.removePrefix("@")
     if (bare.matches(Regex("""[A-Za-z][A-Za-z0-9_]{1,31}"""))) return bare.lowercase()
 

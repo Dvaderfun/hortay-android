@@ -3,10 +3,13 @@ package dev.lyo.hortay.ui.media
 import android.util.Log
 import com.airbnb.lottie.LottieComposition
 import com.airbnb.lottie.LottieCompositionFactory
+import io.ktor.client.HttpClient
+import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.client.statement.bodyAsBytes
+import io.ktor.http.HttpHeaders
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import okhttp3.Request
 import java.io.ByteArrayOutputStream
 import java.util.LinkedHashMap
 import java.util.zip.GZIPInputStream
@@ -33,7 +36,7 @@ internal object LottieUrlStore {
             size > MAX_ENTRIES
     }
 
-    suspend fun load(url: String, http: OkHttpClient): LottieComposition? {
+    suspend fun load(url: String, http: HttpClient): LottieComposition? {
         synchronized(lru) { lru[url]?.let { return it } }
         return withContext(Dispatchers.IO) {
             val bytes = runCatching { fetch(url, http) }.getOrElse {
@@ -51,15 +54,15 @@ internal object LottieUrlStore {
         }
     }
 
-    private fun fetch(url: String, http: OkHttpClient): ByteArray? {
-        val request = Request.Builder().url(url).header("User-Agent", USER_AGENT).build()
-        http.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) {
-                Log.w(TAG, "lottie URL HTTP ${response.code}: $url")
-                return null
-            }
-            return response.body?.bytes()
+    private suspend fun fetch(url: String, http: HttpClient): ByteArray? {
+        val response = http.get(url) {
+            header(HttpHeaders.UserAgent, USER_AGENT)
         }
+        if (response.status.value !in 200..299) {
+            Log.w(TAG, "lottie URL HTTP ${response.status.value}: $url")
+            return null
+        }
+        return response.bodyAsBytes()
     }
 
     /**

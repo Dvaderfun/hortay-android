@@ -316,7 +316,7 @@ class AppGraph(context: Context) {
      * cold TGS resolve hits the same H2 connection that the JSON resolve already
      * opened to t.me.
      */
-    val webHttpClient: okhttp3.OkHttpClient =
+    val webHttpClient: io.ktor.client.HttpClient =
         WebTelegramClient.defaultHttpClient(File(context.cacheDir, "web-http"))
 
     val webClient: WebTelegramClient = WebTelegramClient(webHttpClient)

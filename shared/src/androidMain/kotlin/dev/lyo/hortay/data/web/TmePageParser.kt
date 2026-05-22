@@ -1,9 +1,9 @@
 package dev.lyo.hortay.data.web
 
 import kotlinx.collections.immutable.toPersistentList
-import org.jsoup.Jsoup
-import org.jsoup.nodes.Document
-import org.jsoup.nodes.Element
+import com.fleeksoft.ksoup.Ksoup
+import com.fleeksoft.ksoup.nodes.Document
+import com.fleeksoft.ksoup.nodes.Element
 
 /**
  * Parses HTML from `https://t.me/s/<username>` into a [WebChannelPage].
@@ -30,7 +30,7 @@ object TmePageParser {
      * a channel preview (404 page, /privatechannel redirect, login wall).
      */
     fun parse(html: String, username: String): WebChannelPage? {
-        val doc = Jsoup.parse(html)
+        val doc = Ksoup.parse(html)
         val channel = parseChannelInfo(doc, username) ?: return null
         val posts = parsePosts(doc)
         // Cursor is the seq id of the OLDEST post; caller paginates with `?before=<seq>`.

@@ -26,7 +26,7 @@
     </queries>
 
     <application
-        android:name=".HortayApp"
+        android:name="dev.lyo.hortay.HortayApp"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         tools:replace="android:allowBackup"
@@ -39,7 +39,7 @@
         android:localeConfig="@xml/locales_config">
 
         <activity
-            android:name=".MainActivity"
+            android:name="dev.lyo.hortay.MainActivity"
             android:exported="true"
             android:theme="@style/Theme.Hortay.Splash"
             android:windowSoftInputMode="adjustResize">

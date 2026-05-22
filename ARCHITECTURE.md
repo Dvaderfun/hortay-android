@@ -22,15 +22,24 @@ Modules, load-bearing decisions, hard rules, and conventions. Pair with [README.
 
 Single-process, single-Activity. `MainActivity` routes: `auth.Ready → MainScaffold` → `isGuest → WebModeScaffold` → else `AuthScreen`. Subscriptions (DataStore `SubscriptionsStore`) survive both transitions.
 
-## Architecture (3 modules)
+## Architecture (4 modules — KMP/CMP)
 
-- **`:app`** — Compose UI, `AppGraph` (manual DI), repositories, ViewModels. JVM 17.
-- **`:libtdlib`** — Vendored TDLib JNI (`org.drinkless.tdlib.{Client,TdApi}.java`) + `jniLibs`. Don't hand-edit the `.java` files — `scripts/update-tdlib.sh` will clobber them.
-- **`:baselineprofile`** — Macrobenchmark, AOT cold-start profile.
+- **`:androidApp`** — Android application entry point. `HortayApp` (Application class), `MainActivity`, `AndroidManifest.xml`, signing configs, build types (debug/release/beta/benchmark), proguard rules. Depends on `:shared`. Plugin: `com.android.application`. JVM 21.
+- **`:shared`** — KMP library module with Compose Multiplatform UI. Contains `AppGraph` (manual DI), repositories, ViewModels, all UI, data layer, SQLDelight DAOs. Plugin: `com.android.kotlin.multiplatform.library` + `org.jetbrains.kotlin.multiplatform` + `org.jetbrains.compose`. Source sets: `commonMain` (shared across all targets), `androidMain` (Android-specific incl. TDLib + ExoPlayer). JVM 21. Naming follows the [May 2026 JetBrains KMP default structure](https://blog.jetbrains.com/kotlin/2026/05/new-kmp-default-structure/) — `shared` denotes a library, `androidApp` is the entry point.
+- **`:libtdlib`** — Vendored TDLib JNI (`org.drinkless.tdlib.{Client,TdApi}.java`) + `jniLibs`. Android-only. Don't hand-edit the `.java` files — `scripts/update-tdlib.sh` will clobber them.
+- **`:baselineprofile`** — Macrobenchmark, AOT cold-start profile. Targets `:androidApp`.
+
+**Why split `:androidApp` + `:shared`:** AGP 9 forbids `com.android.application` + `org.jetbrains.kotlin.multiplatform` in the same module. Application module stays pure Android; KMP library module owns shared code. See [JetBrains migration guide](https://kotlinlang.org/docs/multiplatform/multiplatform-project-agp-9-migration.html).
+
+**BuildConfig bridge.** `com.android.kotlin.multiplatform.library` doesn't generate `buildConfigField`. `:androidApp` defines BuildConfig fields (`TELEGRAM_API_ID`, etc.), `HortayApp.onCreate` writes them into the `AppConfig` object in `:shared`/androidMain. All non-Application code reads from `AppConfig`.
+
+**Namespace split.** `:shared` namespace = `dev.lyo.hortay` (so `R.string.*` references stay unchanged across 130+ files). `:androidApp` namespace = `dev.lyo.hortay.app` (avoids R-class collision). Manifest uses FQCN `android:name="dev.lyo.hortay.HortayApp"` because `HortayApp` and `MainActivity` live in `androidApp/src/main/kotlin/dev/lyo/hortay/` — manifest's namespace-relative resolution would otherwise look in `dev.lyo.hortay.app.*`.
 
 DI built in `HortayApp.onCreate` as `graph: AppGraph`, accessed via `(application as HortayApp).graph`. Heavy singletons (`MediaCache`, `CustomEmoji`, `ExoPlayerPool`, `ReadCursors`) injected via CompositionLocal in `MainActivity`.
 
-**Modularization trigger.** Stay single-`:app` until any of: > 300 Kotlin files in `:app/src/main`, cold build > 60 s on dev hardware, or > 1 active contributor. Cut lines are already encoded by packages — `data/web/*` → `:data-web`, `ui/timeline/*` + `ui/main/*` → `:feature-timeline`, `ui/theme/*` + `ui/components/*` → `:core-ui`. Until then, enforce boundaries with `internal` visibility, not separate modules.
+**Code distribution (current state, post-Phase 1):** All ~177 Kotlin source files live in `shared/src/androidMain/kotlin/`. `commonMain` directories exist but are empty — code moves to `commonMain` happen in subsequent phases. Migration plan: pure data models + CMP-ready UI (~65 files) → `commonMain`; TDLib + ExoPlayer + platform services stay in `androidMain` behind expect/actual.
+
+**Modularization trigger (for further splits within `:shared`).** Stay single-source-set inside `:shared` until any of: > 300 Kotlin files in `androidMain`, cold build > 60 s on dev hardware, or > 1 active contributor. Cut lines are already encoded by packages — `data/web/*` → `:data-web`, `ui/timeline/*` + `ui/main/*` → `:feature-timeline`, `ui/theme/*` + `ui/components/*` → `:core-ui`. Until then, enforce boundaries with `internal` visibility, not separate modules.
 
 ## Load-bearing — don't change without reading the rationale in place
 
@@ -45,7 +54,7 @@ DI built in `HortayApp.onCreate` as `graph: AppGraph`, accessed via `(applicatio
 | Cold-start snapshot | `data/TimelineSnapshotStore.kt` + `TimelineViewModel:59-66` | Restore → parallel `refreshIfStale`. |
 | FLOOD_WAIT global gate | `data/TdClient.kt:100-113` | Single `AtomicLong` deadline. Recognise **both 420 and 429**. |
 | TDLib quirks (album sync, stall) | `data/MediaCache.kt:55-71` + `data/posts/PostsRepository.kt:67-74` | `tdlib/td#2523`, `tdlib/td#2585`. |
-| Web-mode SQL portability | `app/src/main/sqldelight/.../web/db/*.sq` | All upserts via `INSERT OR IGNORE` + `UPDATE` — **not** `ON CONFLICT DO UPDATE`. Android 8/9 SQLite < 3.24. FTS5 skipped. |
+| Web-mode SQL portability | `shared/src/androidMain/sqldelight/.../web/db/*.sq` | All upserts via `INSERT OR IGNORE` + `UPDATE` — **not** `ON CONFLICT DO UPDATE`. Android 8/9 SQLite < 3.24. FTS5 skipped. |
 | Web-mode media TTL | `data/web/Post.sq` + `WebFeedSource.DEFAULT_MEDIA_TTL_MS` | t.me/s/ CDN URLs live 1–4 h. |
 | Guest-mode routing | `MainActivity.kt` | `auth.Ready → MainScaffold` → `isGuest → WebModeScaffold` → `AuthScreen`. |
 | StartupCoordinator | `data/StartupCoordinator.kt` | `Booting → Active` gates speculative work. |
@@ -115,8 +124,11 @@ Each `❌` carries a **Revisit:** clause — the concrete condition that would j
 
 - ❌ `enableV1Signing = true` — AGP 9 + R8 zip layout breaks JarInputStream v1.
 - ❌ `x86_64` in release `abiFilters` — +24 MB libtdjni.so for zero users.
-- ❌ Bumping `versionCode` by hand. It's auto-derived from `git rev-list --count HEAD` (`app/build.gradle.kts:158-185`).
+- ❌ Bumping `versionCode` by hand. It's auto-derived from `git rev-list --count HEAD` in `androidApp/build.gradle.kts`.
 - ❌ `bundleRelease` without a fresh commit — same versionCode → Play returns 409. Workflow: commit → bundle.
+- ❌ Adding `buildConfigField` to `:shared`. The KMP library plugin (`com.android.kotlin.multiplatform.library`) doesn't support `buildFeatures.buildConfig`. New runtime constants go into `androidApp/build.gradle.kts` as `buildConfigField`, then `HortayApp.onCreate` mirrors them into `AppConfig` for the rest of the app to read.
+- ❌ Referencing `dev.lyo.hortay.BuildConfig` from `:shared`. Use `AppConfig.*` instead.
+- ❌ `com.android.application` plugin + `org.jetbrains.kotlin.multiplatform` in the same module. AGP 9 forbids it. App-shell stays separate from KMP library.
 
 ### Workspace
 
@@ -144,35 +156,38 @@ CHANGELOG.md is release notes for a user, not a PR description. Rationale lives 
 ## Commands
 
 ```bash
-./gradlew :app:installDebug
-./gradlew :app:assembleRelease           # release APK (needs keystore.properties)
-./gradlew :app:assembleBeta              # beta, applicationId.beta, versionCode = git commit count
-./gradlew test                           # JUnit 5 unit tests
-./gradlew :app:lintRelease               # R8 + lint vital — pre-commit gate
-./gradlew :app:generateBaselineProfile   # AOT profile (~3–5 min on device)
-./scripts/update-tdlib.sh [SHA]          # Bump TDLib (Docker, ~10–15 min)
+./gradlew :androidApp:installDebug
+./gradlew :androidApp:assembleRelease           # release APK (needs keystore.properties)
+./gradlew :androidApp:assembleBeta              # beta, applicationId.beta, versionCode = git commit count
+./gradlew :shared:compileAndroidMain        # compile KMP shared module only
+./gradlew test                                  # JUnit 5 unit tests
+./gradlew :androidApp:lintRelease               # R8 + lint vital — pre-commit gate
+./gradlew :androidApp:generateBaselineProfile   # AOT profile (~3–5 min on device)
+./scripts/update-tdlib.sh [SHA]                 # Bump TDLib (Docker, ~10–15 min)
 adb logcat -s TdClient MediaCache PostsRepository ChatPresence
+adb shell run-as dev.lyo.hortay tail -f files/td-logs/td.log  # TDLib internal log (debug builds, LOG_VERBOSITY=1)
 ```
 
-Toolchain: JDK 17, Gradle 9.4.1, AGP 9.2.0, Kotlin 2.3.10 (K2). Compose Compiler via `org.jetbrains.kotlin.plugin.compose`.
+Toolchain: JDK 21, Gradle 9.5.1, AGP 9.2.0, Kotlin 2.3.10 (K2), Compose Multiplatform 1.12.0-alpha01. Compose Compiler via `org.jetbrains.kotlin.plugin.compose`.
 
 ### Verifying rules
 
-- **Compose skippability** — Compose Compiler stability reports are wired via the Kotlin Compose plugin; check `app/build/compose_compiler/` after a build. New `@Stable`/`@Immutable` regressions show up as "unstable" classes in the graph.
-- **Translations parity** — `./gradlew :app:lintRelease` flags `MissingTranslation`. CI gate.
+- **Compose skippability** — Compose Compiler stability reports are wired via the Kotlin Compose plugin; check `shared/build/compose_compiler/` after a build. New `@Stable`/`@Immutable` regressions show up as "unstable" classes in the graph.
+- **Translations parity** — `./gradlew :androidApp:lintRelease` flags `MissingTranslation`. CI gate.
 - **Cold-start budget** — `:baselineprofile` macrobenchmark + `adb logcat -s PostsRepository` (look for `GetChat`/`GetChatHistory` storms).
-- **Static analysis (Compose stability + Kotlin smells)** — `./gradlew :app:detekt` (config: `config/detekt/detekt.yml`, baseline: `config/detekt/baseline.xml`). Not bundled into `lintRelease` — heavy on dev hardware; CI gate adds it explicitly. Compose rules from `nlopez/compose-rules` surface `Modifier` ordering, `UnstableCollections` (platform `List`/`Map` reaching Composables), `CompositionLocalAllowlist` and the rest of the Compose-specific smells. Run `./gradlew :app:detektBaseline` once after enabling to seed the baseline; commit the regenerated file.
+- **Static analysis (Compose stability + Kotlin smells)** — `./gradlew :shared:detekt` (config: `config/detekt/detekt.yml`, baseline: `config/detekt/baseline.xml`). Not bundled into `lintRelease` — heavy on dev hardware; CI gate adds it explicitly.
 
 ## Setup delta on top of README
 
-- `keystore.properties` at the repo root (gitignored) supplies `storeFile`, `storePassword`, `keyAlias`, `keyPassword`. AGP enables release signing only when this file exists (`app/build.gradle.kts:59-70`).
+- `keystore.properties` at the repo root (gitignored) supplies `storeFile`, `storePassword`, `keyAlias`, `keyPassword`. AGP enables release signing only when this file exists (`androidApp/build.gradle.kts`).
+- `local.properties` at repo root (gitignored) supplies `telegram.apiId` + `telegram.apiHash` from <https://my.telegram.org>. Read by `androidApp/build.gradle.kts` → `BuildConfig` → `AppConfig`.
 - Beta uses the same keystore + auto-versionCode from git.
 - `gradle.properties` carries `HORTAY_CHILD_SAFETY_POLICY_URL` / `HORTAY_PRIVACY_POLICY_URL` for CSAE compliance.
 
 ## Versioning
 
-- `versionCode` for release and beta is auto-derived from `git rev-list --count HEAD` (`app/build.gradle.kts:158-185`).
+- `versionCode` for release and beta is auto-derived from `git rev-list --count HEAD` in `androidApp/build.gradle.kts`.
 - `versionCode = 1` in `defaultConfig` is a sentinel for debug builds.
 - `versionName` is manual. Bump on semver-worthy releases. Beta auto-appends `-beta-<sha>`.
 - TDLib pin: `scripts/tdlib-version.txt` (auto-generated). Dedicated commit `chore(tdlib): bump to <sha>` per bump.
-- Native debug symbols: `scripts/update-tdlib.sh` (default `KEEP_DEBUG=1`) extracts unstripped libs into `libtdlib/build/tdlib-unstripped/<abi>/libtdjni.so`. AGP `debugSymbolLevel = "FULL"` packages them into the AAB.
+- Native debug symbols: `scripts/update-tdlib.sh` (default `KEEP_DEBUG=1`) extracts unstripped libs into `libtdlib/build/tdlib-unstripped/<abi>/libtdjni.so`. AGP `debugSymbolLevel = "FULL"` packages them into the AAB. `libtdlib/build.gradle.kts` sourceSets picks unstripped overlay when present, falls back to committed stripped libs otherwise (AGP 9 forbids duplicate `.so` across `srcDirs`).

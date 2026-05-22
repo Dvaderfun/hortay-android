@@ -1,6 +1,6 @@
 package dev.lyo.hortay.data.web
 
-import org.jsoup.Jsoup
+import com.fleeksoft.ksoup.Ksoup
 
 /**
  * Plain-text projection of Telegram channel-preview post HTML (the inner HTML of
@@ -35,6 +35,6 @@ object WebTextRenderer {
      */
     fun toPlainText(html: String): String {
         if (html.isBlank()) return ""
-        return Jsoup.parseBodyFragment(html).body().text()
+        return Ksoup.parseBodyFragment(html).body().text()
     }
 }
