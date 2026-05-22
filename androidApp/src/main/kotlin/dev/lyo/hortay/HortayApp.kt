@@ -23,6 +23,10 @@ class HortayApp : Application(), SingletonImageLoader.Factory {
 
     override fun onCreate() {
         super.onCreate()
+        // PlatformContextHolder must init BEFORE AppGraph — the KMP
+        // createPreferencesDataStore factory reads its app context to
+        // resolve filesDir for the .preferences_pb on-disk file.
+        dev.lyo.hortay.data.PlatformContextHolder.init(this)
         AppConfig.telegramApiId = BuildConfig.TELEGRAM_API_ID
         AppConfig.telegramApiHash = BuildConfig.TELEGRAM_API_HASH
         AppConfig.childSafetyPolicyUrl = BuildConfig.CHILD_SAFETY_POLICY_URL

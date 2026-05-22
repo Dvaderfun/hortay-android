@@ -336,7 +336,8 @@ class AppGraph(context: Context) {
      * user signs in, Phase 2's migration step uses this set to drive auto-subscribe
      * via TdApi.SearchPublicChat + TdApi.JoinChat (throttled).
      */
-    val webSubscriptions: SubscriptionsStore = SubscriptionsStore(context)
+    val webSubscriptions: SubscriptionsStore =
+        SubscriptionsStore(dev.lyo.hortay.data.createPreferencesDataStore(SubscriptionsStore.FILE_NAME))
 
     /** Persists "use the app without signing in" choice. See [GuestModeStore]. */
     val guestMode: GuestModeStore = GuestModeStore(context)
