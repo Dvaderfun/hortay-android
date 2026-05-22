@@ -60,6 +60,11 @@ tdlog.txt
 # --- Gradle daemon JVM config (auto-generated per-machine) ---
 gradle/gradle-daemon-jvm.properties
 
+# --- Xcode user state (per-developer, not part of project config) ---
+**/xcuserdata/
+**/project.xcworkspace/xcuserdata/
+**/*.xcodeproj/project.xcworkspace/
+
 # --- Keystores (never commit signing keys) ---
 *.jks
 *.keystore
