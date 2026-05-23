@@ -1,6 +1,6 @@
 package dev.lyo.hortay.data.web
 
-import android.util.Log
+import dev.lyo.hortay.PlatformLog
 import dev.lyo.hortay.data.AuthStage
 import dev.lyo.hortay.data.ChannelActionsRepository
 import dev.lyo.hortay.data.posts.PostsRepository
@@ -147,7 +147,7 @@ class MigrationCoordinator(
             } catch (cancellation: kotlinx.coroutines.CancellationException) {
                 throw cancellation
             } catch (t: Throwable) {
-                Log.w(TAG, "migration: SearchPublicChat($cleaned) failed: ${t.message}")
+                PlatformLog.w(TAG, "migration: SearchPublicChat($cleaned) failed: ${t.message}")
                 anyFailure.set(true)
                 null
             }
@@ -156,7 +156,7 @@ class MigrationCoordinator(
                     // null without exception = TDLib reports no such public chat.
                     // That's a permanent classification (handle was wrong, channel
                     // was deleted) — don't re-offer.
-                    Log.w(TAG, "migration: SearchPublicChat($cleaned) returned null (skip, won't retry)")
+                    PlatformLog.w(TAG, "migration: SearchPublicChat($cleaned) returned null (skip, won't retry)")
                 }
             } else {
                 try {
@@ -165,7 +165,7 @@ class MigrationCoordinator(
                 } catch (cancellation: kotlinx.coroutines.CancellationException) {
                     throw cancellation
                 } catch (t: Throwable) {
-                    Log.w(TAG, "migration: JoinChat($cleaned) failed: ${t.message}")
+                    PlatformLog.w(TAG, "migration: JoinChat($cleaned) failed: ${t.message}")
                     anyFailure.set(true)
                 }
             }
@@ -191,7 +191,7 @@ class MigrationCoordinator(
                 runCatching { subscriptions.remove(username) }
                     .onFailure { err ->
                         if (err is kotlinx.coroutines.CancellationException) throw err
-                        Log.w(TAG, "migration: subscriptions.remove($username) failed: ${err.message}")
+                        PlatformLog.w(TAG, "migration: subscriptions.remove($username) failed: ${err.message}")
                     }
             }
             // No manual refresh after JoinChat: TDLib emits UpdateNewChat with
@@ -212,7 +212,7 @@ class MigrationCoordinator(
         if (!anyFailure.get()) {
             migrationStore.markProposalShown()
         } else {
-            Log.i(TAG, "migration: ${migrated.size}/${usernames.size} succeeded, retryable failures left — proposal stays pending")
+            PlatformLog.i(TAG, "migration: ${migrated.size}/${usernames.size} succeeded, retryable failures left — proposal stays pending")
         }
         _progress.value = Progress(total = usernames.size, processed = usernames.size, lastUsername = null)
         _pendingProposal.value = null

@@ -1,6 +1,6 @@
 package dev.lyo.hortay.data.web
 
-import android.util.Log
+import dev.lyo.hortay.PlatformLog
 import dev.lyo.hortay.AppConfig
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
@@ -97,7 +97,7 @@ class WebTelegramClient(
         }.fold(
             onSuccess = { response -> handleResponse(response, username) },
             onFailure = { error ->
-                Log.w(TAG, "fetchChannelPage(${username}) failed: ${error.message}")
+                PlatformLog.w(TAG, "fetchChannelPage(${username}) failed: ${error.message}")
                 FetchResult.NetworkError(error)
             },
         )
@@ -146,10 +146,10 @@ class WebTelegramClient(
                 val body = response.bodyAsText()
                 val page = TmePageParser.parse(body, username)
                 if (page == null) {
-                    Log.w(TAG, "Parse failed for $username (body length=${body.length})")
+                    PlatformLog.w(TAG, "Parse failed for $username (body length=${body.length})")
                     if (AppConfig.debug) {
-                        Log.w(TAG, "  head: ${body.take(400).replace('\n', ' ')}")
-                        Log.w(TAG, "  ctype: ${response.headers[HttpHeaders.ContentType]} server: ${response.headers[HttpHeaders.Server]}")
+                        PlatformLog.w(TAG, "  head: ${body.take(400).replace('\n', ' ')}")
+                        PlatformLog.w(TAG, "  ctype: ${response.headers[HttpHeaders.ContentType]} server: ${response.headers[HttpHeaders.Server]}")
                     }
                     return FetchResult.ParseFailure
                 }
@@ -174,7 +174,7 @@ class WebTelegramClient(
                 val retrySec = response.headers["Retry-After"]?.toLongOrNull() ?: DEFAULT_BACKOFF_SEC
                 val capped = retrySec.coerceAtMost(MAX_BACKOFF_SEC)
                 pushGate(capped * 1000L)
-                Log.w(TAG, "429 from t.me/s/$username — backing off ${capped}s")
+                PlatformLog.w(TAG, "429 from t.me/s/$username — backing off ${capped}s")
                 return FetchResult.RateLimited(capped * 1000L)
             }
             in 500..599 -> {

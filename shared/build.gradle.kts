@@ -58,6 +58,8 @@ kotlin {
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.kotlinx.collections.immutable)
+            implementation(libs.kotlinx.datetime)
+            implementation(libs.kotlinx.atomicfu)
 
             // Ksoup — KMP HTML parser, replaces Jsoup. Same API surface
             // (Jsoup.parse, Document/Element/Node, CSS selectors).

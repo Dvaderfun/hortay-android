@@ -340,7 +340,9 @@ class AppGraph(context: Context) {
         SubscriptionsStore(dev.lyo.hortay.data.createPreferencesDataStore(SubscriptionsStore.FILE_NAME))
 
     /** Persists "use the app without signing in" choice. See [GuestModeStore]. */
-    val guestMode: GuestModeStore = GuestModeStore(context)
+    val guestMode: GuestModeStore = GuestModeStore(
+        dev.lyo.hortay.data.createPreferencesDataStore(GuestModeStore.FILE_NAME),
+    )
 
     /**
      * Multi-channel orchestrator. Mirrors [webSubscriptions] into the channel
@@ -407,7 +409,9 @@ class AppGraph(context: Context) {
      * erase migration history (the user might re-add a few of the same channels
      * in guest mode before re-authenticating).
      */
-    val migrationStore: MigrationStore = MigrationStore(context)
+    val migrationStore: MigrationStore = MigrationStore(
+        dev.lyo.hortay.data.createPreferencesDataStore(MigrationStore.FILE_NAME),
+    )
 
     /**
      * Drives the post-sign-in migration proposal. Listens for [authStage] →

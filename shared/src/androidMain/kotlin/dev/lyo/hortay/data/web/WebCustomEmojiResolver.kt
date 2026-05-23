@@ -1,6 +1,6 @@
 package dev.lyo.hortay.data.web
 
-import android.util.Log
+import dev.lyo.hortay.PlatformLog
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -48,7 +48,7 @@ class WebCustomEmojiResolver(
         }.fold(
             onSuccess = { response -> parseResponse(response, emojiId) },
             onFailure = { error ->
-                Log.w(TAG, "resolve($emojiId) network error: ${error.message}")
+                PlatformLog.w(TAG, "resolve($emojiId) network error: ${error.message}")
                 null
             },
         )
@@ -69,17 +69,17 @@ class WebCustomEmojiResolver(
 
     private suspend fun parseResponse(response: HttpResponse, emojiId: String): ResolvedEmoji? {
         if (response.status.value != 200) {
-            Log.w(TAG, "resolve($emojiId) HTTP ${response.status.value}")
+            PlatformLog.w(TAG, "resolve($emojiId) HTTP ${response.status.value}")
             return null
         }
         val body = response.bodyAsText()
         val json = runCatching { JSON.decodeFromString<EmojiJson>(body) }.getOrNull()
         if (json == null) {
-            Log.w(TAG, "resolve($emojiId) JSON parse failed (body=${body.take(200)})")
+            PlatformLog.w(TAG, "resolve($emojiId) JSON parse failed (body=${body.take(200)})")
             return null
         }
         if (json.error != null) {
-            Log.w(TAG, "resolve($emojiId) endpoint error: ${json.error}")
+            PlatformLog.w(TAG, "resolve($emojiId) endpoint error: ${json.error}")
             return null
         }
         val type = when (json.type) {
@@ -87,12 +87,12 @@ class WebCustomEmojiResolver(
             "webm" -> ResolvedEmoji.Type.Webm
             "webp" -> ResolvedEmoji.Type.Webp
             else -> {
-                Log.w(TAG, "resolve($emojiId) unknown type ${json.type}")
+                PlatformLog.w(TAG, "resolve($emojiId) unknown type ${json.type}")
                 return null
             }
         }
         val url = json.emoji ?: run {
-            Log.w(TAG, "resolve($emojiId) no emoji url field")
+            PlatformLog.w(TAG, "resolve($emojiId) no emoji url field")
             return null
         }
         return ResolvedEmoji(
