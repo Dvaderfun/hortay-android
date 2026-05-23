@@ -4,6 +4,41 @@ Continuation of Phase H. Target: every UI screen + repository compiles on iOS, t
 
 ---
 
+## Progress (session of 2026-05-23)
+
+**Counts:** 61 androidMain / 150 commonMain / 17 iosMain (started session at 62 / 142 / 15).
+
+**Wave order revised bottom-up** because dependencies run leaf → root:
+`MainScaffoldHelpers → TimelineScreen → ReportFlowSheet`. Promote types
+first, move leaves, then containers.
+
+### Committed
+- **I-A** (`e30a894`) — platform surfaces + Settings/ReportLog/Theme to commonMain.
+  Added `applicationFilesPath` expect/actual, `LocalStatusBarController` lambda
+  slot, `dynamicColorSchemeOrNull` expect/actual. Moved `SettingsStore`,
+  `ReportLogStore`, `Theme.kt` to commonMain.
+- **Wave A partial** (`2ec888e`) — AutoDownload types + Stats types to commonMain.
+  Added `AutoDownloadFacade` interface; `AutoDownloadStore` (Android) implements it.
+
+### Next session resume points
+1. **Finish Wave A**: split `ReportRepository.kt` — move `ReportOption`,
+   `ReportState`, `ReportStep` to `commonMain/data/report/`. Keep the
+   `TdApi.ReportOption` in commonMain as a plain `ReportOption(id: ByteArray,
+   label: String)` DTO. Android-side `ReportRepository` maps TdApi→DTO. Define
+   `ReportFlowController` interface in commonMain. Promote `TranslationsStore.Key`
+   to commonMain `TranslationKey`. Add `FolderTab` DTO + `TranslationsFacade`
+   interface.
+2. **Wave B**: move `ReportFlowSheet`, `ReportFlowViewModel`, `MediaShareActions`
+   (lambda slot via `LocalPlatformImageSaver`), `FullScreenMediaViewer`,
+   `MediaViewerHost`. `GuestReportDelegator` → `LocalGuestReportDelegate` slot.
+3. **Wave C**: expand `HortayBackend` with feed/channel/translations/folders/
+   stats/reports/migration methods.
+4. **Waves D-H, then I-D + I-E** per the plan below.
+
+---
+
+---
+
 ## Where we are (head of `main`, end of Phase H)
 
 | Source set | Files |
