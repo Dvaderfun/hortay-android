@@ -1,10 +1,5 @@
 package dev.lyo.hortay.ui.settings
 
-import android.content.Context
-import android.content.Intent
-import android.net.ConnectivityManager
-import android.provider.Settings
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedContentTransitionScope.SlideDirection
 import androidx.compose.ui.unit.IntOffset
@@ -44,8 +39,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,21 +46,18 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.lyo.hortay.data.AutoDownloadCategory
 import dev.lyo.hortay.data.AutoDownloadPolicy
 import dev.lyo.hortay.data.AutoDownloadSettings
-import dev.lyo.hortay.data.AutoDownloadStore
+import dev.lyo.hortay.data.AutoDownloadFacade
 import dev.lyo.hortay.data.defaultPolicy
 import dev.lyo.hortay.data.policy
 import dev.lyo.hortay.data.withPolicy
@@ -123,10 +113,14 @@ import org.jetbrains.compose.resources.stringResource
  * sense of going "into" and "out of" a category — Material's recommended pattern
  * for hierarchical depth changes.
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(
+    ExperimentalMaterial3Api::class,
+    ExperimentalMaterial3ExpressiveApi::class,
+    androidx.compose.ui.ExperimentalComposeUiApi::class,
+)
 @Composable
 fun AutoDownloadHost(
-    store: AutoDownloadStore,
+    store: AutoDownloadFacade,
     contentPadding: PaddingValues,
     onBack: () -> Unit,
 ) {
@@ -394,26 +388,9 @@ private fun AutoDownloadCategoryScreen(
                 ),
         ) {
             if (isDataSaverActive) {
-                val context = LocalContext.current
                 DataSaverBanner(
                     text = stringResource(Res.string.autodownload_data_saver_note),
-                    onClick = {
-                        // Surface the OS toggle directly so the user can flip it without
-                        // hunting through Android Settings. ACTION_DATA_USAGE_SETTINGS
-                        // is the documented entry point — works back to API 26
-                        // (matches our minSdk). Wrapped in runCatching because some
-                        // Samsung One UI builds have been reported to throw
-                        // ActivityNotFoundException on this exact intent on locked-down
-                        // enterprise devices; falling through silently is correct
-                        // (the banner stays visible, the user can still toggle in
-                        // Settings → Connections → Data Usage manually).
-                        runCatching {
-                            context.startActivity(
-                                Intent(Settings.ACTION_DATA_USAGE_SETTINGS)
-                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                            )
-                        }
-                    },
+                    onClick = { openOsDataUsageSettings() },
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 )
             }
@@ -557,8 +534,7 @@ private fun VideoSizeSlider(
     // the source of truth changes from elsewhere (settings reset, profile
     // rewritten by another path).
     var localIdx by remember(externalIdx) { mutableStateOf(externalIdx) }
-    val context = LocalContext.current
-    val displayValue = formatMbInt(steps[localIdx], context)
+    val displayValue = formatMbInt(steps[localIdx])
 
     Column(
         modifier = Modifier
@@ -641,7 +617,6 @@ private fun DataSaverBanner(
  */
 @Composable
 private fun summarize(policy: AutoDownloadPolicy): String {
-    val context = LocalContext.current
     if (!policy.photos && !policy.videos && !policy.animations) {
         return stringResource(Res.string.autodownload_summary_off)
     }
@@ -650,61 +625,16 @@ private fun summarize(policy: AutoDownloadPolicy): String {
     if (policy.videos) {
         parts += stringResource(
             Res.string.autodownload_summary_videos_capped,
-            formatMbInt(policy.videoMaxBytes, context),
+            formatMbInt(policy.videoMaxBytes),
         )
     }
     if (policy.animations) parts += stringResource(Res.string.autodownload_summary_animations)
     return parts.joinToString(", ")
 }
 
-/**
- * Cellular-only Data-Saver detection. Wi-Fi never triggers the OS toggle, and a
- * roaming connection is still cellular for restriction purposes — query in both
- * cases. We don't touch [HortayNetworkType] here on purpose: this banner is
- * informational about a system setting, not the user's per-network choice.
- *
- * Returns a [State] (not a plain Boolean) so the banner re-renders when the user
- * toggles the OS setting and returns to the app. Two re-check sources:
- *   • Lifecycle ON_RESUME — covers the canonical "user dipped into Android
- *     Settings → Data Saver, came back to Hortay" path. Cheap to re-query.
- *   • [ConnectivityManager.OnRestrictBackgroundChangedListener] does not exist
- *     as a public API; the supported mechanism is the
- *     ACTION_RESTRICT_BACKGROUND_CHANGED implicit broadcast, which manifest-
- *     declared receivers can't get on Oreo+. Foreground re-check on resume
- *     covers our use case (the banner is only seen on the foreground).
- */
-@Composable
-private fun rememberDataSaverActive(category: AutoDownloadCategory): State<Boolean> {
-    val context = LocalContext.current
-    val state = remember(category) { mutableStateOf(false) }
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(category, lifecycleOwner) {
-        if (category == AutoDownloadCategory.Wifi) {
-            state.value = false
-            return@DisposableEffect onDispose { }
-        }
-        val cm = context.getSystemService(ConnectivityManager::class.java)
-        fun recompute() {
-            state.value = cm?.let {
-                runCatching {
-                    it.restrictBackgroundStatus == ConnectivityManager.RESTRICT_BACKGROUND_STATUS_ENABLED
-                }.getOrDefault(false)
-            } ?: false
-        }
-        recompute()
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) recompute()
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-    return state
-}
-
 /** Round MB display to the nearest int — matches Telegram's slider labels exactly. */
-private fun formatMbInt(bytes: Long, @Suppress("UNUSED_PARAMETER") context: Context): String {
+@Composable
+private fun formatMbInt(bytes: Long): String {
     val mb = (bytes / (1024 * 1024)).toInt().coerceAtLeast(1)
-    return kotlinx.coroutines.runBlocking {
-        org.jetbrains.compose.resources.getString(Res.string.size_mb_int, mb)
-    }
+    return stringResource(Res.string.size_mb_int, mb)
 }
