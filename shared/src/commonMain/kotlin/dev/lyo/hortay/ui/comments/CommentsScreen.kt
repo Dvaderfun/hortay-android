@@ -2,7 +2,6 @@
 
 package dev.lyo.hortay.ui.comments
 
-import androidx.activity.BackEventCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -30,8 +29,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import dev.lyo.hortay.data.AlbumItem
-import dev.lyo.hortay.data.CommentsRepository
-import dev.lyo.hortay.data.posts.PostsRepository
+import dev.lyo.hortay.data.HortayBackend
+import dev.lyo.hortay.data.ThreadState
 import dev.lyo.hortay.data.ReactionItem
 import dev.lyo.hortay.data.ReactionKind
 import dev.lyo.hortay.data.Reactions
@@ -39,6 +38,7 @@ import dev.lyo.hortay.data.ReplyMediaKind
 import dev.lyo.hortay.data.ReplyPreview
 import dev.lyo.hortay.data.ThreadRow
 import dev.lyo.hortay.data.TimelinePost
+import dev.lyo.hortay.ui.main.BackSwipeEdge
 import kotlinx.coroutines.flow.map
 import dev.lyo.hortay.ui.components.HortayTopBar
 import dev.lyo.hortay.ui.components.HortayTopBarSize
@@ -101,33 +101,26 @@ data class CommentsDisabledOverride(
  * MainScaffold owns the [Animatable] driving these values; we receive a plain Float so
  * this composable stays trivially testable and reusable from other entry points.
  *
- * [repo] / [feedRepo] are nullable so the same screen renders in guest (web) mode where
- * there's no TDLib session and therefore no [CommentsRepository] / no
- * [PostsRepository.posts] flow to subscribe to. In that mode the caller passes a
- * [disabledOverride] and the screen renders the pinned anchor + a single empty-state
- * hero explaining the situation, reusing every visual primitive the live path uses.
+ * [backend] is nullable so the same screen renders in guest (web) mode where
+ * there's no TDLib session and therefore no thread source / feed flow to
+ * subscribe to. In that mode the caller passes a [disabledOverride] and the
+ * screen renders the pinned anchor + a single empty-state hero explaining the
+ * situation, reusing every visual primitive the live path uses.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CommentsScreen(
     post: TimelinePost,
-    repo: CommentsRepository?,
     /**
-     * Live feed source so the pinned anchor PostCard reflects the same reactions,
-     * view counts and comment counts the user would see in the feed below. Without
-     * this the anchor is rendered from the frozen [NavEntry.Comments] snapshot
-     * (captured at navigation time) — optimistic toggles and incoming
-     * `UpdateMessageInteractionInfo` updates go to `PostsRepository._posts` but
-     * never flow back to the visible chip on this screen. When the post is no
-     * longer in the feed window (deep-link to an evicted post, fresh deep-link
-     * before ingest), this falls through and the frozen snapshot stays — the
-     * chip just won't animate on tap until the post lands in `_posts`.
-     *
-     * Null in guest (web) mode: there's no [PostsRepository] there, so live
-     * sync simply isn't available — the anchor renders from the frozen
-     * snapshot and reaction taps are no-ops via the default `onReactionToggle`.
+     * TDLib backend. Null in guest (web) mode — there's no thread source and
+     * no live feed flow, so the anchor renders from the frozen NavEntry
+     * snapshot and reaction taps are no-ops via the default
+     * `onReactionToggle`. Authenticated mode supplies
+     * [HortayBackend.feedPosts] (live anchor lookup),
+     * [HortayBackend.observeThread] (rolling thread state) and
+     * [HortayBackend.viewThreadMessages] (dwell-driven read ack).
      */
-    feedRepo: PostsRepository?,
+    backend: HortayBackend?,
     onDismiss: () -> Unit,
     /**
      * When non-null, the screen skips `repo.observeThread` entirely and renders a
@@ -180,7 +173,7 @@ fun CommentsScreen(
      */
     onPollVote: (chatId: Long, messageId: Long, chosenIndices: IntArray) -> Unit = { _, _, _ -> },
     backProgress: Float = 0f,
-    backSwipeEdge: Int = BackEventCompat.EDGE_LEFT,
+    backSwipeEdge: Int = BackSwipeEdge.Left,
 ) {
     // Live anchor: track the feed entry whose chat+id matches the post we were
     // opened with so reactions / view count / comment count stay fresh while the
@@ -200,9 +193,9 @@ fun CommentsScreen(
     // reactions / view counts can't move because the underlying flow doesn't
     // exist, and Telegram's t.me/s/ rendering doesn't report interaction info
     // we could refresh from anyway.
-    val liveAnchor: TimelinePost? = if (feedRepo != null) {
-        val collected by remember(feedRepo, anchorChatId, anchorId) {
-            feedRepo.posts.map { list ->
+    val liveAnchor: TimelinePost? = if (backend != null) {
+        val collected by remember(backend, anchorChatId, anchorId) {
+            backend.feedPosts.map { list ->
                 list.firstOrNull { it.chatId == anchorChatId && it.id == anchorId }
             }
         }.collectAsStateWithLifecycle(initialValue = null)
@@ -222,14 +215,14 @@ fun CommentsScreen(
     // because the `when` arm below picks up the override directly. Keeps the
     // viewport-dwell ack effect dormant for the same reason (no thread to ack
     // against).
-    val threadDisabled = disabledOverride != null || repo == null
-    val state by remember(post.chatId, candidateIds, threadDisabled, repo) {
-        if (threadDisabled || repo == null) {
-            kotlinx.coroutines.flow.flowOf(CommentsRepository.ThreadState.Loading)
+    val threadDisabled = disabledOverride != null || backend == null
+    val state by remember(post.chatId, candidateIds, threadDisabled, backend) {
+        if (threadDisabled || backend == null) {
+            kotlinx.coroutines.flow.flowOf(ThreadState.Loading)
         } else {
-            repo.observeThread(post.chatId, candidateIds)
+            backend.observeThread(post.chatId, candidateIds)
         }
-    }.collectAsStateWithLifecycle(initialValue = CommentsRepository.ThreadState.Loading)
+    }.collectAsStateWithLifecycle(initialValue = ThreadState.Loading)
 
     val viewer = LocalMediaViewer.current
     val pinnedPostInteractions = remember(
@@ -318,24 +311,19 @@ fun CommentsScreen(
     // no comment rows whose ids could land in `visibleItemsInfo` anyway, so
     // the only cost saved is the snapshotFlow subscription itself, but the
     // contract is clearer this way.
-    if (!threadDisabled && repo != null) {
-        val liveRepo = repo
-        LaunchedEffect(listState, liveRepo, post.chatId) {
+    if (!threadDisabled && backend != null) {
+        val liveBackend = backend
+        LaunchedEffect(listState, liveBackend, post.chatId) {
             snapshotFlow { listState.layoutInfo.visibleItemsInfo.mapNotNull { it.key as? Long } }
                 .distinctUntilChanged()
                 .collectLatest { ids ->
                     if (ids.isEmpty()) return@collectLatest
                     delay(COMMENT_READ_DWELL_MS)
-                    val ready = state as? CommentsRepository.ThreadState.Ready ?: return@collectLatest
+                    val ready = state as? ThreadState.Ready ?: return@collectLatest
                     val fresh = ids.filter { it !in ackedRead }
                     if (fresh.isEmpty()) return@collectLatest
-                    // Populate ackedRead BEFORE dispatching, and detach the suspending ack
-                    // into [scope] so a fresh viewport emission cancelling this collector
-                    // doesn't take the in-flight call with it. Mirrors TimelineScreen's
-                    // read-mark effect — same reasoning applies for the discussion
-                    // thread's lastReadInboxMessageId.
                     fresh.forEach { ackedRead.add(it) }
-                    scope.launch { liveRepo.viewMessages(ready.threadChatId, fresh) }
+                    scope.launch { liveBackend.viewThreadMessages(ready.threadChatId, fresh) }
                 }
         }
     }
@@ -348,8 +336,8 @@ fun CommentsScreen(
     //     the rest of the way off-screen, contracts to 0.85 and fades to alpha=0 so the
     //     overlay actually "leaves" before being removed from composition. Without it the
     //     screen would freeze at peek and then snap away.
-    val backDirection = if (backSwipeEdge == BackEventCompat.EDGE_LEFT) 1f else -1f
-    val backOriginX = if (backSwipeEdge == BackEventCompat.EDGE_LEFT) 0f else 1f
+    val backDirection = if (backSwipeEdge == BackSwipeEdge.Left) 1f else -1f
+    val backOriginX = if (backSwipeEdge == BackSwipeEdge.Left) 0f else 1f
 
     // A hot LRU hit on a previously-opened thread or a fast cold-path resolve
     // (cached anchor + small / empty thread) lands Ready inside ~50-200 ms,
@@ -367,7 +355,7 @@ fun CommentsScreen(
     // so without this gate the spinner would unconditionally land after
     // the grace and sit on top of the empty-state hero forever.
     val showLoadingOverlay = rememberDeferredLoading(
-        pending = !threadDisabled && state is CommentsRepository.ThreadState.Loading,
+        pending = !threadDisabled && state is ThreadState.Loading,
         key = post.chatId to (candidateIds.minOrNull() ?: post.id),
         graceMs = dev.lyo.hortay.data.SCREEN_MOUNT_GRACE_MS,
     )
@@ -397,7 +385,7 @@ fun CommentsScreen(
             // below. Subtitle surfaces only when there ARE replies (count via
             // pluralStringResource); Loading / empty / Error keep the chrome
             // calm and let the body's empty-state hero communicate the situation.
-            val replyCount = (state as? CommentsRepository.ThreadState.Ready)?.rows?.size ?: 0
+            val replyCount = (state as? ThreadState.Ready)?.rows?.size ?: 0
             val subtitleText = if (replyCount > 0) {
                 pluralStringResource(Res.plurals.comments_count, replyCount, replyCount)
             } else {
@@ -492,14 +480,14 @@ fun CommentsScreen(
                 return@LazyColumn
             }
             when (val s = state) {
-                CommentsRepository.ThreadState.Loading -> if (showLoadingOverlay) {
+                ThreadState.Loading -> if (showLoadingOverlay) {
                     item(key = "loading") {
                         Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
                             LoadingIndicator()
                         }
                     }
                 }
-                is CommentsRepository.ThreadState.Ready -> if (s.rows.isEmpty()) {
+                is ThreadState.Ready -> if (s.rows.isEmpty()) {
                     item(key = "empty") {
                         CommentsEmptyState(
                             symbol = "forum",
@@ -529,7 +517,7 @@ fun CommentsScreen(
                         )
                     }
                 }
-                is CommentsRepository.ThreadState.Error -> item(key = "disabled") {
+                is ThreadState.Error -> item(key = "disabled") {
                     CommentsEmptyState(
                         symbol = "chat_bubble",
                         title = stringResource(Res.string.comments_disabled_title),

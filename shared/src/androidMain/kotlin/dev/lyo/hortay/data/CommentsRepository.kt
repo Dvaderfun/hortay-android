@@ -59,12 +59,6 @@ class CommentsRepository(
     private val unavailableMsg: String get() = res.getString(Res.string.comments_unavailable)
 
 
-    sealed interface ThreadState {
-        data object Loading : ThreadState
-        data class Ready(val rows: ImmutableList<ThreadRow>, val threadChatId: Long) : ThreadState
-        data class Error(val message: String) : ThreadState
-    }
-
     private data class ResolvedAnchor(val threadChatId: Long, val rootId: Long)
 
     /**

@@ -591,14 +591,13 @@ fun WebModeScaffold(graph: AppGraph) {
                                 )
                                 is NavEntry.Comments -> dev.lyo.hortay.ui.comments.CommentsScreen(
                                     post = entry.anchor,
-                                    // Guest mode has no TDLib session → no
-                                    // CommentsRepository, no PostsRepository.posts
-                                    // to live-sync the anchor against. The screen
-                                    // renders the frozen NavEntry snapshot and
-                                    // shows the [webCommentsOverride] empty-state
-                                    // hero in place of the thread body.
-                                    repo = null,
-                                    feedRepo = null,
+                                    // Guest mode has no TDLib session → no backend
+                                    // to live-sync the anchor or thread against.
+                                    // The screen renders the frozen NavEntry
+                                    // snapshot and shows [webCommentsOverride] as
+                                    // the empty-state hero in place of the thread
+                                    // body.
+                                    backend = null,
                                     onDismiss = ::popNav,
                                     disabledOverride = webCommentsOverride,
                                     // Predictive-back transform is owned by the
