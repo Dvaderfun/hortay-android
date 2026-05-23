@@ -23,7 +23,7 @@ Human-facing docs: README.md (setup), ARCHITECTURE.md (decisions), CHANGELOG.md 
 - `:libtdlib` — TDLib JNI (Android-only; iOS port deferred — see "TDLib iOS strategy" in ARCHITECTURE.md).
 - `:baselineprofile` — macrobenchmark.
 
-Current code distribution: ALL ~177 Kotlin source files in `shared/src/androidMain/kotlin/`. `commonMain` exists but empty. Phases 2-5 of migration move files into `commonMain` + add expect/actual abstractions for platform services.
+Current code distribution (after Phase G1/G5/G6/G7): ~154 files in `androidMain`, ~37 in `commonMain`, ~9 in `iosMain`. The data layer (web pipeline, stores, helpers) lives in `commonMain`; the UI layer is still mostly `androidMain` because PostCard/PostBody pull ExoPlayer / Lottie / Coil-video which need expect/actual splits (Phase G3 / G4 work). iOS gets a slimmer parallel renderer in `iosMain/MainViewController.kt` driven off the SAME `WebFeedSource` flow.
 
 ## Build commands
 
@@ -72,20 +72,21 @@ The Xcode "Compile Kotlin Framework" build phase invokes `:shared:embedAndSignAp
 
 ## commonMain inventory (current state)
 
-Data layer in `shared/src/commonMain/kotlin/dev/lyo/hortay/`:
-- `data/` — 12 pure data files: `AuthStage`, `ConnectionStatus`, `FormattedText`, `PostContent`, `TimelinePost`, `UserMessageBus`, `PostFilterStrategy`, `ReactionTogglePolicy`, `ThreadRow`, `FeedSource`, `DeepLinkRouter`, `report/ReportDialogState`.
-- `data/PreferencesDataStoreFactory.kt` — `expect fun createPreferencesDataStore(name): DataStore<Preferences>` with platform actuals via Okio.
-- `data/web/SubscriptionsStore.kt` — KMP, takes `DataStore<Preferences>` from factory.
-- `data/web/db/DriverFactory.kt` — `expect class DriverFactory` with platform actuals (AndroidSqliteDriver / NativeSqliteDriver).
+Data layer (`shared/src/commonMain/kotlin/dev/lyo/hortay/`):
+- `AppConfig.kt`, `Clock.kt` (`nowMs`, `parseIsoToEpochMs`), `PlatformLog.kt`, `PlatformLocale.kt`, `PlatformDispatchers.kt` — KMP helpers (expect/actual).
+- `data/` — 12 pure data files (AuthStage, TimelinePost, PostContent, …) plus `FeedOrder`, `IgnoredChannelsStore`, `ReadCursors`, `StringResolver` (with `ComposeResourcesStringResolver` wrapping CMP `getString` via runBlocking), `PreferencesDataStoreFactory`.
+- `data/web/` — full web pipeline: `WebFeedSource`, `WebRepository`, `WebTelegramClient` (consumes `defaultWebHttpClient` expect/actual — OkHttp on Android, Darwin on iOS), `WebPostAdapter`, `TmePageParser`, `WebTextRenderer`, `WebCustomEmojiResolver`, `WebFeedScheduler`, `WebPost`, `SubscriptionsStore`, `GuestModeStore`, `MigrationStore`.
+- `data/web/db/` — SQLDelight expect/actual `DriverFactory` + `WebDatabaseProvider` (Android resolves Context via `PlatformContextHolder`, iOS needs nothing).
 
-Resources in `shared/src/commonMain/composeResources/`:
+Resources (`shared/src/commonMain/composeResources/`):
 - `values/strings.xml` + `values-uk/strings.xml` (EN + UK).
 - `drawable/sym_*.xml` (94 vector drawables).
-- Duplicated in `shared/src/androidMain/res/` during migration so existing `R.string.*` keeps working.
+- Plus duplicated in `shared/src/androidMain/res/` for legacy `R.string.*` paths during transitional builds.
 
-iOS UI in `shared/src/iosMain/kotlin/dev/lyo/hortay/MainViewController.kt`:
-- Working subscriptions screen with real DataStore persistence.
-- Mounted from `iosApp/iosApp/ContentView.swift` via `UIViewControllerRepresentable`.
+UI:
+- `:shared:androidMain/kotlin/dev/lyo/hortay/ui/` — full PostCard tree, all screens. Uses CMP `Res.string.*` everywhere (Phase G1 migration). TDLib-bound files (MigrationCoordinator, WebCustomEmojiBridge) stay androidMain — they reference repos that depend on TDApi types.
+- `:shared:iosMain/kotlin/dev/lyo/hortay/IosAppGraph.kt` — slim DI root for guest-mode.
+- `:shared:iosMain/kotlin/dev/lyo/hortay/MainViewController.kt` — iOS entry point. Renders a feed of channel header + text caption + first photo via Coil AsyncImage, driven off `IosAppGraph.webFeedSource`. Parallel to Android's PostCard until ExoPlayer / Lottie / Coil-video get expect/actual.
 
 ## Migration status
 
@@ -108,13 +109,14 @@ iOS UI in `shared/src/iosMain/kotlin/dev/lyo/hortay/MainViewController.kt`:
 **Deferred:**
 - Phase A5 — Google Fonts → bundled fonts (cosmetic).
 
-**Pending — Phase G (next session):**
-Move the remaining 165 androidMain files. See plan at `.plans/phase-g-multiplatform-ui.md`. Steps:
-1. **G1** — Bulk `R.string` → `Res.string` migration script (37 UI files unblock).
-2. **G2** — TDLib expect/actual `HortayBackend` interface (25 TDLib-touching files).
-3. **G3** — `expect interface VideoPlayer` (5 ExoPlayer files).
-4. **G5** — Context-tied store + StringResolver expect/actual (24 files).
-5. **G6** — Move web pipeline (WebFeedSource etc.) to commonMain.
-6. **G7** — IosAppGraph + wire `MainViewController` to `WebModeScaffold`.
+**Completed in this session:**
+- **G1** — Bulk `R.string` / `R.drawable` / `R.plurals` migration to CMP `Res.*`. New `StringResolver` (commonMain, wraps CMP `getString` via `runBlocking`). 60 files converted.
+- **G5** — Context expect/actual: `PlatformLog`, `PlatformLocale.currentLanguageTag`, `PlatformDispatchers.ioDispatcher`, plus `IgnoredChannelsStore` / `GuestModeStore` / `MigrationStore` refactored to take `DataStore<Preferences>` from the KMP factory.
+- **G6** — Web data pipeline (`WebFeedSource`, `WebRepository`, `WebTelegramClient`, `WebPostAdapter`, `WebCustomEmojiResolver`, `WebFeedScheduler`, `WebPost`, `TmePageParser`, `WebTextRenderer`) lives in commonMain. HTTP client via `expect defaultWebHttpClient` (OkHttp / Darwin). `WebDatabaseProvider` expect/actual.
+- **G7** — `IosAppGraph` + real iOS guest-mode UI in `MainViewController.kt` driven by the shared `WebFeedSource`. Coil-compose + coil-network-ktor3 moved to commonMain for image rendering on both targets.
 
-Target: iOS Simulator runs the same Hortay UX as Android (guest-mode pipeline).
+**Still pending:**
+- **G2** — TDLib `HortayBackend` expect/actual so authenticated-mode repositories can move to commonMain (iOS would get web-only stubs). Multi-day work — large translation layer over `TdApi.*` Java types.
+- **G3** — `expect interface VideoPlayer` so PostBody's video rendering can move out of androidMain (AVPlayer on iOS).
+- **G4** — Compottie rewrite of `CustomEmojiAnimator` / `InlineCustomEmojiRenderer` so inline custom emoji animate on iOS (currently Airbnb Lottie via `LottieDrawable.draw(canvas)`).
+- Bulk UI move depends on G2/G3/G4 — PostCard's transitive graph touches ExoPlayer / Lottie / TDLib repos. Without those abstractions, individual UI files can't move because they import androidMain helpers (`ExoPlayerPool.acquire/release`, `MediaCache.observe`, `CustomEmojiRepository`, `Country` data class colocated with `CountryRepository`, etc.).
