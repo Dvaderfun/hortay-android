@@ -96,12 +96,7 @@ internal fun TabContentSwitcher(
                     tabStateHolder.SaveableStateProvider(key = "feed-channel:__all__") {
                         TimelineScreen(
                             feed = graph.postsRepository,
-                            tdlibRepo = graph.postsRepository,
                             backend = graph.backend,
-                            commentsRepo = graph.commentsRepository,
-                            folders = graph.chatFoldersRepository,
-                            translations = graph.translations,
-                            channelActions = graph.channelActions,
                             bookmarks = graph.bookmarkStore,
                             contentPadding = padding,
                             showOnlyBookmarked = false,
@@ -140,12 +135,7 @@ internal fun TabContentSwitcher(
                 )
                 NavTab.Saved -> TimelineScreen(
                     feed = graph.postsRepository,
-                    tdlibRepo = graph.postsRepository,
                     backend = graph.backend,
-                    commentsRepo = graph.commentsRepository,
-                    folders = graph.chatFoldersRepository,
-                    translations = graph.translations,
-                    channelActions = graph.channelActions,
                     bookmarks = graph.bookmarkStore,
                     contentPadding = padding,
                     showOnlyBookmarked = true,

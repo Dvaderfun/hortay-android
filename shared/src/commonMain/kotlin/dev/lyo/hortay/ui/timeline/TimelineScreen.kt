@@ -21,25 +21,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.layout
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.lifecycle.viewmodel.initializer
 import dev.lyo.hortay.data.BookmarkStore
+import dev.lyo.hortay.data.HortayBackend
 import dev.lyo.hortay.data.isUnplayableVideo
-import dev.lyo.hortay.data.ChannelActionsRepository
-import dev.lyo.hortay.data.ChatFoldersRepository
 import dev.lyo.hortay.data.isUnreadAt
 import dev.lyo.hortay.data.isUnreadIn
 import dev.lyo.hortay.data.orderedFor
-import dev.lyo.hortay.data.CommentsRepository
 import dev.lyo.hortay.data.DownloadPriority
-import dev.lyo.hortay.data.TranslationsStore
 import dev.lyo.hortay.data.PostContent
-import dev.lyo.hortay.data.posts.PostsRepository
 import dev.lyo.hortay.data.TimelinePost
+import dev.lyo.hortay.data.TranslationKey
 import dev.lyo.hortay.data.bookmarkKey
 import dev.lyo.hortay.ui.actions.PostActions
 import dev.lyo.hortay.ui.main.rememberFloatingTopBarBehavior
@@ -104,12 +100,13 @@ fun TimelineScreen(
      * of opening cold. Header / forward-source taps pass null.
      */
     onChannelOpen: (chatId: Long, scrollToMessageId: Long?) -> Unit = { _, _ -> },
-    tdlibRepo: PostsRepository? = null,
-    backend: dev.lyo.hortay.data.HortayBackend? = null,
-    commentsRepo: CommentsRepository? = null,
-    folders: ChatFoldersRepository? = null,
-    translations: TranslationsStore? = null,
-    channelActions: ChannelActionsRepository? = null,
+    /**
+     * Optional TDLib-backed backend. Null in pre-auth / guest-only paths
+     * where the screen still renders the local feed source but every TDLib-
+     * shaped affordance (folders bar, translation chip, reactions, polls,
+     * archive scope, focus-chat tracking, comments prefetch) is hidden.
+     */
+    backend: HortayBackend? = null,
     onOpenComments: (TimelinePost) -> Unit = {},
     homeTapTrigger: Long = 0L,
     onBrandTap: () -> Unit = {},
@@ -249,44 +246,39 @@ fun TimelineScreen(
     // routing (MainActivity) already shows only one tree at a time, so they
     // never collide visually.
     val vm: TimelineViewModel = viewModel(
-        key = feed.javaClass.name,
+        key = feed::class.simpleName ?: "TimelineFeed",
         factory = remember(feed, bookmarks) {
             viewModelFactory { initializer { TimelineViewModel(feed, bookmarks) } }
         },
     )
-    val context = LocalContext.current
     val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+    val folders = backend?.folders
+    val translationsFacade = backend?.translations
 
     val posts by vm.posts.collectAsStateWithLifecycle()
     val refreshing by vm.refreshing.collectAsStateWithLifecycle()
     val bookmarkedKeys by vm.bookmarkedKeys.collectAsStateWithLifecycle()
     val pendingNew by vm.pendingNew.collectAsStateWithLifecycle()
-    val foldersList: List<org.drinkless.tdlib.TdApi.ChatFolderInfo> = folders?.tdFolders
+    val foldersList: List<dev.lyo.hortay.data.FolderInfo> = folders?.folders
         ?.collectAsStateWithLifecycle()?.value
         ?: emptyList()
-    // Resolved per-folder rules (kept hot by ChatFoldersRepository). Used to hide tabs
-    // that the user can't act on:
-    //   • folders whose membership rule matches none of the subscribed channels — the
-    //     tab would just open onto an empty feed;
-    //   • folders whose rule is indistinguishable from the default "All" scope — the
-    //     tab would duplicate the already-present "Усі" chip.
-    // Filtering is gated on rules being resolved: while [fullFolders] is empty (cold
-    // start, between UpdateChatFolders and the parallel GetChatFolder fan-out landing),
-    // we render the raw list as before so the bar doesn't flicker / lose tabs.
-    val fullFoldersMap: Map<Int, org.drinkless.tdlib.TdApi.ChatFolder> = folders?.fullFolders
+    // Resolved per-folder rules (kept hot by FoldersFacade). Used to hide tabs
+    // that duplicate the "All" scope. Filtering is gated on rules being resolved:
+    // while [folderRules] is empty (cold start, between UpdateChatFolders and the
+    // parallel GetChatFolder fan-out landing), we render the raw list as before so
+    // the bar doesn't flicker / lose tabs.
+    val folderRulesMap: Map<Int, dev.lyo.hortay.data.FolderRule> = folders?.folderRules
         ?.collectAsStateWithLifecycle()?.value
         ?: emptyMap()
-    // Per-folder resolved chat-id sets (TDLib applies the rule, we just consume the answer).
-    // Used by the tab-visibility check below to hide folders that contain none of the
-    // currently-subscribed channels — same UX as before, just sourced from TDLib instead of
-    // an in-process rule reimplementation.
+    // Per-folder resolved chat-id sets. Used by the tab-visibility check below to
+    // hide folders that contain none of the currently-subscribed channels.
     val folderChatIdsMap: Map<Int, Set<Long>> = folders?.folderChatIds
         ?.collectAsStateWithLifecycle()?.value
         ?: emptyMap()
-    val archivedChatIds: Set<Long> = tdlibRepo?.archivedChatIds
+    val archivedChatIds: Set<Long> = backend?.archivedChatIds
         ?.collectAsStateWithLifecycle()?.value
         ?: emptySet()
-    val translationsMap = translations?.translations
+    val translationsMap = translationsFacade?.translations
         ?.collectAsStateWithLifecycle()?.value
         ?: emptyMap()
 
@@ -357,7 +349,7 @@ fun TimelineScreen(
             selectedFolderId != null -> {
                 val match = foldersList.firstOrNull { it.id == selectedFolderId }
                 if (match == null) FilterScope.All
-                else FilterScope.Folder(match.id, match.name?.text?.text.orEmpty())
+                else FilterScope.Folder(match.id, match.title)
             }
             else -> FilterScope.All
         }
@@ -436,7 +428,7 @@ fun TimelineScreen(
     // when the user opened the feed". One source of truth: every boundary
     // pick — cold-start latcher, home-tap, scope switch, pill fallback — goes
     // through the same value via [homeScrollIndex] / [buildTimelineUiState].
-    val recencyCutoffMs = remember { System.currentTimeMillis() - BOUNDARY_RECENCY_WINDOW_MS }
+    val recencyCutoffMs = remember { dev.lyo.hortay.nowMs() - BOUNDARY_RECENCY_WINDOW_MS }
 
     val visiblePosts = remember(filteredPosts, feedOrder) {
         filteredPosts.orderedFor(feedOrder)
@@ -911,7 +903,7 @@ fun TimelineScreen(
     rememberPendingScrollToMessage(
         displayedItems = feedItems,
         pendingTarget = readyPendingTarget,
-        loadHistoryAround = { cid, mid -> tdlibRepo?.loadHistoryAround(cid, mid) ?: false },
+        loadHistoryAround = { cid, mid -> backend?.loadHistoryAround(cid, mid) ?: false },
         onLanded = { cid, mid, idx ->
             highlightedPostKey = cid to mid
             listState.scrollToItem(idx)
@@ -1020,12 +1012,12 @@ fun TimelineScreen(
     // storm. commentCount > 0 (not just != null) skips the typical "0 replies
     // forever" case that would otherwise burn 2 wasted RPCs per post on the
     // dominant share of first-launch volume.
-    if (commentsRepo != null && !coveredByOverlay) {
+    if (backend != null && !coveredByOverlay) {
         rememberCommentsPrefetch(
             listState = listState,
             displayedItems = feedItems,
             startupPhase = startupPhase,
-            prefetchThread = commentsRepo::prefetchThread,
+            prefetchThread = backend::prefetchThread,
             maxConcurrent = COMMENTS_PREFETCH_LIMIT,
         )
     }
@@ -1079,8 +1071,8 @@ fun TimelineScreen(
     //
     // Cleanup: try/finally with NonCancellable on the close so a fast screen exit
     // still flushes CloseChat.
-    if (tdlibRepo != null && !coveredByOverlay) {
-        LaunchedEffect(listState, tdlibRepo) {
+    if (backend != null && !coveredByOverlay) {
+        LaunchedEffect(listState, backend) {
             var opened: Long? = null
             try {
                 androidx.compose.runtime.snapshotFlow {
@@ -1090,7 +1082,6 @@ fun TimelineScreen(
                     .collectLatest { topIdx ->
                         if (topIdx == null) return@collectLatest
                         kotlinx.coroutines.delay(FOCUS_DWELL_MS)
-                        // Latest displayed list — same staleness reason as Effect 1.
                         val items = feedItemsState.value
                         val topChat = items.getOrNull(topIdx)?.posts()?.firstOrNull()?.chatId
                             ?: return@collectLatest
@@ -1099,20 +1090,16 @@ fun TimelineScreen(
                         // the local refcount BEFORE issuing the network CloseChat, so a
                         // mid-flight cancellation here would otherwise leak an opened
                         // chat in TDLib (refcount 0 locally, but TDLib never received
-                        // CloseChat). Pinning the swap means a subsequent collectLatest
-                        // cancel waits for both calls to land before letting the next
-                        // emission start its own swap. NonCancellable doesn't block
-                        // forever — viewMessages and OpenChat/CloseChat are bounded
-                        // RPCs and ChatPresence wraps the send in runCatching anyway.
+                        // CloseChat).
                         kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
-                            opened?.let { prev -> tdlibRepo.closeChat(prev) }
-                            tdlibRepo.openChat(topChat)
+                            opened?.let { prev -> backend.closeChat(prev) }
+                            backend.openChat(topChat)
                             opened = topChat
                         }
                     }
             } finally {
                 kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
-                    opened?.let { tdlibRepo.closeChat(it) }
+                    opened?.let { backend.closeChat(it) }
                 }
             }
         }
@@ -1176,29 +1163,23 @@ fun TimelineScreen(
     val interactions = remember(
         vm,
         viewer,
-        translations,
-        channelActions,
-        tdlibRepo,
+        translationsFacade,
+        backend,
         feed,
         bookmarks,
         onReportClick,
         canReport,
     ) {
-        // Album members share the same translation — TDLib stores translations against the
-        // caption-carrying message id, but for the UI any post in the album should look
-        // translated. Fall back to scanning album members when the lookup misses.
-        //
-        // The cache is keyed by language as well: the user's system locale can change
-        // mid-session and we don't want to serve a stale translation in the wrong target
-        // tongue. We resolve the active target on every lookup so a post's render reacts
-        // to a locale change as soon as the next recomposition reads translationsState.
+        // Album members share the same translation — TDLib stores translations against
+        // the caption-carrying message id, but for the UI any post in the album should
+        // look translated. Fall back to scanning album members when the lookup misses.
         fun lookup(post: TimelinePost): dev.lyo.hortay.data.FormattedText? {
-            val t = translations ?: return null
+            val facade = translationsFacade ?: return null
             val map = translationsState.value
-            val lang = t.currentTargetLanguage()
-            map[dev.lyo.hortay.data.TranslationKey(post.chatId, post.id, lang)]?.let { return it }
+            val lang = facade.currentTargetLanguage()
+            map[TranslationKey(post.chatId, post.id, lang)]?.let { return it }
             post.albumMessageIds.forEach { id ->
-                map[dev.lyo.hortay.data.TranslationKey(post.chatId, id, lang)]?.let { return it }
+                map[TranslationKey(post.chatId, id, lang)]?.let { return it }
             }
             return null
         }
@@ -1211,7 +1192,9 @@ fun TimelineScreen(
                 // remoteVideoUrl and ExoPlayer would spin trying to prepare nothing.
                 val items = (post.content as? dev.lyo.hortay.data.PostContent.PhotoAlbum)?.items.orEmpty()
                 if (items.getOrNull(idx)?.isUnplayableVideo == true) {
-                    scope.launch { dev.lyo.hortay.ui.actions.PostActions.openInTelegram(uriHandler, backend, post) }
+                    backend?.let {
+                        scope.launch { dev.lyo.hortay.ui.actions.PostActions.openInTelegram(uriHandler, it, post) }
+                    }
                 } else {
                     viewer.openFor(post.content, idx)
                 }
@@ -1268,69 +1251,63 @@ fun TimelineScreen(
                 }
             },
             onBookmarkClick = { post -> vm.toggleBookmark(post) },
-            onShareClick = { post -> scope.launch { PostActions.share(backend, post) } },
+            onShareClick = { post -> backend?.let { scope.launch { PostActions.share(it, post) } } },
             onCopyClick = { post -> PostActions.copyText(post) },
             onOpenClick = { post ->
                 markPostReadState.value(post)
-                scope.launch { PostActions.openInTelegram(uriHandler, backend, post) }
+                backend?.let { scope.launch { PostActions.openInTelegram(uriHandler, it, post) } }
             },
             onTranslateClick = { post ->
-                val t = translations ?: return@PostInteractions
+                val facade = translationsFacade ?: return@PostInteractions
                 scope.launch {
                     val ids = post.albumMessageIds.ifEmpty { listOf(post.id) }
-                    t.translate(post.chatId, ids.first())
+                    facade.translate(post.chatId, ids.first())
                 }
             },
             onClearTranslationClick = { post ->
-                val t = translations ?: return@PostInteractions
+                val facade = translationsFacade ?: return@PostInteractions
                 val ids = post.albumMessageIds.ifEmpty { listOf(post.id) }
-                ids.forEach { t.clear(post.chatId, it) }
+                ids.forEach { facade.clear(post.chatId, it) }
             },
             isTranslated = { post -> lookup(post) != null },
             translationFor = ::lookup,
-            translateEnabled = translations != null,
+            translateEnabled = translationsFacade != null,
             onReactionToggle = { post, item ->
-                val ca = channelActions ?: return@PostInteractions
-                val repo = tdlibRepo ?: return@PostInteractions
-                // Optimistic UI: flip the chip and adjust the count BEFORE the RPC so
-                // the tap feels instant — the canonical pattern (Telegram-Android,
-                // Twitter, Reddit, Slack). The eventual `UpdateMessageInteractionInfo`
-                // overwrites the local guess with server truth via
-                // [PostsRepository.flushPendingInteractionInfo]; on RPC failure we
-                // revert by applying the inverse toggle.
+                val be = backend ?: return@PostInteractions
+                // Optimistic UI: flip the chip BEFORE the RPC so the tap feels
+                // instant. The eventual `UpdateMessageInteractionInfo` overwrites
+                // the local guess with server truth; on RPC failure we revert.
                 val target = post.albumMessageIds.ifEmpty { listOf(post.id) }.first()
                 val nowChosen = !item.isChosen
-                repo.applyOptimisticReaction(post.chatId, target, item.kind, nowChosen)
+                be.applyOptimisticReaction(post.chatId, target, item.kind, nowChosen)
                 scope.launch {
-                    val ok = ca.toggleReaction(
+                    val ok = be.toggleReaction(
                         chatId = post.chatId,
                         messageId = target,
                         kind = item.kind,
                         isChosen = item.isChosen,
                     )
-                    if (!ok) repo.applyOptimisticReaction(post.chatId, target, item.kind, item.isChosen)
+                    if (!ok) be.applyOptimisticReaction(post.chatId, target, item.kind, item.isChosen)
                 }
             },
             onPostClick = { post ->
                 markPostReadState.value(post)
                 onOpenCommentsState.value(post)
             },
-            // Optimistic poll vote: flip the local poll state (chosen rows light up, shimmer
-            // ride the result bars) BEFORE the RPC, then dispatch SetPollAnswer. The eventual
-            // `UpdateMessageContent` from TDLib carries the authoritative percentages and
-            // overwrites our guess via [PostsRepository.handleContentChanged]; on RPC failure
-            // [PostsRepository.clearPollPending] with revert=true undoes the local flip.
+            // Optimistic poll vote: flip the local poll state BEFORE the RPC, then
+            // dispatch SetPollAnswer. The eventual `UpdateMessageContent` carries the
+            // authoritative percentages; on RPC failure clearPollPending(revert=true)
+            // undoes the local flip.
             onPollVote = { post, indices ->
-                val ca = channelActions ?: return@PostInteractions
-                val repo = tdlibRepo ?: return@PostInteractions
+                val be = backend ?: return@PostInteractions
                 val target = post.albumMessageIds.ifEmpty { listOf(post.id) }.first()
-                repo.applyOptimisticPollAnswer(post.chatId, target, indices)
+                be.applyOptimisticPollAnswer(post.chatId, target, indices)
                 scope.launch {
-                    val ok = ca.setPollAnswer(post.chatId, target, indices)
-                    repo.clearPollPending(post.chatId, target, revert = !ok)
+                    val ok = be.setPollAnswer(post.chatId, target, indices)
+                    be.clearPollPending(post.chatId, target, revert = !ok)
                 }
             },
-            pollVotingEnabled = channelActions != null && tdlibRepo != null,
+            pollVotingEnabled = backend != null,
             isBookmarked = { post -> post.bookmarkKey() in bookmarkedState.value },
             onReportClick = onReportClick,
             canReport = canReport,
@@ -1446,14 +1423,13 @@ fun TimelineScreen(
                     val visibleChatIds = remember(posts) {
                         posts.asSequence().map { it.chatId }.toSet()
                     }
-                    val tabs = remember(foldersList, fullFoldersMap, folderChatIdsMap, visibleChatIds, folders) {
-                        val repo = folders
+                    val tabs = remember(foldersList, folderRulesMap, folderChatIdsMap, visibleChatIds) {
                         foldersList.mapNotNull { info ->
-                            val full = fullFoldersMap[info.id]
+                            val rule = folderRulesMap[info.id]
                             val ids = folderChatIdsMap[info.id]
                             val keep = when {
-                                full == null || repo == null -> true
-                                repo.isEquivalentToAll(full) -> false
+                                rule == null -> true
+                                rule.includesAllChannels -> false
                                 // Membership not yet resolved — keep the tab so it doesn't
                                 // briefly drop out between UpdateChatFolders and the eager
                                 // folderChatIds warm-up landing.
@@ -1461,7 +1437,7 @@ fun TimelineScreen(
                                 visibleChatIds.isEmpty() -> true
                                 else -> visibleChatIds.any { it in ids }
                             }
-                            if (keep) FolderTab(info.id, info.name?.text?.text.orEmpty()) else null
+                            if (keep) FolderTab(info.id, info.title) else null
                         }
                     }
                     val hasFolderUi = tabs.isNotEmpty() || archivedChatIds.isNotEmpty()
