@@ -1,6 +1,7 @@
 package dev.lyo.hortay
 
 import dev.lyo.hortay.data.ComposeResourcesStringResolver
+import dev.lyo.hortay.data.HortayBackend
 import dev.lyo.hortay.data.IgnoredChannelsStore
 import dev.lyo.hortay.data.StringResolver
 import dev.lyo.hortay.data.createPreferencesDataStore
@@ -55,4 +56,7 @@ class IosAppGraph {
         scope = appScope,
         ignoredChannels = ignoredChannels,
     )
+
+    /** Stub backend so commonMain UI screens compile on iOS. Guest-mode UI never calls into it. */
+    val backend: HortayBackend = HortayBackend()
 }

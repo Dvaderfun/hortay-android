@@ -34,7 +34,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ContainedLoadingIndicator
 import androidx.compose.material3.LoadingIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -43,7 +42,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import dev.lyo.hortay.ui.icons.Symbol
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -56,20 +54,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.lyo.hortay.AppGraph
 import dev.lyo.hortay.data.AuthStage
+import dev.lyo.hortay.data.ComposeResourcesStringResolver
 import dev.lyo.hortay.data.Country
-import dev.lyo.hortay.data.TdClient
+import dev.lyo.hortay.data.HortayBackend
+import dev.lyo.hortay.data.StringResolver
+import dev.lyo.hortay.data.web.GuestModeStore
 import dev.lyo.hortay.ui.icons.Symbol
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import hortay.shared.generated.resources.Res
 import hortay.shared.generated.resources.app_name
@@ -109,21 +109,29 @@ import hortay.shared.generated.resources.auth_title_wait_password
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * Auth flow entry point. Reads three signals from [TdClient]:
- *   - [TdClient.authStage] — where we are in TDLib's authorization state machine.
- *   - [TdClient.authError]  — transient errors from the last submit (kept *separate* so
- *     a rejected code doesn't blow the user back to a blank "Помилка" screen — they stay
- *     on the same form with their input intact and an inline message under the field).
- *   - [TdClient.connection] (optional) — could be used to gate the submit button when
- *     offline; currently we let TDLib reject and the friendly mapper handles it.
+ * Auth flow entry point. Reads three signals from [HortayBackend]:
+ *   - [HortayBackend.authStage] — where we are in TDLib's authorization state
+ *     machine.
+ *   - [HortayBackend.authError] — transient errors from the last submit (kept
+ *     *separate* so a rejected code doesn't blow the user back to a blank
+ *     "Помилка" screen — they stay on the same form with their input intact
+ *     and an inline message under the field).
+ *   - country catalogue / detected ISO for the phone form's picker.
  *
- * The [graph] dependency is what gives us [AppGraph.countries]; we let the country picker
- * lazy-load on first composition of the phone form (`countries.load()` inside `LaunchedEffect`).
+ * [guestMode] supplies the "Continue without login" escape hatch (writes the
+ * DataStore flag that [MainActivity] reads to route into [WebModeScaffold]).
+ * [scope] is the long-lived app scope — launching auth RPCs from a composable
+ * scope would cancel them on the very recompose that pulls the form off the
+ * tree.
  */
 @Composable
-fun AuthScreen(graph: AppGraph, stage: AuthStage) {
-    val client = graph.tdClient
-    val authError by client.authError.collectAsStateWithLifecycle()
+fun AuthScreen(
+    backend: HortayBackend,
+    guestMode: GuestModeStore,
+    scope: CoroutineScope,
+    stage: AuthStage,
+) {
+    val authError by backend.authError.collectAsStateWithLifecycle()
 
     Box(
         modifier = Modifier
@@ -145,7 +153,7 @@ fun AuthScreen(graph: AppGraph, stage: AuthStage) {
             // is the root of the flow — there's nowhere to back to. Loading/Ready/Error
             // either auto-resolve or have their own retry button.
             if (stage is AuthStage.WaitCode || stage is AuthStage.WaitPassword) {
-                BackAffordance(onBack = { graph.appScope.launch { client.cancelAuth() } })
+                BackAffordance(onBack = { scope.launch { backend.cancelAuth() } })
                 Spacer(Modifier.height(12.dp))
             }
 
@@ -168,20 +176,27 @@ fun AuthScreen(graph: AppGraph, stage: AuthStage) {
             ) { current ->
                 when (current) {
                     is AuthStage.Loading -> LoadingForm()
-                    is AuthStage.WaitPhone -> PhoneForm(graph = graph, errorMessage = authError)
+                    is AuthStage.WaitPhone -> PhoneForm(
+                        backend = backend,
+                        guestMode = guestMode,
+                        scope = scope,
+                        errorMessage = authError,
+                    )
                     is AuthStage.WaitCode -> CodeForm(
-                        graph = graph,
+                        backend = backend,
+                        scope = scope,
                         stage = current,
                         errorMessage = authError,
                     )
                     is AuthStage.WaitPassword -> PasswordForm(
-                        graph = graph,
+                        backend = backend,
+                        scope = scope,
                         stage = current,
                         errorMessage = authError,
                     )
                     is AuthStage.Error -> RecoverableErrorBlock(
                         message = current.message,
-                        onRetry = { graph.appScope.launch { client.cancelAuth() } },
+                        onRetry = { scope.launch { backend.cancelAuth() } },
                     )
                     is AuthStage.Ready -> LoadingForm()
                 }
@@ -264,13 +279,16 @@ private fun HeroBlock(stage: AuthStage) {
 // ---------- Phone ----------
 
 @Composable
-private fun PhoneForm(graph: AppGraph, errorMessage: String?) {
-    val client = graph.tdClient
-    val scope = rememberCoroutineScope()
-    val countries by graph.countries.countries.collectAsStateWithLifecycle()
-    val detectedIso by graph.countries.detectedIso.collectAsStateWithLifecycle()
+private fun PhoneForm(
+    backend: HortayBackend,
+    guestMode: GuestModeStore,
+    scope: CoroutineScope,
+    errorMessage: String?,
+) {
+    val countries by backend.countries.collectAsStateWithLifecycle()
+    val detectedIso by backend.detectedCountryIso.collectAsStateWithLifecycle()
 
-    LaunchedEffect(Unit) { graph.countries.load() }
+    LaunchedEffect(Unit) { backend.loadCountries() }
 
     var selected by remember { mutableStateOf<Country?>(null) }
     var phoneNational by remember { mutableStateOf("") }
@@ -296,7 +314,7 @@ private fun PhoneForm(graph: AppGraph, errorMessage: String?) {
     // Errors from a previous submit clear once the user edits anything — feels right and
     // avoids a stale red message hanging around after they've already corrected it.
     LaunchedEffect(phoneNational, selected, customDial) {
-        if (errorMessage != null) client.clearAuthError()
+        if (errorMessage != null) backend.clearAuthError()
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -340,7 +358,7 @@ private fun PhoneForm(graph: AppGraph, errorMessage: String?) {
                 val full = prefix + phoneNational
                 submitting = true
                 scope.launch {
-                    try { client.submitPhone(full) } finally { submitting = false }
+                    try { backend.submitPhone(full) } finally { submitting = false }
                 }
             },
         )
@@ -359,7 +377,7 @@ private fun PhoneForm(graph: AppGraph, errorMessage: String?) {
         // container) — guest mode is a real opt-out, not the happy path.
         OutlinedButton(
             onClick = {
-                scope.launch { graph.guestMode.setGuest(true) }
+                scope.launch { guestMode.setGuest(true) }
             },
             shapes = ButtonDefaults.shapes(),
             modifier = Modifier.fillMaxWidth(),
@@ -482,9 +500,12 @@ private fun PhoneNumberRow(
 // ---------- Code ----------
 
 @Composable
-private fun CodeForm(graph: AppGraph, stage: AuthStage.WaitCode, errorMessage: String?) {
-    val client = graph.tdClient
-    val scope = rememberCoroutineScope()
+private fun CodeForm(
+    backend: HortayBackend,
+    scope: CoroutineScope,
+    stage: AuthStage.WaitCode,
+    errorMessage: String?,
+) {
     val focusManager = LocalFocusManager.current
 
     // Reset the typed code whenever TDLib swaps the active code channel — resend can
@@ -507,20 +528,20 @@ private fun CodeForm(graph: AppGraph, stage: AuthStage.WaitCode, errorMessage: S
     }
     LaunchedEffect(stage.resendAvailableInSec) {
         while (secondsLeft > 0) {
-            kotlinx.coroutines.delay(1000)
+            delay(1000)
             secondsLeft -= 1
         }
     }
 
     LaunchedEffect(code) {
-        if (errorMessage != null) client.clearAuthError()
+        if (errorMessage != null) backend.clearAuthError()
     }
 
     val onSubmit: (String) -> Unit = { input ->
         if (!submitting) {
             submitting = true
             scope.launch {
-                try { client.submitCode(input) } finally { submitting = false }
+                try { backend.submitCode(input) } finally { submitting = false }
             }
         }
     }
@@ -579,11 +600,11 @@ private fun CodeForm(graph: AppGraph, stage: AuthStage.WaitCode, errorMessage: S
                 onClick = {
                     resending = true
                     scope.launch {
-                        try { client.resendCode() } finally { resending = false }
+                        try { backend.resendCode() } finally { resending = false }
                     }
                 },
             ) {
-                val ctxRes = remember { dev.lyo.hortay.data.ComposeResourcesStringResolver() }
+                val ctxRes = remember { ComposeResourcesStringResolver() }
                 Text(
                     text = resendLabel(
                         res = ctxRes,
@@ -596,7 +617,7 @@ private fun CodeForm(graph: AppGraph, stage: AuthStage.WaitCode, errorMessage: S
             }
             TextButton(
                 enabled = !submitting,
-                onClick = { scope.launch { client.cancelAuth() } },
+                onClick = { scope.launch { backend.cancelAuth() } },
             ) {
                 Text(
                     text = stringResource(Res.string.auth_change_number),
@@ -620,7 +641,7 @@ private fun minSubmitLength(stage: AuthStage.WaitCode): Int =
  * down state. Pulling this out keeps CodeForm's layout block readable.
  */
 private fun resendLabel(
-    res: dev.lyo.hortay.data.StringResolver,
+    res: StringResolver,
     secondsLeft: Int,
     resending: Boolean,
     nextChannelLabel: String?,
@@ -634,9 +655,12 @@ private fun resendLabel(
 // ---------- Password ----------
 
 @Composable
-private fun PasswordForm(graph: AppGraph, stage: AuthStage.WaitPassword, errorMessage: String?) {
-    val client = graph.tdClient
-    val scope = rememberCoroutineScope()
+private fun PasswordForm(
+    backend: HortayBackend,
+    scope: CoroutineScope,
+    stage: AuthStage.WaitPassword,
+    errorMessage: String?,
+) {
     val focusManager = LocalFocusManager.current
 
     var password by remember { mutableStateOf("") }
@@ -654,7 +678,7 @@ private fun PasswordForm(graph: AppGraph, stage: AuthStage.WaitPassword, errorMe
     var recoveryMode by remember { mutableStateOf(RecoveryMode.Idle) }
 
     LaunchedEffect(password, recoveryCode) {
-        if (errorMessage != null) client.clearAuthError()
+        if (errorMessage != null) backend.clearAuthError()
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -778,7 +802,7 @@ private fun PasswordForm(graph: AppGraph, stage: AuthStage.WaitPassword, errorMe
                             recoveryMode = RecoveryMode.Unavailable
                         } else {
                             recoveryMode = RecoveryMode.Sent
-                            scope.launch { client.requestPasswordRecovery() }
+                            scope.launch { backend.requestPasswordRecovery() }
                         }
                     }
                     .padding(vertical = 4.dp),
@@ -794,7 +818,7 @@ private fun PasswordForm(graph: AppGraph, stage: AuthStage.WaitPassword, errorMe
                     focusManager.clearFocus()
                     submitting = true
                     scope.launch {
-                        try { client.recoverPassword(recoveryCode) } finally { submitting = false }
+                        try { backend.recoverPassword(recoveryCode) } finally { submitting = false }
                     }
                 },
             )
@@ -807,7 +831,7 @@ private fun PasswordForm(graph: AppGraph, stage: AuthStage.WaitPassword, errorMe
                     focusManager.clearFocus()
                     submitting = true
                     scope.launch {
-                        try { client.submitPassword(password) } finally { submitting = false }
+                        try { backend.submitPassword(password) } finally { submitting = false }
                     }
                 },
             )
