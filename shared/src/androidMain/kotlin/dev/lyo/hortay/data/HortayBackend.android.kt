@@ -12,6 +12,7 @@ actual class HortayBackend(
     private val client: TdClient,
     private val countriesRepo: CountryRepository,
     private val channelActions: ChannelActionsRepository,
+    private val linkResolver: TelegramLinkResolver,
 ) {
     actual val authStage: StateFlow<AuthStage> get() = client.authStage
     actual val authError: StateFlow<String?> get() = client.authError
@@ -36,4 +37,9 @@ actual class HortayBackend(
     actual suspend fun leaveChat(chatId: Long) = channelActions.leaveChat(chatId)
     actual suspend fun userProfile(userId: Long): UserProfile? =
         channelActions.userProfile(userId)
+
+    actual suspend fun resolveLink(uri: String): DeepLink? {
+        val parsed = runCatching { android.net.Uri.parse(uri) }.getOrNull() ?: return null
+        return linkResolver.resolve(parsed)
+    }
 }

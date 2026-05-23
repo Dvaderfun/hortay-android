@@ -299,7 +299,12 @@ fun WebModeScaffold(graph: AppGraph) {
             else systemUriHandler.openUri("https://t.me/")
         }
     }
-    LinkAwareScaffold(graph) {
+    LinkAwareScaffold(
+        backend = graph.backend,
+        router = graph.deepLinkRouter,
+        linkDialogs = graph.linkDialogs,
+        scope = graph.appScope,
+    ) {
     CompositionLocalProvider(
         LocalReadCursors provides cursorHolder,
         dev.lyo.hortay.ui.media.LocalInlineVideoAutoplay provides inlineVideoAutoplay,

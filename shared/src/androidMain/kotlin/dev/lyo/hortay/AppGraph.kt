@@ -202,18 +202,6 @@ class AppGraph(context: Context) {
 
     val countries: CountryRepository = CountryRepository(tdClient, res, appScope)
 
-    /**
-     * Platform-agnostic delegate over TDLib for commonMain UI. Wraps the
-     * TDLib-typed repos so screens can take a single `HortayBackend` reference
-     * and compile on both Android and iOS. See [HortayBackend] KDoc for the
-     * rationale.
-     */
-    val backend: HortayBackend = HortayBackend(
-        client = tdClient,
-        countriesRepo = countries,
-        channelActions = channelActions,
-    )
-
     // Custom-emoji resolver for inline emojis in formatted text and for custom-emoji
     // reaction buckets. Uses GetCustomEmojiStickers in batches of up to 200 ids; the
     // request stream is debounced 50ms so a screen-full of posts coalesces into a
@@ -256,6 +244,19 @@ class AppGraph(context: Context) {
      */
     val linkResolver: TelegramLinkResolver = TelegramLinkResolver(tdClient)
         .also { it.bindLogoutClear(tdClient.loggedOut, appScope) }
+
+    /**
+     * Platform-agnostic delegate over TDLib for commonMain UI. Wraps the
+     * TDLib-typed repos so screens can take a single `HortayBackend` reference
+     * and compile on both Android and iOS. See [HortayBackend] KDoc for the
+     * rationale.
+     */
+    val backend: HortayBackend = HortayBackend(
+        client = tdClient,
+        countriesRepo = countries,
+        channelActions = channelActions,
+        linkResolver = linkResolver,
+    )
 
     /**
      * Process-wide dialog state for link-confirmation flows. Hoisted off the scaffolds

@@ -416,7 +416,12 @@ fun MainScaffold(graph: AppGraph) {
     // URL against the Telegram link resolver before falling back to the OS. One
     // interceptor wired here is cheaper than wrapping every Text call-site individually
     // and guarantees no path leaks straight to ACTION_VIEW.
-    LinkAwareScaffold(graph) {
+    LinkAwareScaffold(
+        backend = graph.backend,
+        router = graph.deepLinkRouter,
+        linkDialogs = graph.linkDialogs,
+        scope = graph.appScope,
+    ) {
         CompositionLocalProvider(
             LocalReadCursors provides cursorHolder,
             dev.lyo.hortay.ui.media.LocalInlineVideoAutoplay provides inlineVideoAutoplay,

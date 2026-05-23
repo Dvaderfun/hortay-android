@@ -115,4 +115,16 @@ expect class HortayBackend {
      * the lookup.
      */
     suspend fun userProfile(userId: Long): UserProfile?
+
+    // ---- Links --------------------------------------------------------
+
+    /**
+     * Parse [uri] through TDLib's `GetInternalLinkType` (knows the full ~50
+     * t.me / tg:// shape catalogue, runs offline, pre-auth-safe). Returns a
+     * typed [DeepLink] for inbound dispatch into the app, or null when the
+     * URL isn't recognisably Telegram-internal. The iOS stub returns null
+     * for everything — guest-mode UI falls through to the OS handler via
+     * [androidx.compose.ui.platform.UriHandler.openUri].
+     */
+    suspend fun resolveLink(uri: String): DeepLink?
 }
