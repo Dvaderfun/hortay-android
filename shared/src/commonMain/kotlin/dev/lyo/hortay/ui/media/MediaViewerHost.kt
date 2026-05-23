@@ -11,10 +11,9 @@ import dev.lyo.hortay.data.AlbumItem
 /**
  * Mounts a single [FullScreenMediaViewer] above [content] and wires it into
  * [LocalMediaViewer] so descendant screens can open media without owning the
- * viewer themselves. Lives in androidMain because the underlying
- * [FullScreenMediaViewer] still pulls Android-only APIs (MediaStore /
- * FileProvider for Save / Copy / Share). iOS doesn't expose the viewer yet —
- * guest-mode UI on iOS skips media taps via the default no-op controller.
+ * viewer themselves. The platform Save / Copy / Share routing flows through
+ * [LocalMediaShareActions], which is provided by `MainActivity` /
+ * `MainViewController`.
  */
 @Composable
 fun MediaViewerHost(content: @Composable () -> Unit) {

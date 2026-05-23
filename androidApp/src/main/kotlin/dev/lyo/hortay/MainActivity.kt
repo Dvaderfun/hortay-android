@@ -96,6 +96,8 @@ class MainActivity : ComponentActivity() {
                     },
                     dev.lyo.hortay.LocalPlatformToaster provides
                         dev.lyo.hortay.AndroidToaster(applicationContext),
+                    dev.lyo.hortay.ui.media.LocalMediaShareActions provides
+                        dev.lyo.hortay.ui.media.AndroidMediaShareActions,
                 ) {
                     Surface(modifier = Modifier.fillMaxSize()) {
                         val auth by graph.tdClient.authStage.collectAsStateWithLifecycle()
