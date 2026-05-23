@@ -176,4 +176,4 @@ private const val HORIZONTAL_SWAY_PX = 3f
 private const val DISPERSE_MIN_PX = 24f
 private const val DISPERSE_LIFT_PX = 14f
 private const val DISPERSE_DELAY_FRACTION = 0.55f
-private const val TWO_PI = (2.0 * Math.PI).toFloat()
+private const val TWO_PI = 6.2831855f // 2 * PI
