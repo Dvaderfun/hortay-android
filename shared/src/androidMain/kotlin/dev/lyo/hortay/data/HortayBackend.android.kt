@@ -29,6 +29,7 @@ actual class HortayBackend(
     private val linkResolver: TelegramLinkResolver,
     private val postsRepo: PostsRepository,
     private val commentsRepo: CommentsRepository,
+    actual val folders: FoldersFacade?,
     private val reportRepo: ReportRepository,
     actual val reportDialogs: ReportDialogState,
     actual val reportLogStore: ReportLogStore,
@@ -69,6 +70,7 @@ actual class HortayBackend(
 
     actual val feedPosts: StateFlow<PersistentList<TimelinePost>> get() = postsRepo.posts
     actual val newArrivals: SharedFlow<TimelinePost> get() = postsRepo.newArrivals
+    actual val archivedChatIds: StateFlow<Set<Long>> get() = postsRepo.archivedChatIds
 
     actual suspend fun refreshFeed() = postsRepo.refresh()
     actual suspend fun loadOlder(chatId: Long): Int = postsRepo.loadOlder(chatId)

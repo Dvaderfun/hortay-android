@@ -261,7 +261,7 @@ fun TimelineScreen(
     val refreshing by vm.refreshing.collectAsStateWithLifecycle()
     val bookmarkedKeys by vm.bookmarkedKeys.collectAsStateWithLifecycle()
     val pendingNew by vm.pendingNew.collectAsStateWithLifecycle()
-    val foldersList: List<org.drinkless.tdlib.TdApi.ChatFolderInfo> = folders?.folders
+    val foldersList: List<org.drinkless.tdlib.TdApi.ChatFolderInfo> = folders?.tdFolders
         ?.collectAsStateWithLifecycle()?.value
         ?: emptyList()
     // Resolved per-folder rules (kept hot by ChatFoldersRepository). Used to hide tabs
