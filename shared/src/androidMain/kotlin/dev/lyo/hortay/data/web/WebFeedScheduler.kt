@@ -1,6 +1,6 @@
 package dev.lyo.hortay.data.web
 
-import android.util.Log
+import dev.lyo.hortay.PlatformLog
 import dev.lyo.hortay.data.AuthStage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -112,10 +112,10 @@ class WebFeedScheduler(
             } catch (cancellation: kotlinx.coroutines.CancellationException) {
                 throw cancellation
             } catch (t: Throwable) {
-                Log.w(TAG, "tier-2 scheduler died on uncaught throw; loop exits", t)
+                PlatformLog.w(TAG, "tier-2 scheduler died on uncaught throw; loop exits", t)
             }
         }.also {
-            Log.i(TAG, "tier-2 scheduler started (${tier2IntervalMs / 1000}s base, adaptive)")
+            PlatformLog.i(TAG, "tier-2 scheduler started (${tier2IntervalMs / 1000}s base, adaptive)")
         }
     }
 
@@ -132,7 +132,7 @@ class WebFeedScheduler(
         runCatching { feedSource.refreshAsync(force = false).join() }
             .onFailure { err ->
                 if (err is kotlinx.coroutines.CancellationException) throw err
-                Log.w(TAG, "tier-2 sweep failed; backing off then retrying", err)
+                PlatformLog.w(TAG, "tier-2 sweep failed; backing off then retrying", err)
             }
     }
 

@@ -1,6 +1,6 @@
 package dev.lyo.hortay.data.web
 
-import android.util.Log
+import dev.lyo.hortay.PlatformLog
 import dev.lyo.hortay.data.FeedSource
 import dev.lyo.hortay.data.IgnoredChannelsStore
 import dev.lyo.hortay.data.TimelinePost
@@ -284,7 +284,7 @@ class WebFeedSource(
                 lastSuccessfulRefreshAtMs = System.currentTimeMillis()
                 _refreshState.value = RefreshState.Idle
             } catch (t: Throwable) {
-                Log.w(TAG, "refresh failed: ${t.message}")
+                PlatformLog.w(TAG, "refresh failed: ${t.message}")
                 _refreshState.value = RefreshState.Error(t.message ?: "refresh failed")
             }
         } finally {

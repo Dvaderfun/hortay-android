@@ -1,6 +1,6 @@
 package dev.lyo.hortay.data.web
 
-import android.util.Log
+import dev.lyo.hortay.PlatformLog
 import dev.lyo.hortay.data.CustomEmojiRepository
 import dev.lyo.hortay.data.CustomEmojiSticker
 import dev.lyo.hortay.data.FormattedText
@@ -113,7 +113,7 @@ class WebCustomEmojiBridge(
             }
             if (resolved.isNotEmpty()) {
                 customEmojiRepo.populate(resolved)
-                Log.i(TAG, "populated ${resolved.size} custom emoji stickers from web resolver")
+                PlatformLog.i(TAG, "populated ${resolved.size} custom emoji stickers from web resolver")
             }
         }
     }

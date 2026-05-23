@@ -1,6 +1,6 @@
 package dev.lyo.hortay.data.web
 
-import android.util.Log
+import dev.lyo.hortay.PlatformLog
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
 import app.cash.sqldelight.coroutines.mapToOneOrNull
@@ -608,14 +608,14 @@ class WebRepository(
     private fun decodeMedia(jsonStr: String): PersistentList<WebMedia> = runCatching {
         json.decodeFromString(mediaListSerializer, jsonStr).toPersistentList()
     }.getOrElse {
-        Log.w(TAG, "media decode failed: ${it.message}")
+        PlatformLog.w(TAG, "media decode failed: ${it.message}")
         persistentListOf()
     }
 
     private fun decodeReactions(jsonStr: String): PersistentList<WebReaction> = runCatching {
         json.decodeFromString(reactionListSerializer, jsonStr).toPersistentList()
     }.getOrElse {
-        Log.w(TAG, "reactions decode failed: ${it.message}")
+        PlatformLog.w(TAG, "reactions decode failed: ${it.message}")
         persistentListOf()
     }
 
