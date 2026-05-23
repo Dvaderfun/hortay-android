@@ -112,6 +112,15 @@ actual class HortayBackend(
 
     actual suspend fun viewThreadMessages(threadChatId: Long, messageIds: List<Long>) {}
     actual suspend fun prefetchThread(chatId: Long, candidateMessageIds: List<Long>) {}
+    actual fun applyCommentOptimisticReaction(
+        threadChatId: Long,
+        messageId: Long,
+        current: Reactions,
+        kind: ReactionKind,
+        nowChosen: Boolean,
+    ) {
+    }
+    actual fun clearCommentOptimisticReaction(threadChatId: Long, messageId: Long) {}
     actual suspend fun canonicalShareUrl(post: TimelinePost): String? = null
 
     actual val isAuthenticated: StateFlow<Boolean> = MutableStateFlow(false).asStateFlow()
