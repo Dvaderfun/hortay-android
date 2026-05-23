@@ -131,35 +131,25 @@ fun CustomEmojiInlineView(
         val repaint = if (sticker.needsRepainting) tintColor else null
 
         when (sticker.format) {
-            // TGS routes through [InlineCustomEmojiRenderer] (NOT [LottieStickerView])
-            // for inline-emoji sizing. The renderer joins a shared playback session
-            // keyed by customEmojiId in [CustomEmojiAnimator], so N repeats of the
-            // same emoji in a post share one [com.airbnb.lottie.LottieDrawable] + one
-            // progress state + one Choreographer tick. Saves CPU/battery proportionally
-            // to the repeat count: a post with 30 copies of the same TGS emoji pays
-            // roughly 1/30 of the per-frame raster cost of the naive
-            // [LottieStickerView] path. Full-size stickers (StickerView) keep using
-            // [LottieStickerView] because there's at most 1–2 of them on screen and
-            // they want native composition fps.
+            // TGS routes through [LottieStickerView] (Compottie). Each inline emoji
+            // gets its own LottieAnimation — the shared-bitmap optimisation that
+            // existed during the Airbnb-Lottie era is gone (Compottie has no
+            // `LottieDrawable.draw(canvas)` equivalent). Per-glyph rendering is fine
+            // for the realistic load (≤ 30 inline emojis per visible card viewport,
+            // capped by LazyColumn skippability) and buys iOS parity.
             //
             // `remoteUrl` path: web (anonymous) mode where we have a URL but no TDLib
-            // fileId. InlineCustomEmojiRenderer routes through [LottieUrlStore] in
-            // that case, fetching the .tgs (or pre-decompressed JSON) bytes via the
-            // shared OkHttp client. TDLib mode keeps using fileId.
-            // TGS animation routes through [InlineCustomEmojiRenderer] — shared
-            // [com.airbnb.lottie.LottieDrawable] per (id, fps) in [CustomEmojiAnimator],
-            // background-thread rasterisation, double-buffered blits. See animator KDoc
-            // for the full rationale.
-            StickerFormat.Tgs -> InlineCustomEmojiRenderer(
-                customEmojiId = customEmojiId,
+            // fileId. LottieStickerView fetches the .tgs (or pre-decompressed JSON)
+            // bytes via the shared HTTP client.
+            StickerFormat.Tgs -> LottieStickerView(
                 fileId = sticker.media.fileId,
-                remoteUrl = sticker.media.takeIf { it.fileId == null }?.remoteUrl,
                 thumb = sticker.thumb,
                 contentDescription = contentDescription,
                 modifier = Modifier.fillMaxSize(),
-                tintColor = repaint,
-                fps = CustomEmojiAnimator.Fps.Inline,
                 priority = priority,
+                iterate = true,
+                repaintColor = repaint,
+                remoteUrl = sticker.media.takeIf { it.fileId == null }?.remoteUrl,
             )
             StickerFormat.Webp -> {
                 // Static WEBP is the cheap path — render directly. (Most custom emojis

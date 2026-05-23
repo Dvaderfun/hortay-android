@@ -5,8 +5,7 @@ import androidx.compose.runtime.Immutable
 /**
  * Resolved custom-emoji sticker descriptor. Produced by
  * `CustomEmojiRepository.request → flush(GetCustomEmojiStickers)`; consumed by
- * `CustomEmojiInlineView` / `InlineCustomEmojiRenderer` to paint a single
- * inline glyph.
+ * `CustomEmojiInlineView` to paint a single inline glyph.
  *
  * [thumb] is the small-image preview Telegram ships alongside every sticker
  * (`Sticker.thumbnail`) — UI shows it the moment the sticker resolves, before

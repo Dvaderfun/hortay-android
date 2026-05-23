@@ -36,44 +36,34 @@ import java.io.FileInputStream
 import java.util.zip.GZIPInputStream
 
 /**
- * Plays a Telegram TGS (gzipped Lottie) sticker via Compottie. Pipeline:
+ * Plays a Telegram TGS (gzipped Lottie) sticker via Compottie. Used both for
+ * full-size stickers (in PostBody / comments) and for inline custom-emoji
+ * glyphs (one Composable per glyph — the old shared-bitmap rasteriser that
+ * relied on Airbnb's `LottieDrawable.draw(canvas)` is gone since H2). Pipeline:
  *
- *   1. Ask [MediaCache] to download the .tgs file at the given priority.
- *   2. Underlay the [thumb] (TDLib-served WEBP/PNG) — instant preview while bytes land.
+ *   1. Ask [dev.lyo.hortay.data.MediaCache] to download the .tgs file at the
+ *      given priority.
+ *   2. Underlay the [thumb] (TDLib-served WEBP/PNG) — instant preview while
+ *      bytes land.
  *   3. Once the file is `Ready`, decompress + parse into Compottie's
  *      [CompottieComposition].
  *   4. Hand the composition to Compose's [Image] with [rememberLottiePainter] —
  *      Compottie's pure-Kotlin renderer, KMP-ready.
  *
- * # Why Compottie here, Airbnb Lottie in [CustomEmojiAnimator]
- *
- * Two Lottie code paths coexist during the KMP migration:
- *   - **This file (LottieStickerView):** full-size stickers in PostBody / comments.
- *     One renderer per visible sticker; per-frame cost manageable. Uses Compottie's
- *     `Image(painter = rememberLottiePainter(...))` — works on Android + iOS.
- *   - **[CustomEmojiAnimator] + [InlineCustomEmojiRenderer]:** inline custom emoji
- *     inside formatted text. 30+ active simultaneously on a busy feed; needs the
- *     bitmap-bg-rasterisation double-buffer architecture which is bound to Airbnb's
- *     `LottieDrawable.draw(canvas)` API. Compottie has no drawable equivalent
- *     (renderer is Composable-only). Migration of that path is a separate ticket.
- *
- * The architecture-level rationale belongs in `ARCHITECTURE.md` once the dual-path
- * split is durable.
- *
  * # Recoloring (`repaintColor`)
  *
- * TDLib's `StickerFullTypeCustomEmoji.needsRepainting` flag marks monochrome emojis
- * that must take the surrounding text colour. Airbnb's path used
- * `PorterDuffColorFilter(argb, PorterDuff.Mode.SRC_ATOP)` as a `LottieDynamicProperty`.
- * Compottie's renderer respects Compose's [ColorFilter] on the surrounding [Image] —
- * `ColorFilter.tint(color, blendMode = BlendMode.SrcAtop)` is the KMP-friendly
- * equivalent. No per-layer dynamic-property DSL needed.
+ * TDLib's `StickerFullTypeCustomEmoji.needsRepainting` flag marks monochrome
+ * emojis that must take the surrounding text colour. Compottie's renderer
+ * respects Compose's [ColorFilter] on the surrounding [Image] —
+ * `ColorFilter.tint(color, blendMode = BlendMode.SrcAtop)` is the
+ * KMP-friendly equivalent. No per-layer dynamic-property DSL needed.
  *
  * # Lifecycle / battery
  *
- * Animation pauses while the host lifecycle is below STARTED (app backgrounded,
- * screen off). Off-screen items in a LazyColumn are disposed by the column itself,
- * which tears down this composable and stops drawing entirely.
+ * Animation pauses while the host lifecycle is below STARTED (app
+ * backgrounded, screen off). Off-screen items in a LazyColumn are disposed
+ * by the column itself, which tears down this composable and stops drawing
+ * entirely.
  */
 @Composable
 fun LottieStickerView(
