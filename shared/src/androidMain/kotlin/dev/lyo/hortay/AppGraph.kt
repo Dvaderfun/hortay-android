@@ -188,7 +188,9 @@ class AppGraph(context: Context) {
         scope = appScope,
     ).also { it.bind() }
 
-    val bookmarkStore: BookmarkStore = BookmarkStore(context)
+    val bookmarkStore: BookmarkStore = BookmarkStore(
+        dev.lyo.hortay.data.createPreferencesDataStore(BookmarkStore.FILE_NAME),
+    )
 
     val statsRepository: StatsRepository = StatsRepository(tdClient)
 
