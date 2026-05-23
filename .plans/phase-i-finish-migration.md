@@ -6,7 +6,7 @@ Continuation of Phase H. Target: every UI screen + repository compiles on iOS, t
 
 ## Progress (session of 2026-05-23 → 2026-05-24)
 
-**Counts:** 52 androidMain / 163 commonMain / 17 iosMain
+**Counts:** 51 androidMain / 170 commonMain / 17 iosMain
 (started session at 61 / 150 / 17, started Phase H at 111 / 87 / 9).
 
 **Wave order revised bottom-up** because dependencies run leaf → root:
@@ -67,31 +67,43 @@ first, move leaves, then containers.
   `BackSwipeEdge.Right`; AppGraph dep replaced with explicit
   (backend, bookmarks, ignoredChannels, userMessages, startupPhase).
   Two new backend methods (`applyCommentOptimisticReaction`,
-  `clearCommentOptimisticReaction`) absorb the comments-thread
-  override path that previously needed `CommentsRepository`.
+  `clearCommentOptimisticReaction`).
+- **Wave D wave 5** (`078987c` + `7c58abf`) — `AutoDownloadScreen` and
+  `SettingsScreen` move to commonMain. `DataSaver.kt` expect/actual
+  (`rememberDataSaverActive` + `openOsDataUsageSettings`),
+  `LanguagePicker.kt` (LocalLanguagePicker slot + AndroidLanguagePicker
+  impl), `ImageDiskCache.kt` expect/actual (Android wraps Coil's disk
+  cache, iOS no-op). `StatsFacade` interface in commonMain; backend
+  exposes `stats: StatsFacade?` + `autoDownload: AutoDownloadFacade?`.
+  Safety-policy rows route through `LocalUriHandler` (CustomTabs path
+  dropped).
+- **Wave D wave 1 finish — `TabContentSwitcher`** (`a81137e`). All three
+  rendered screens now commonMain; switcher takes explicit deps and
+  routes Profile-tab logout / enter-guest through `backend.logOut()`.
+- **Wave D wave 2 — `MainScaffold`** (`8a41257`). The 569-line container
+  goes commonMain. Backend grows `connection`, `floodWaitUntilMs`,
+  `previewChatInvite`, `primeCommentsForOpen`. BackEventCompat →
+  BackSwipeEdge; PredictiveBackHandler from
+  `androidx.compose.ui.backhandler`; `System.nanoTime()` → atomicfu
+  `nextTapToken()` counter. androidApp adds direct
+  kotlinx-collections-immutable dep so the ReadCursors typealias
+  resolves at the MainActivity call site.
 
 ### Next session resume points
-1. **Wave D wave 5 — SettingsScreen + AutoDownloadScreen**.
-   Needs a `PlatformConnectivity` abstraction (or lambda slot) for
-   `ConnectivityManager` restrict-background status and the
-   `Settings.ACTION_DATA_USAGE_SETTINGS` intent. SettingsScreen
-   routes through `backend.settingsStore` / `backend.statsRepository`
-   (statsRepository already exposed via Wave-A facade — make sure
-   `backend.statsRepository` is wired).
-2. **Wave D wave 1 finish — `TabContentSwitcher`**. Renders
-   TimelineScreen + ChannelsScreen + SettingsScreen, so it can move
-   once SettingsScreen lands.
-3. **Wave D wave 2 — `MainScaffold` (557 lines)**.
-4. **Wave D wave 4 — WebModeScaffold + AddChannelSheet +
+1. **Wave D wave 4 — WebModeScaffold + AddChannelSheet +
    MigrationProposalSheet**. WebModeScaffold consumes
-   `LocalGuestReportDelegate` (slot already landed) for the report
+   `LocalGuestReportDelegate` (slot landed in Wave B) for the report
    delegation path. MigrationProposalSheet needs
-   `MigrationCoordinator.progress` exposed via backend.
-5. **Wave D wave 7 — `Theme.kt`** (last UI file).
-6. **I-D — iOS UI parity ship** — replace `MainViewController`'s parallel
-   renderer with the real `WebModeScaffold` tree.
-7. **I-E — production polish** — lint + detekt + baseline profile +
-   CHANGELOG + ARCHITECTURE.
+   `MigrationCoordinator.progress` exposed via backend (or a
+   `MigrationCoordinatorFacade`). AddChannelSheet probably just needs
+   the existing web pipeline accessors. WebModeScaffold is the second-
+   biggest remaining file (~660 lines).
+2. **I-D — iOS UI parity ship** — replace `MainViewController`'s parallel
+   renderer with the real `WebModeScaffold` tree once that file moves.
+3. **I-E — production polish** — lint + detekt + baseline profile +
+   CHANGELOG + ARCHITECTURE refresh.
+
+`Theme.kt` already lives in commonMain (verified — was moved in I-A).
 
 ---
 
