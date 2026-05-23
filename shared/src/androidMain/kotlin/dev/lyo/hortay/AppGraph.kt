@@ -452,7 +452,9 @@ class AppGraph(context: Context) {
      * moderators" explainer has been shown. Resets on logout so a new account
      * always sees it on first report.
      */
-    val reportExplainerStore: ReportExplainerStore = ReportExplainerStore(context)
+    val reportExplainerStore: ReportExplainerStore = ReportExplainerStore(
+        dev.lyo.hortay.data.createPreferencesDataStore(ReportExplainerStore.FILE_NAME),
+    )
 
     /**
      * TDLib-based dynamic ReportChat flow. Called from [MainScaffold]'s
