@@ -32,7 +32,7 @@ class CommentsRepositoryTest {
 
         val state = repo.observeThread(chatId = 123L, candidateMessageIds = listOf(1L, 2L)).first()
 
-        assertTrue(state is CommentsRepository.ThreadState.Error)
+        assertTrue(state is ThreadState.Error)
     }
 
     @Test
@@ -75,8 +75,8 @@ class CommentsRepositoryTest {
         val repo = CommentsRepository(td, fakeMapper(td), TestScope(StandardTestDispatcher(testScheduler)), FakeStrings)
 
         val ready = repo.observeThread(chatId, listOf(anchor)).first {
-            it is CommentsRepository.ThreadState.Ready
-        } as CommentsRepository.ThreadState.Ready
+            it is ThreadState.Ready
+        } as ThreadState.Ready
 
         assertEquals(threadChatId, ready.threadChatId)
         assertEquals(1, ready.rows.size, "rootId mirror must be filtered out")
@@ -123,7 +123,7 @@ class CommentsRepositoryTest {
         }
         val repo = CommentsRepository(td, fakeMapper(td), testScope, FakeStrings)
 
-        val collected = mutableListOf<CommentsRepository.ThreadState>()
+        val collected = mutableListOf<ThreadState>()
         val job = testScope.launch {
             repo.observeThread(chatId, listOf(anchor)).collect { collected += it }
         }
@@ -145,7 +145,7 @@ class CommentsRepositoryTest {
         )
         advanceUntilIdle()
 
-        val final = collected.last() as CommentsRepository.ThreadState.Ready
+        val final = collected.last() as ThreadState.Ready
         val visibleIds = final.rows.map { it.message.id }.toSet()
         assertFalse(200L in visibleIds, "foreign-thread comment must not be visible")
         assertTrue(201L in visibleIds, "our-thread comment must appear")
@@ -201,8 +201,8 @@ class CommentsRepositoryTest {
         val repo = CommentsRepository(td, fakeMapper(td), TestScope(StandardTestDispatcher(testScheduler)), FakeStrings)
 
         val ready = repo.observeThread(chatId, listOf(anchor)).first {
-            it is CommentsRepository.ThreadState.Ready
-        } as CommentsRepository.ThreadState.Ready
+            it is ThreadState.Ready
+        } as ThreadState.Ready
 
         assertEquals(1, ready.rows.size, "3 album members must merge into ONE thread row")
         val merged = ready.rows.single().message
@@ -265,8 +265,8 @@ class CommentsRepositoryTest {
         val repo = CommentsRepository(td, fakeMapper(td), TestScope(StandardTestDispatcher(testScheduler)), FakeStrings)
 
         val ready = repo.observeThread(chatId, listOf(anchor)).first {
-            it is CommentsRepository.ThreadState.Ready
-        } as CommentsRepository.ThreadState.Ready
+            it is ThreadState.Ready
+        } as ThreadState.Ready
 
         val ids = ready.rows.map { it.message.id }
         assertEquals(listOf(200L), ids,
@@ -321,8 +321,8 @@ class CommentsRepositoryTest {
         val repo = CommentsRepository(td, fakeMapper(td), TestScope(StandardTestDispatcher(testScheduler)), FakeStrings)
 
         val ready = repo.observeThread(chatId, listOf(anchor)).first {
-            it is CommentsRepository.ThreadState.Ready
-        } as CommentsRepository.ThreadState.Ready
+            it is ThreadState.Ready
+        } as ThreadState.Ready
 
         assertEquals(2, ready.rows.size, "merged album + reply = 2 rows")
         val albumRow = ready.rows.first { it.message.id == 100L }

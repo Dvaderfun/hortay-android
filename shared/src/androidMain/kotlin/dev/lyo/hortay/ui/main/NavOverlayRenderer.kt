@@ -210,8 +210,7 @@ private fun RenderNavEntry(
         )
         is NavEntry.Comments -> CommentsScreen(
             post = entry.anchor,
-            repo = graph.commentsRepository,
-            feedRepo = graph.postsRepository,
+            backend = graph.backend,
             onDismiss = onPopNav,
             // The three "leave this detail view for somewhere else" hooks
             // below — channel-chip tap, foreign-author header tap, reply
@@ -258,7 +257,7 @@ private fun RenderNavEntry(
             onReactionToggle = { chatId, messageId, snapshot, kind, wasChosen ->
                 // Tap origin is encoded in [chatId]: the anchor's chat is the
                 // channel post's chatId; comments live in the linked discussion
-                // supergroup ([CommentsRepository.ThreadState.Ready.threadChatId]).
+                // supergroup ([ThreadState.Ready.threadChatId]).
                 // We route the optimistic mutation to the repository that owns
                 // that state and let TDLib reconcile via the usual
                 // UpdateMessageInteractionInfo path.

@@ -256,6 +256,8 @@ class AppGraph(context: Context) {
         countriesRepo = countries,
         channelActions = channelActions,
         linkResolver = linkResolver,
+        postsRepo = postsRepository,
+        commentsRepo = commentsRepository,
     )
 
     /**

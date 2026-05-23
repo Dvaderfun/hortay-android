@@ -1,8 +1,12 @@
 package dev.lyo.hortay.data
 
+import kotlinx.collections.immutable.PersistentList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flowOf
 
 /**
  * iOS actual for [HortayBackend]. Guest-mode-only stub — every method either
@@ -36,4 +40,12 @@ actual class HortayBackend {
     actual suspend fun leaveChat(chatId: Long) {}
     actual suspend fun userProfile(userId: Long): UserProfile? = null
     actual suspend fun resolveLink(uri: String): DeepLink? = null
+
+    actual val feedPosts: StateFlow<PersistentList<TimelinePost>> =
+        MutableStateFlow(persistentListOf<TimelinePost>()).asStateFlow()
+
+    actual fun observeThread(chatId: Long, candidateMessageIds: List<Long>): Flow<ThreadState> =
+        flowOf(ThreadState.Loading)
+
+    actual suspend fun viewThreadMessages(threadChatId: Long, messageIds: List<Long>) {}
 }

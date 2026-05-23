@@ -6,35 +6,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.staticCompositionLocalOf
 import dev.lyo.hortay.data.AlbumItem
-import dev.lyo.hortay.data.PostContent
 
 /**
- * Single full-screen media viewer for the whole app. Mounted once at the top of the UI tree
- * (see [MediaViewerHost]); any screen — timeline, comments, future channel detail — opens
- * media via [LocalMediaViewer.current.open]. Centralising this avoids each screen owning a
- * private `viewerState` and a duplicated [FullScreenMediaViewer] composable, and means the
- * viewer survives screen-level recomposition or navigation back/forward.
+ * Mounts a single [FullScreenMediaViewer] above [content] and wires it into
+ * [LocalMediaViewer] so descendant screens can open media without owning the
+ * viewer themselves. Lives in androidMain because the underlying
+ * [FullScreenMediaViewer] still pulls Android-only APIs (MediaStore /
+ * FileProvider for Save / Copy / Share). iOS doesn't expose the viewer yet —
+ * guest-mode UI on iOS skips media taps via the default no-op controller.
  */
-val LocalMediaViewer = staticCompositionLocalOf<MediaViewerController> {
-    error("MediaViewerHost is missing — wrap your UI tree in MediaViewerHost { … }")
-}
-
-class MediaViewerController internal constructor(
-    private val opener: (List<AlbumItem>, Int) -> Unit,
-) {
-    fun open(items: List<AlbumItem>, index: Int = 0) {
-        if (items.isEmpty()) return
-        opener(items, index)
-    }
-
-    /** Convenience: project [PostContent] and open if it has any viewable media. */
-    fun openFor(content: PostContent, index: Int = 0) {
-        content.toAlbumItems()?.let { open(it, index) }
-    }
-}
-
 @Composable
 fun MediaViewerHost(content: @Composable () -> Unit) {
     var state by remember { mutableStateOf<ViewerState?>(null) }

@@ -1,5 +1,8 @@
 package dev.lyo.hortay.data
 
+import dev.lyo.hortay.data.posts.PostsRepository
+import kotlinx.collections.immutable.PersistentList
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -13,6 +16,8 @@ actual class HortayBackend(
     private val countriesRepo: CountryRepository,
     private val channelActions: ChannelActionsRepository,
     private val linkResolver: TelegramLinkResolver,
+    private val postsRepo: PostsRepository,
+    private val commentsRepo: CommentsRepository,
 ) {
     actual val authStage: StateFlow<AuthStage> get() = client.authStage
     actual val authError: StateFlow<String?> get() = client.authError
@@ -41,5 +46,14 @@ actual class HortayBackend(
     actual suspend fun resolveLink(uri: String): DeepLink? {
         val parsed = runCatching { android.net.Uri.parse(uri) }.getOrNull() ?: return null
         return linkResolver.resolve(parsed)
+    }
+
+    actual val feedPosts: StateFlow<PersistentList<TimelinePost>> get() = postsRepo.posts
+
+    actual fun observeThread(chatId: Long, candidateMessageIds: List<Long>): Flow<ThreadState> =
+        commentsRepo.observeThread(chatId, candidateMessageIds)
+
+    actual suspend fun viewThreadMessages(threadChatId: Long, messageIds: List<Long>) {
+        commentsRepo.viewMessages(threadChatId, messageIds)
     }
 }

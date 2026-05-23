@@ -1,5 +1,7 @@
 package dev.lyo.hortay.data
 
+import kotlinx.collections.immutable.PersistentList
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -127,4 +129,36 @@ expect class HortayBackend {
      * [androidx.compose.ui.platform.UriHandler.openUri].
      */
     suspend fun resolveLink(uri: String): DeepLink?
+
+    // ---- Feed / comments ---------------------------------------------
+
+    /**
+     * Live snapshot of the merged feed (the `PostsRepository.posts` flow on
+     * Android). The Comments overlay reads this so the pinned anchor's
+     * reaction chip / view count / comment count stay in sync with the feed
+     * row underneath. iOS returns an empty list — guest-mode UI doesn't
+     * surface a unified TDLib feed and the iOS Comments path never mounts.
+     */
+    val feedPosts: StateFlow<PersistentList<TimelinePost>>
+
+    /**
+     * Subscribe to live updates of a discussion thread. The flow emits
+     * [ThreadState.Loading] immediately, resolves to [ThreadState.Ready]
+     * (or [ThreadState.Error]) on first round-trip, then continues to emit
+     * fresh `Ready` snapshots as TDLib's `Update*Message*` events stream in.
+     *
+     * [candidateMessageIds] lists every message in the originating post's
+     * album (or just the single post id) — the backend picks the carrier
+     * with `canGetMessageThread = true` and starts the conversation from
+     * there.
+     */
+    fun observeThread(chatId: Long, candidateMessageIds: List<Long>): Flow<ThreadState>
+
+    /**
+     * Mark thread messages as read (TDLib `ViewMessages` against the
+     * discussion supergroup). Called by the comments screen's dwell-ack
+     * effect when a comment row sits in the viewport past the read-mark
+     * dwell window.
+     */
+    suspend fun viewThreadMessages(threadChatId: Long, messageIds: List<Long>)
 }
