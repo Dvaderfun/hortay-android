@@ -35,13 +35,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import dev.lyo.hortay.data.ChannelActionsRepository
 import dev.lyo.hortay.data.ChannelInfo
+import dev.lyo.hortay.data.HortayBackend
 import dev.lyo.hortay.data.IgnoredChannelsStore
 import dev.lyo.hortay.ui.icons.Symbol
 import kotlinx.coroutines.launch
-import java.text.NumberFormat
-import java.util.Locale
 import hortay.shared.generated.resources.Res
 import hortay.shared.generated.resources.channels_hide_from_feed
 import hortay.shared.generated.resources.channels_join
@@ -57,8 +55,8 @@ import org.jetbrains.compose.resources.stringResource
 /**
  * Bottom sheet rendered when the user taps a channel header in filtered-feed mode. Pulls
  * fresh metadata (title, handle, description, subscriber count, mute/member state) from
- * [ChannelActionsRepository] on entry; the sheet itself stays visible during the loading
- * window so the trigger feels instant — fields populate inline as TDLib responds.
+ * [HortayBackend] on entry; the sheet itself stays visible during the loading window so
+ * the trigger feels instant — fields populate inline as TDLib responds.
  *
  * Mute / Leave toggles are optimistic: the local state flips first, then the call goes
  * out. Errors fall back to the server state on the next refresh; given how rare a write
@@ -69,7 +67,7 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 fun ChannelInfoSheet(
     chatId: Long,
-    actions: ChannelActionsRepository,
+    backend: HortayBackend,
     onDismiss: () -> Unit,
     /**
      * Tapping the Report row opens the TDLib reportChat flow at the channel level
@@ -100,7 +98,7 @@ fun ChannelInfoSheet(
 
     // First open or chatId switch → fetch fresh.
     LaunchedEffect(chatId) {
-        info = actions.channelInfo(chatId)
+        info = backend.channelInfo(chatId)
     }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
@@ -132,7 +130,7 @@ fun ChannelInfoSheet(
             Spacer(Modifier.height(8.dp))
             current.subscribers?.let {
                 Text(
-                    text = stringResource(Res.string.channels_subscribers, formatThousands(it)),
+                    text = stringResource(Res.string.channels_subscribers, formatThousandsKmp(it)),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -159,7 +157,7 @@ fun ChannelInfoSheet(
                 onClick = {
                     val target = !current.isMuted
                     info = current.copy(isMuted = target)
-                    scope.launch { actions.setMuted(chatId, target) }
+                    scope.launch { backend.setMuted(chatId, target) }
                 },
             )
             // "Hide from feed" row. Mute silences notifications but the
@@ -185,7 +183,7 @@ fun ChannelInfoSheet(
                     tint = MaterialTheme.colorScheme.error,
                     onClick = {
                         info = current.copy(isMember = false)
-                        scope.launch { actions.leaveChat(chatId) }
+                        scope.launch { backend.leaveChat(chatId) }
                     },
                 )
             } else {
@@ -195,7 +193,7 @@ fun ChannelInfoSheet(
                     tint = MaterialTheme.colorScheme.primary,
                     onClick = {
                         info = current.copy(isMember = true)
-                        scope.launch { actions.joinChat(chatId) }
+                        scope.launch { backend.joinChat(chatId) }
                     },
                 )
             }
@@ -262,5 +260,20 @@ private fun ActionRow(
     )
 }
 
-private fun formatThousands(n: Int): String =
-    NumberFormat.getNumberInstance(Locale.forLanguageTag("uk")).format(n)
+/**
+ * KMP-safe "12345" → "12 345" thousands grouping. `java.text.NumberFormat` is
+ * JVM-only; this single-pass formatter is locale-naïve (always a thin space,
+ * matching Ukrainian / Russian typography). Folded inline because the only
+ * other consumer (UserProfileSheet) is androidMain still and uses the same
+ * shape — extract to a shared helper when both call sites are common.
+ */
+internal fun formatThousandsKmp(n: Int): String {
+    val s = if (n < 0) (-n).toString() else n.toString()
+    if (s.length <= 3) return if (n < 0) "-$s" else s
+    val sb = StringBuilder()
+    for (i in s.indices) {
+        if (i > 0 && (s.length - i) % 3 == 0) sb.append(' ')
+        sb.append(s[i])
+    }
+    return if (n < 0) "-$sb" else sb.toString()
+}

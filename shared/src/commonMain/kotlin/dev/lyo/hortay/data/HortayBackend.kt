@@ -89,4 +89,30 @@ expect class HortayBackend {
 
     /** Clear any pending [authError] (e.g. once the user starts typing again). */
     fun clearAuthError()
+
+    // ---- Channels / users ---------------------------------------------
+
+    /**
+     * Fetch the channel metadata bundle for [chatId] (title, handle, description,
+     * subscriber count, mute / member flags). Returns null if the chat isn't a
+     * channel-style supergroup or TDLib rejects the lookup.
+     */
+    suspend fun channelInfo(chatId: Long): ChannelInfo?
+
+    /** Toggle the mute state of [chatId] in the user's notification settings. */
+    suspend fun setMuted(chatId: Long, muted: Boolean)
+
+    /** Subscribe the user to [chatId]. */
+    suspend fun joinChat(chatId: Long)
+
+    /** Unsubscribe from [chatId]. */
+    suspend fun leaveChat(chatId: Long)
+
+    /**
+     * Fetch the public-profile bundle for [userId] (name, handle, bio, avatar,
+     * presence, bot/support flags, personal channel link, birthday, common
+     * groups count). Returns null if the user isn't visible or TDLib rejects
+     * the lookup.
+     */
+    suspend fun userProfile(userId: Long): UserProfile?
 }

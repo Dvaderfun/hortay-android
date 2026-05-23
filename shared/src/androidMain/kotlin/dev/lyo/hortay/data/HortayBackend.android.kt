@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
 actual class HortayBackend(
     private val client: TdClient,
     private val countriesRepo: CountryRepository,
+    private val channelActions: ChannelActionsRepository,
 ) {
     actual val authStage: StateFlow<AuthStage> get() = client.authStage
     actual val authError: StateFlow<String?> get() = client.authError
@@ -26,4 +27,13 @@ actual class HortayBackend(
     actual suspend fun requestPasswordRecovery() = client.requestPasswordRecovery()
     actual suspend fun recoverPassword(code: String) = client.recoverPassword(code)
     actual fun clearAuthError() = client.clearAuthError()
+
+    actual suspend fun channelInfo(chatId: Long): ChannelInfo? =
+        channelActions.channelInfo(chatId)
+    actual suspend fun setMuted(chatId: Long, muted: Boolean) =
+        channelActions.setMuted(chatId, muted)
+    actual suspend fun joinChat(chatId: Long) = channelActions.joinChat(chatId)
+    actual suspend fun leaveChat(chatId: Long) = channelActions.leaveChat(chatId)
+    actual suspend fun userProfile(userId: Long): UserProfile? =
+        channelActions.userProfile(userId)
 }

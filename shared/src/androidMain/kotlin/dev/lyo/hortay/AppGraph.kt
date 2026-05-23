@@ -208,7 +208,11 @@ class AppGraph(context: Context) {
      * and compile on both Android and iOS. See [HortayBackend] KDoc for the
      * rationale.
      */
-    val backend: HortayBackend = HortayBackend(client = tdClient, countriesRepo = countries)
+    val backend: HortayBackend = HortayBackend(
+        client = tdClient,
+        countriesRepo = countries,
+        channelActions = channelActions,
+    )
 
     // Custom-emoji resolver for inline emojis in formatted text and for custom-emoji
     // reaction buckets. Uses GetCustomEmojiStickers in batches of up to 200 ids; the

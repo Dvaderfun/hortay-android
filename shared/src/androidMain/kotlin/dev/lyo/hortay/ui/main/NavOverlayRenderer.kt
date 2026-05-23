@@ -191,6 +191,7 @@ private fun RenderNavEntry(
             bookmarks = graph.bookmarkStore,
             translations = graph.translations,
             channelActions = graph.channelActions,
+            backend = graph.backend,
             ignoredChannels = graph.ignoredChannels,
             contentPadding = padding,
             onBack = onPopNav,

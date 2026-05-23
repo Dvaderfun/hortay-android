@@ -29,4 +29,10 @@ actual class HortayBackend {
     actual suspend fun requestPasswordRecovery() {}
     actual suspend fun recoverPassword(code: String) {}
     actual fun clearAuthError() {}
+
+    actual suspend fun channelInfo(chatId: Long): ChannelInfo? = null
+    actual suspend fun setMuted(chatId: Long, muted: Boolean) {}
+    actual suspend fun joinChat(chatId: Long) {}
+    actual suspend fun leaveChat(chatId: Long) {}
+    actual suspend fun userProfile(userId: Long): UserProfile? = null
 }
