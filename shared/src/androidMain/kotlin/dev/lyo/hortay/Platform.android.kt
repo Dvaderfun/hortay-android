@@ -1,5 +1,6 @@
 package dev.lyo.hortay
 
+import android.animation.ValueAnimator
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -47,3 +48,5 @@ class AndroidToaster(private val context: Context) : PlatformToaster {
         Toast.makeText(context.applicationContext, text, length).show()
     }
 }
+
+actual fun systemAnimatorDurationScale(): Float = ValueAnimator.getDurationScale()

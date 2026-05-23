@@ -68,7 +68,7 @@ import hortay.shared.generated.resources.media_load_stalled
  * Thread-safe by design: state is held in [ConcurrentHashMap]s; mutations are confined to a
  * single update collector running on [ioDispatcher].
  */
-class MediaCache(
+actual class MediaCache(
     private val td: TdSender,
     private val scope: CoroutineScope,
     private val connection: StateFlow<ConnectionStatus>,
@@ -503,7 +503,7 @@ class MediaCache(
         }
     }
 
-    fun observe(fileId: Int): StateFlow<MediaState> = slot(fileId).asStateFlow()
+    actual fun observe(fileId: Int): StateFlow<MediaState> = slot(fileId).asStateFlow()
 
     /**
      * Idempotent: safe to call from each Composable that mounts.
@@ -516,7 +516,7 @@ class MediaCache(
      * Also aborts any debounced cancel for the same fileId — a quick scroll past a card
      * and back must not tear the in-flight download down.
      */
-    suspend fun ensure(fileId: Int, priority: DownloadPriority = DownloadPriority.VisibleMedia) {
+    actual suspend fun ensure(fileId: Int, priority: DownloadPriority) {
         // Aborting first means a re-mount that beats the debounce window keeps the
         // in-flight download. Done before the hot-path guards because the cancel job
         // also clears activePriority — racing it would mean we early-return on a stale
@@ -599,7 +599,7 @@ class MediaCache(
      * user explicitly tapped the cancel control, so we honour the intent regardless
      * of who else might be observing).
      */
-    fun cancelExplicit(fileId: Int) {
+    actual fun cancelExplicit(fileId: Int) {
         // Aborting any debounced cancel for the same id is a no-op safety net — the
         // explicit path runs immediately and writes the same state below.
         pendingCancels.remove(fileId)?.cancel()
@@ -625,7 +625,7 @@ class MediaCache(
      * to know the failure happened. Intended for UI "tap to retry" affordances on the
      * failed-state placeholder.
      */
-    suspend fun retry(fileId: Int, priority: DownloadPriority = DownloadPriority.VisibleMedia) {
+    actual suspend fun retry(fileId: Int, priority: DownloadPriority) {
         // Reset through the reducer, not direct write — same race rationale as
         // [cancelExplicit]. ensure() then schedules its own GetFile through the
         // same channel, so the reducer sees: Reset → fresh GetFile → Downloading,
@@ -648,7 +648,7 @@ class MediaCache(
      * that aren't currently Ready. Fire-and-forget: runs on the app scope so it isn't
      * cancelled by the very recomposition the state flip triggers.
      */
-    fun invalidate(fileId: Int, priority: DownloadPriority = DownloadPriority.VisibleMedia) {
+    actual fun invalidate(fileId: Int, priority: DownloadPriority) {
         // Don't peek `slot.value` here — race window: Coil sees a file-not-found
         // error, calls invalidate(), and between this peek and the launched
         // coroutine's send, the reducer drains an UpdateFile that legitimately
@@ -704,7 +704,7 @@ class MediaCache(
      * and concurrency-safe: identical events from concurrent resyncs collapse
      * cleanly inside the reducer.
      */
-    fun resync(fileId: Int) {
+    actual fun resync(fileId: Int) {
         if (states[fileId] == null) return
         scope.launch(ioDispatcher) {
             runCatching {
@@ -809,7 +809,7 @@ class MediaCache(
      * The cost on metered is one extra `CancelDownloadFile` RPC per dispose-without-
      * remount, which compared to the slot-contention savings is a clear net win.
      */
-    fun cancelDeferred(fileId: Int) {
+    actual fun cancelDeferred(fileId: Int) {
         lateinit var jobRef: Job
         val debounceMs = if (networkType.value == HortayNetworkType.Wifi) {
             CANCEL_DEBOUNCE_WIFI_MS

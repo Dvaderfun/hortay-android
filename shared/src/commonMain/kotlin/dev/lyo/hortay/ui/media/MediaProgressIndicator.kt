@@ -1,5 +1,3 @@
-@file:Suppress("INVISIBLE_REFERENCE", "INVISIBLE_MEMBER")
-
 package dev.lyo.hortay.ui.media
 
 import androidx.compose.animation.core.LinearEasing
@@ -27,41 +25,43 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import dev.lyo.hortay.data.MediaState
-import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import dev.lyo.hortay.data.MediaState
+import dev.lyo.hortay.data.effectiveSkeletonGrace
 import dev.lyo.hortay.ui.icons.Symbol
 import dev.lyo.hortay.ui.theme.HortayExpressive
 import dev.lyo.hortay.ui.theme.asComposeShape
 import hortay.shared.generated.resources.Res
 import hortay.shared.generated.resources.media_retry
 import hortay.shared.generated.resources.size_units
+import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringArrayResource
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * Telegram-style determinate media progress indicator. A semi-transparent black disk
- * sits over the (blurred) minithumb; an arc traces the download progress; a central
- * action icon hints at the action ("arrow_downward" while downloading, "close" if
- * tappable to cancel, "refresh" if showing a retry on a failed download). The arc
- * itself slowly rotates while indeterminate — even when bytes are flowing the user
- * sees motion, which reads as "alive" rather than "frozen".
+ * Telegram-style determinate media progress indicator. A semi-transparent
+ * black disk sits over the (blurred) minithumb; an arc traces the download
+ * progress; a central action icon hints at the action ("arrow_downward"
+ * while downloading, "close" if tappable to cancel, "refresh" if showing a
+ * retry on a failed download). The arc itself slowly rotates while
+ * indeterminate — even when bytes are flowing the user sees motion, which
+ * reads as "alive" rather than "frozen".
  *
- * Tuned to mirror the official Telegram Android client visually: same disk alpha (~0.4),
- * same stroke ratio (~0.07 of the diameter), same arrow chevron style.
+ * Tuned to mirror the official Telegram Android client visually: same disk
+ * alpha (~0.4), same stroke ratio (~0.07 of the diameter), same arrow
+ * chevron style.
  *
- * If [onClick] is non-null the disk becomes tappable — used to wire "tap to cancel"
- * mid-download and "tap to retry" on a failure.
+ * If [onClick] is non-null the disk becomes tappable — used to wire "tap
+ * to cancel" mid-download and "tap to retry" on a failure.
  */
 @Composable
 fun MediaProgressIndicator(
@@ -86,12 +86,6 @@ fun MediaProgressIndicator(
         ),
         label = "media-progress-spin-angle",
     )
-    // Determinate-progress disc keeps the Telegram-canonical look: clean black
-    // translucent circle, circular arc that travels around it as bytes flow,
-    // central action icon. M3 Expressive's polygon-morph cue lives in the
-    // *indeterminate* sibling below; mixing the two on the determinate disc
-    // (Cookie ridges around a circular arc) read as visual noise — the arc
-    // and the polygon ridges fought for the eye instead of compounding.
     val diskModifier = Modifier
         .size(size)
         .clip(CircleShape)
@@ -107,8 +101,6 @@ fun MediaProgressIndicator(
                 color = Color.Black.copy(alpha = DISK_ALPHA),
                 radius = diameter / 2f,
             )
-            // Faint full ring as the "track" — gives the eye a stable reference
-            // for how much is left.
             drawArc(
                 color = Color.White.copy(alpha = TRACK_ALPHA),
                 startAngle = 0f,
@@ -118,9 +110,6 @@ fun MediaProgressIndicator(
                 size = arcSize,
                 style = Stroke(width = stroke, cap = StrokeCap.Round),
             )
-            // Active arc. We sweep from animatedProgress, but rotate the start
-            // angle by `spin` so the arc visibly travels — Telegram does this so
-            // a stalled 0% isn't indistinguishable from a hung indicator.
             val sweep = (animatedProgress * 360f).coerceAtLeast(MIN_SWEEP_DEGREES)
             drawArc(
                 color = Color.White,
@@ -142,9 +131,10 @@ fun MediaProgressIndicator(
 }
 
 /**
- * Indeterminate variant for the brief window between "we asked TDLib for the file"
- * and "first progress update arrived". Same look as [MediaProgressIndicator], but
- * the arc is a fixed-length sweep that just spins.
+ * Indeterminate variant for the brief window between "we asked TDLib for
+ * the file" and "first progress update arrived". Delegates to M3
+ * Expressive's `LoadingIndicator` (polygon cycle) on a translucent black
+ * disc — same vocabulary as pull-to-refresh / auth-submit / comments load.
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -153,14 +143,6 @@ fun MediaIndeterminateIndicator(
     size: Dp = 44.dp,
     onClick: (() -> Unit)? = null,
 ) {
-    // Indeterminate state — the brief window before progress data lands —
-    // delegates to M3 Expressive's `LoadingIndicator`: it morphs through the
-    // canonical polygon cycle (Circle → SoftBurst → Cookie9 → Pill → Sunny),
-    // the same vocabulary used by pull-to-refresh, auth-submit and comments
-    // thread load. Black translucent disc backdrop keeps the indicator
-    // legible on any photo (white snow, black headlines, mid-grey portraits).
-    // Cancel-X overlays the polygon when [onClick] is wired (tap-to-cancel
-    // matches Telegram's affordance during download).
     val diskModifier = Modifier
         .size(size)
         .clip(CircleShape)
@@ -183,19 +165,10 @@ fun MediaIndeterminateIndicator(
 }
 
 /**
- * Combined "downloading" overlay: progress (or indeterminate) circle plus a Telegram-style
- * "5.2 / 12.4 MB" pill underneath. The label is hidden when [totalBytes] is zero (TDLib
- * sometimes hasn't resolved the file size yet — better no label than a "5.2 / 0 MB").
- *
- * Tap on the indicator → [onCancel] (matches Telegram's tap-to-cancel during download).
- *
- * Visually unified: both pre-progress (no bytes yet) and mid-download states render the
- * same M3 Expressive polygon-cycle [MediaIndeterminateIndicator]. An earlier iteration
- * split the two — polygon for indeterminate, circle+arc for determinate — which made a
- * single download visibly switch styles mid-flow as the first progress bytes landed.
- * The numeric "X.X / Y.Y MB" pill underneath is the canonical surface for the actual
- * progress percentage; the disc is just "system is downloading", same vocabulary as
- * pull-to-refresh / auth submit / comments load.
+ * Combined "downloading" overlay: indeterminate cycle plus a Telegram-style
+ * "5.2 / 12.4 MB" pill underneath. The label is hidden when [totalBytes] is
+ * zero (TDLib sometimes hasn't resolved the file size yet — better no
+ * label than a "5.2 / 0 MB"). Tap → [onCancel].
  */
 @Composable
 fun MediaLoadingOverlay(
@@ -205,10 +178,6 @@ fun MediaLoadingOverlay(
     modifier: Modifier = Modifier,
     onCancel: (() -> Unit)? = null,
 ) {
-    // `progress` parameter unused now — kept in the signature for API stability
-    // (callers still pass it). The numeric byte-progress pill below is the
-    // canonical surface for "how many bytes landed"; the visual disc is just
-    // "system is downloading".
     @Suppress("UNUSED_PARAMETER", "unused")
     val keepParam = progress
     Column(
@@ -226,10 +195,8 @@ fun MediaLoadingOverlay(
 }
 
 /**
- * Failed-download placeholder. Shows a refresh icon on the same translucent disk — a
- * tap fires [onRetry] to force a re-download. Used in place of the loading overlay
- * when [dev.lyo.hortay.data.MediaState.Failed] is the slot's terminal state, including
- * the "stalled past N retries" surface from MediaCache's watchdog.
+ * Failed-download placeholder. Refresh icon on the same translucent disk —
+ * a tap fires [onRetry] to force a re-download.
  */
 @Composable
 fun MediaFailedOverlay(
@@ -272,9 +239,6 @@ private fun BytePill(text: String) {
 }
 
 private fun formatProgressBytes(downloaded: Long, total: Long, units: List<String>): String {
-    // For the same-unit case ("5.2 / 12.4 MB") only the right side carries the unit —
-    // matches Telegram's compact label. When the units differ ("780 KB / 1.2 MB") we
-    // print both sides with their own unit.
     val (downValue, downUnit) = humanizeBytes(downloaded, units)
     val (totalValue, totalUnit) = humanizeBytes(total, units)
     return if (downUnit == totalUnit) {
@@ -292,32 +256,39 @@ private fun humanizeBytes(bytes: Long, units: List<String>): Pair<String, String
         size /= 1024
         idx++
     }
-    val value = if (size >= 100 || idx == 0 || size == size.toLong().toDouble()) {
-        size.toLong().toString()
-    } else {
-        "%.1f".format(size)
+    val value = when {
+        size >= 100 || idx == 0 || size == size.toLong().toDouble() -> size.toLong().toString()
+        else -> {
+            // KMP-safe one-decimal format. String.format("%.1f", …) is JVM-only.
+            val whole = size.toLong()
+            val tenth = ((size * 10).toLong()) % 10
+            "$whole.$tenth"
+        }
     }
     return value to units[idx]
 }
 
 /**
- * Returns `true` only after [graceMs] elapsed continuously in a "loading" state. Resets
- * to `false` whenever [pending] flips to false (file finished / failed) or [key] changes.
+ * Returns `true` only after [graceMs] elapsed continuously in a "loading"
+ * state. Resets to `false` whenever [pending] flips to false (file finished /
+ * failed) or [key] changes.
  *
- * UX motivation: most TDLib downloads on a healthy network land in 100-400ms — within the
- * grace window, the user never sees a spinner flicker on top of the minithumb, so loading
- * for a quick file is *invisible*. Telegram-Android does the same: their RecyclerView item
- * binds the placeholder thumb instantly and only paints the determinate progress disc after
- * a short delay so a fast load doesn't strobe a tiny circle on the screen.
+ * UX motivation: most TDLib downloads on a healthy network land in
+ * 100-400ms — within the grace window, the user never sees a spinner
+ * flicker on top of the minithumb, so loading for a quick file is
+ * *invisible*. Telegram-Android does the same: their RecyclerView item
+ * binds the placeholder thumb instantly and only paints the determinate
+ * progress disc after a short delay so a fast load doesn't strobe a tiny
+ * circle on the screen.
  *
- * Anything still loading past [graceMs] gets the full overlay — at that point the user is
- * looking at a slow file and *needs* feedback (and a tap-to-cancel affordance).
+ * Anything still loading past [graceMs] gets the full overlay — at that
+ * point the user is looking at a slow file and *needs* feedback (and a
+ * tap-to-cancel affordance).
  *
  * The grace is scaled by the system animator-duration-scale via
- * [dev.lyo.hortay.data.effectiveSkeletonGrace] — `0` when animations are
- * disabled (accessibility / developer options) so the spinner paints
- * immediately when there's no transition to hide behind, and proportional
- * when the user has set x0.5 / x2 animation speed.
+ * [effectiveSkeletonGrace] — `0` when animations are disabled
+ * (accessibility / developer options / iOS Reduce Motion) so the spinner
+ * paints immediately when there's no transition to hide behind.
  */
 @Composable
 fun rememberDeferredLoading(
@@ -325,7 +296,7 @@ fun rememberDeferredLoading(
     key: Any?,
     graceMs: Long = LOADING_OVERLAY_GRACE_MS,
 ): Boolean {
-    val effective = remember(graceMs) { dev.lyo.hortay.data.effectiveSkeletonGrace(graceMs) }
+    val effective = remember(graceMs) { effectiveSkeletonGrace(graceMs) }
     val visible by produceState(
         initialValue = pending && effective == 0L,
         pending, key, effective,
@@ -365,6 +336,5 @@ private const val TRACK_ALPHA = 0.18f
 private const val STROKE_FRACTION = 0.07f
 // Even at 0% we draw a tiny arc so the indicator never looks empty / broken on screen.
 private const val MIN_SWEEP_DEGREES = 8f
-private const val INDETERMINATE_SWEEP_DEGREES = 90f
 private const val ICON_FRACTION = 0.42f
 private val BYTE_LABEL_GAP = 8.dp

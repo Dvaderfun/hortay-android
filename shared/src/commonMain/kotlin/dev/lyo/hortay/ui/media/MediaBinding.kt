@@ -13,39 +13,40 @@ import dev.lyo.hortay.data.MediaState
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
- * Compose-side facade over [MediaCache] that bundles the four mandatory operations
- * every TDLib-backed media renderer must perform:
+ * Compose-side facade over [MediaCache] that bundles the four mandatory
+ * operations every TDLib-backed media renderer must perform:
  *
- *   1. **Observe** the file's [MediaState] as a Compose [androidx.compose.runtime.State],
- *      so recomposition fires on download progress / Ready / Failed transitions.
- *   2. **Ensure** keyed on (fileId, priority, scroll-gate, isRemote) so a re-mount
- *      or scroll-settle picks up the download immediately while a mid-fling mount
- *      defers to the gate. The keying tuple matters: a stale tuple would skip
- *      ensure() during the very transition that should rescue a queued cancel.
+ *   1. **Observe** the file's [MediaState] as a Compose
+ *      [androidx.compose.runtime.State], so recomposition fires on download
+ *      progress / Ready / Failed transitions.
+ *   2. **Ensure** keyed on (fileId, priority, scroll-gate, isRemote) so a
+ *      re-mount or scroll-settle picks up the download immediately while a
+ *      mid-fling mount defers to the gate. The keying tuple matters: a stale
+ *      tuple would skip ensure() during the very transition that should rescue
+ *      a queued cancel.
  *   3. **Cancel** on Composable dispose via [MediaCache.cancelDeferred] so a
  *      scrolled-past slot is released back to TDLib's per-DC download pool.
  *      Web-mode call sites skip this (no slot to release).
- *   4. **Web-mode no-op** shape: when [fileId] is null OR [isRemote] is true the
- *      binding stays in [MediaState.Idle] and the renderer falls through to its
- *      own URL-streaming path (Coil / VideoPlayer HTTP DataSource / Compottie URL spec).
+ *   4. **Web-mode no-op** shape: when [fileId] is null OR [isRemote] is true
+ *      the binding stays in [MediaState.Idle] and the renderer falls through
+ *      to its own URL-streaming path (Coil / VideoPlayer HTTP DataSource /
+ *      Compottie URL spec).
  *
- * Replaces 4-step boilerplate previously duplicated across [TdMediaImage],
- * [TdVideoPlayer], [LottieStickerView], [WebmStickerPlayer] and
- * [CustomEmojiInlineView]. An audit found subtle drift across those copies —
- * each renderer keyed `ensure()` on a slightly different tuple, two renderers
+ * Replaces 4-step boilerplate previously duplicated across every TDLib-backed
+ * media renderer. An audit found subtle drift across those copies — each
+ * renderer keyed `ensure()` on a slightly different tuple, two renderers
  * tracked their own per-instance `MutableStateFlow(Idle)` web-mode sentinel
- * with slightly different keying, and the four-step contract was held only by
- * convention. Centralising lets one place hold the contract and every renderer
- * inherit it identically; future renderers can't re-derive a subtly-broken
- * variant of the same 25 lines.
+ * with slightly different keying, and the four-step contract was held only
+ * by convention. Centralising lets one place hold the contract and every
+ * renderer inherit it identically.
  *
  * @param fileId TDLib fileId. Pass `null` when the renderer is in web
  *  (anonymous) mode and intends to fall through to a remote URL.
  * @param priority Initial download priority. Subsequent calls with higher
  *  priority promote the in-flight job in place; lower priorities are no-ops.
  * @param isRemote Whether the parent is in web mode and will use a remote URL
- *  instead of MediaCache. When true, no `ensure` / `cancelDeferred` traffic is
- *  generated and the binding stays at [MediaState.Idle]. Distinct from
+ *  instead of MediaCache. When true, no `ensure` / `cancelDeferred` traffic
+ *  is generated and the binding stays at [MediaState.Idle]. Distinct from
  *  `fileId == null` because some call sites have a non-null fileId AND a
  *  remoteUrl (TDLib mode where the post also carries a CDN URL); only the
  *  parent knows which path is canonical for that call.
@@ -66,7 +67,7 @@ fun rememberMediaBinding(
     // [MediaCache.resync] which routes a fresh GetFile through the reducer.
     // Closes the user-described bug "shows not loaded until I scroll away
     // and back": a slot can drift to a stale [MediaState.Downloading] with
-    // [activePriority] still set (lost UpdateFile, background-while-
+    // its activePriority still set (lost UpdateFile, background-while-
     // completing race, debounced cancel firing right before TDLib's tail
     // Ready event). Without this, [ensure] would short-circuit the stale
     // state on re-mount because `currentPriority >= priority.tdValue`.
@@ -89,23 +90,24 @@ fun rememberMediaBinding(
 
     // Scroll-gate-aware ensure. Re-runs on gate flips so a fling-then-settle
     // landing the user on a new viewport burst-issues ensure() in one frame.
-    // The (fileId, effectivePriority, gateOpen, isRemote) tuple is the canonical
-    // keying that survived several iterations: dropping `gateOpen` made ensure()
-    // fire mid-fling and saturate the per-DC pool with cancelled-on-dispose ghost
-    // downloads; dropping `priority` masked the in-place upgrade path; dropping
-    // `isRemote` made web-mode call sites still hit the cache for a no-op
-    // ensure().
+    // The (fileId, effectivePriority, gateOpen, isRemote) tuple is the
+    // canonical keying that survived several iterations: dropping `gateOpen`
+    // made ensure() fire mid-fling and saturate the per-DC pool with
+    // cancelled-on-dispose ghost downloads; dropping `priority` masked the
+    // in-place upgrade path; dropping `isRemote` made web-mode call sites
+    // still hit the cache for a no-op ensure().
     //
-    // Viewport-centre upgrade: when the host feed has marked this item as the
-    // centre (via [LocalIsCenteredItem]) and the renderer requested
-    // [DownloadPriority.VisibleMedia], we promote to [DownloadPriority.VisibleCenter]
-    // (24 vs 16) so TDLib's priority-aware scheduler always serves the centre
-    // card first on a tight pool. The upgrade is scoped to VisibleMedia callers
-    // only — Avatar/Foreground/Prefetch keep their explicit priority since each
-    // has its own semantic meaning that the centre-of-viewport heuristic
-    // shouldn't override (an avatar at priority 2 is "loses to media on
-    // purpose"; a fullscreen viewer at 32 is already maximum). Recomputed on
-    // every [LocalIsCenteredItem.value] flip so a card sliding into / out of the
+    // Viewport-centre upgrade: when the host feed has marked this item as
+    // the centre (via [LocalIsCenteredItem]) and the renderer requested
+    // [DownloadPriority.VisibleMedia], we promote to
+    // [DownloadPriority.VisibleCenter] (24 vs 16) so TDLib's priority-aware
+    // scheduler always serves the centre card first on a tight pool. The
+    // upgrade is scoped to VisibleMedia callers only — Avatar/Foreground/
+    // Prefetch keep their explicit priority since each has its own semantic
+    // meaning that the centre-of-viewport heuristic shouldn't override (an
+    // avatar at priority 2 is "loses to media on purpose"; a fullscreen
+    // viewer at 32 is already maximum). Recomputed on every
+    // [LocalIsCenteredItem.value] flip so a card sliding into / out of the
     // centre re-issues `ensure` with the new priority and TDLib promotes /
     // demotes the in-flight job in place.
     val isCentered = LocalIsCenteredItem.current.value
@@ -128,11 +130,12 @@ fun rememberMediaBinding(
 
 /**
  * Stable handle returned by [rememberMediaBinding]. Exposes the observed
- * [MediaState] plus convenience accessors for the Ready path and user-initiated
- * cancel / retry / invalidate actions. Renderers receive this instead of the
- * raw `MediaCache` reference: the smaller surface keeps per-fileId scope
- * explicit (no accidental cross-fileId mutations) and lets the binding own the
- * `fileId == null` short-circuiting once instead of at every call site.
+ * [MediaState] plus convenience accessors for the Ready path and
+ * user-initiated cancel / retry / invalidate actions. Renderers receive this
+ * instead of the raw `MediaCache` reference: the smaller surface keeps
+ * per-fileId scope explicit (no accidental cross-fileId mutations) and lets
+ * the binding own the `fileId == null` short-circuiting once instead of at
+ * every call site.
  *
  * `@Immutable` because every field is read-only and the whole handle gets
  * rebuilt by [rememberMediaBinding] on state change — Compose's stability
@@ -160,30 +163,30 @@ class MediaBinding internal constructor(
     val readyPath: String? get() = (state as? MediaState.Ready)?.path?.takeIf { it.isNotEmpty() }
 
     /**
-     * User-initiated cancel: forces the slot to [MediaState.Idle] immediately,
-     * bypassing the debounce window and observer-count guard. Call from
-     * tap-to-cancel affordances on loading overlays.
+     * User-initiated cancel: forces the slot to [MediaState.Idle]
+     * immediately, bypassing the debounce window and observer-count guard.
+     * Call from tap-to-cancel affordances on loading overlays.
      */
     fun cancelExplicit() {
         fileId?.let(cache::cancelExplicit)
     }
 
     /**
-     * Force a retry on a [MediaState.Failed] slot. Suspends until [MediaCache]
-     * has accepted the new ensure(); the resulting state transition arrives
-     * via the bound [state] flow.
+     * Force a retry on a [MediaState.Failed] slot. Suspends until
+     * [MediaCache] has accepted the new ensure(); the resulting state
+     * transition arrives via the bound [state] flow.
      */
     suspend fun retry(priority: DownloadPriority = DownloadPriority.VisibleMedia) {
         fileId?.let { cache.retry(it, priority) }
     }
 
     /**
-     * Invalidate a [MediaState.Ready] slot whose on-disk file has gone missing.
-     * Wires straight to [MediaCache.invalidate] which routes the ResetIfReady
-     * event through the single-writer reducer — race-safe against concurrent
-     * UpdateFile drains. Call from Coil / ExoPlayer error listeners when the
-     * Ready path turned out to be unreadable (TDLib storage optimiser
-     * silently evicted it; tdlib/td#3178).
+     * Invalidate a [MediaState.Ready] slot whose on-disk file has gone
+     * missing. Wires straight to [MediaCache.invalidate] which routes the
+     * ResetIfReady event through the single-writer reducer — race-safe
+     * against concurrent UpdateFile drains. Call from Coil / VideoPlayer
+     * error listeners when the Ready path turned out to be unreadable
+     * (TDLib storage optimiser silently evicted it; tdlib/td#3178).
      */
     fun invalidate(priority: DownloadPriority = DownloadPriority.VisibleMedia) {
         fileId?.let { cache.invalidate(it, priority) }
