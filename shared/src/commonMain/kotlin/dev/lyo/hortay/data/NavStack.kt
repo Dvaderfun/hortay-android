@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import java.util.UUID
+import kotlinx.atomicfu.atomic
 
 /**
  * Process-wide polymorphic back-stack for the drill-overlay surfaces.
@@ -58,7 +58,7 @@ sealed interface NavEntry {
     data class Channel(
         val chatId: Long,
         val scrollToMessageId: Long? = null,
-        override val entryId: String = UUID.randomUUID().toString(),
+        override val entryId: String = nextNavEntryId(),
     ) : NavEntry
 
     /**
@@ -69,7 +69,7 @@ sealed interface NavEntry {
     @Immutable
     data class Comments(
         val anchor: TimelinePost,
-        override val entryId: String = UUID.randomUUID().toString(),
+        override val entryId: String = nextNavEntryId(),
     ) : NavEntry
 
     /**
@@ -83,9 +83,19 @@ sealed interface NavEntry {
     @Immutable
     data class WebChannel(
         val username: String,
-        override val entryId: String = UUID.randomUUID().toString(),
+        override val entryId: String = nextNavEntryId(),
     ) : NavEntry
 }
+
+private val navEntrySeq = atomic(0L)
+
+/**
+ * Process-monotonic id for a freshly-pushed [NavEntry]. Replaces the
+ * previous `UUID.randomUUID()` — KMP doesn't ship `java.util.UUID`, and a
+ * counter is enough here (entries are scoped to a single app instance,
+ * never serialised across processes).
+ */
+private fun nextNavEntryId(): String = "nav-${navEntrySeq.incrementAndGet()}"
 
 class NavStack {
 
