@@ -1,5 +1,6 @@
 package dev.lyo.hortay.data.web
 
+import kotlin.concurrent.Volatile
 import dev.lyo.hortay.PlatformLog
 import dev.lyo.hortay.data.AuthStage
 import kotlinx.coroutines.CoroutineScope

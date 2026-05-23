@@ -18,7 +18,6 @@ import com.fleeksoft.ksoup.Ksoup
 import com.fleeksoft.ksoup.nodes.Element
 import com.fleeksoft.ksoup.nodes.Node
 import com.fleeksoft.ksoup.nodes.TextNode
-import java.time.OffsetDateTime
 import hortay.shared.generated.resources.Res
 import hortay.shared.generated.resources.web_media_placeholder_document
 import hortay.shared.generated.resources.web_media_placeholder_gif
@@ -270,16 +269,21 @@ object WebPostAdapter {
         // mutation re-runs selectFeed → mapToList → htmlToFormatted across all
         // 1000 rows. With a cache the work amortises to one parse per distinct
         // post body (~5 µs lookup vs. ~100-300 µs Jsoup parse for typical bodies).
-        synchronized(formattedCache) { formattedCache[html] }?.let { return it }
+        kotlinx.atomicfu.locks.synchronized(formattedCacheLock) { formattedCache[html] }?.let { return it }
         val (rawText, rawSpans) = emitVerbatim(html)
         val result = normaliseWhitespace(rawText, rawSpans)
-        synchronized(formattedCache) { formattedCache[html] = result }
+        kotlinx.atomicfu.locks.synchronized(formattedCacheLock) {
+            if (formattedCache.size >= 1024) {
+                val iterator = formattedCache.entries.iterator()
+                if (iterator.hasNext()) { iterator.next(); iterator.remove() }
+            }
+            formattedCache[html] = result
+        }
         return result
     }
 
-    private val formattedCache = object : LinkedHashMap<String, FormattedText>(64, 0.75f, /* accessOrder */ true) {
-        override fun removeEldestEntry(eldest: Map.Entry<String, FormattedText>?): Boolean = size > 1024
-    }
+    private val formattedCacheLock = kotlinx.atomicfu.locks.SynchronizedObject()
+    private val formattedCache = LinkedHashMap<String, FormattedText>(64)
 
     /** Phase 1 output: untrimmed, un-collapsed text + spans referencing it. */
     private data class RawWalk(val text: String, val spans: List<FormattedText.Span>)
@@ -457,7 +461,7 @@ object WebPostAdapter {
                 c == '\n' -> {
                     // Strip dangling inline whitespace before the newline.
                     while (out.isNotEmpty() && out.last() != '\n' && out.last().isWhitespace()) {
-                        out.deleteCharAt(out.length - 1)
+                        out.deleteAt(out.length - 1)
                     }
                     val trailingNewlines = countTrailingNewlines(out)
                     srcToDst[i] = out.length
@@ -477,7 +481,7 @@ object WebPostAdapter {
         }
         // Trailing whitespace.
         while (out.isNotEmpty() && out.last().isWhitespace()) {
-            out.deleteCharAt(out.length - 1)
+            out.deleteAt(out.length - 1)
         }
         srcToDst[n] = out.length
 
@@ -502,9 +506,7 @@ object WebPostAdapter {
 
     // ---- Helpers --------------------------------------------------------------
 
-    private fun parseIso(iso: String): Long = runCatching {
-        OffsetDateTime.parse(iso).toInstant().toEpochMilli()
-    }.getOrElse { 0L }
+    private fun parseIso(iso: String): Long = dev.lyo.hortay.parseIsoToEpochMs(iso)
 
     private fun tdWebPreviewFrom(p: WebPreview): TdWebPreview = TdWebPreview(
         url = p.url,

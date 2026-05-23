@@ -2,10 +2,8 @@ package dev.lyo.hortay.data.web
 
 import dev.lyo.hortay.PlatformLog
 import dev.lyo.hortay.AppConfig
+import dev.lyo.hortay.currentLanguageTag
 import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
-import io.ktor.client.plugins.HttpRequestRetry
-import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.cache.HttpCache
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -16,13 +14,9 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.URLBuilder
 import io.ktor.http.takeFrom
 import kotlinx.coroutines.delay
-import okhttp3.Cache
-import okhttp3.ConnectionPool
-import java.io.File
-import java.io.IOException
-import java.util.Locale
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicLong
+import okio.IOException
+import kotlinx.atomicfu.atomic
+import kotlinx.atomicfu.updateAndGet
 
 /**
  * HTTP-level access to `https://t.me/s/<channel>` for the anonymous web pipeline.
@@ -57,7 +51,7 @@ class WebTelegramClient(
      * [awaitGate] before each request so concurrent fetches all suspend together rather
      * than each tripping a separate 429.
      */
-    private val gateUntilMs = AtomicLong(0L)
+    private val gateUntilMs = atomic(0L)
 
     /**
      * Fetch one page of a channel preview.
@@ -113,7 +107,7 @@ class WebTelegramClient(
                 fetchChannelPage(username, useCache = false)
             }
         } catch (_: kotlinx.coroutines.TimeoutCancellationException) {
-            val remainingMs = (gateUntilMs.get() - System.currentTimeMillis()).coerceAtLeast(0L)
+            val remainingMs = (gateUntilMs.value - dev.lyo.hortay.nowMs()).coerceAtLeast(0L)
             return if (remainingMs > 0L) {
                 LookupResult.RateLimited(remainingMs)
             } else {
@@ -193,15 +187,15 @@ class WebTelegramClient(
 
     private suspend fun awaitGate() {
         while (true) {
-            val until = gateUntilMs.get()
-            val now = System.currentTimeMillis()
+            val until = gateUntilMs.value
+            val now = dev.lyo.hortay.nowMs()
             if (until <= now) return
             delay(until - now)
         }
     }
 
     private fun pushGate(durationMs: Long) {
-        val deadline = System.currentTimeMillis() + durationMs
+        val deadline = dev.lyo.hortay.nowMs() + durationMs
         gateUntilMs.updateAndGet { existing -> maxOf(existing, deadline) }
     }
 
@@ -219,7 +213,7 @@ class WebTelegramClient(
             "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
 
         private val ACCEPT_LANGUAGE: String = run {
-            val tag = Locale.getDefault().toLanguageTag()
+            val tag = currentLanguageTag()
             if (tag.equals("en", ignoreCase = true) || tag.startsWith("en-", ignoreCase = true)) {
                 "$tag,en;q=0.9"
             } else {
@@ -231,60 +225,6 @@ class WebTelegramClient(
         private const val DEFAULT_BACKOFF_SEC = 30L
         private const val LOOKUP_TIMEOUT_MS = 15_000L
         private const val SERVER_ERROR_BACKOFF_SEC = 10L
-
-        /**
-         * Build the default HTTP client. Pass a [cacheDir] to enable disk-backed
-         * conditional GET — typically the app's `Context.cacheDir / "web-http"`.
-         * When null, no HTTP cache is used and every fetch is a full body download.
-         *
-         * Implementation: Ktor's `HttpClient(OkHttp)` engine takes an OkHttp.Builder
-         * via `config { }`. We configure the OkHttp internals (timeouts, cache,
-         * connection pool, redirect policy) there, then Ktor's HttpClient surface
-         * wraps that engine. This keeps the original behaviour (disk cache,
-         * 8-conn pool, no auto-redirect) while moving the public API to Ktor.
-         */
-        fun defaultHttpClient(cacheDir: File? = null): HttpClient = HttpClient(OkHttp) {
-            engine {
-                config {
-                    connectTimeout(10, TimeUnit.SECONDS)
-                    readTimeout(15, TimeUnit.SECONDS)
-                    callTimeout(20, TimeUnit.SECONDS)
-                    connectionPool(ConnectionPool(8, 60, TimeUnit.SECONDS))
-                    // Disable redirect-following for /s/<u> probes so we can
-                    // detect the "private channel" redirect (t.me/s/foo →
-                    // t.me/foo) cleanly. Ktor's HttpRedirect plugin (not
-                    // installed) would otherwise follow them.
-                    followRedirects(false)
-                    followSslRedirects(false)
-                    if (cacheDir != null) {
-                        if (!cacheDir.exists()) cacheDir.mkdirs()
-                        cache(Cache(cacheDir, HTTP_CACHE_SIZE_BYTES))
-                    }
-                }
-            }
-            // Ktor's HttpRedirect is on by default; turn it off because we
-            // configured the engine to not follow redirects.
-            followRedirects = false
-            // Ktor's HttpCache works in-memory by default; the OkHttp engine's
-            // disk cache (above) is the persistent layer. Installing HttpCache
-            // here would shadow OkHttp's cache, so we leave it out.
-            expectSuccess = false
-            install(HttpTimeout) {
-                requestTimeoutMillis = 20_000L
-            }
-            install(HttpRequestRetry) {
-                // Conservative retry: only on transient transport-layer failures
-                // (e.g. interrupted connections, not 4xx/5xx). 429/5xx handling
-                // lives in [handleResponse] where it integrates with the global
-                // rate-limit gate.
-                retryOnExceptionIf(maxRetries = 2) { _, cause ->
-                    cause is IOException
-                }
-                exponentialDelay(base = 2.0, maxDelayMs = 5_000L)
-            }
-        }
-
-        private const val HTTP_CACHE_SIZE_BYTES = 10L * 1024 * 1024
     }
 }
 

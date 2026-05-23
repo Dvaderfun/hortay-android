@@ -119,7 +119,9 @@ class AppGraph(context: Context) {
      * [postsRepository] / [webFeedSource] because both consume it for the
      * read-side filter applied to their respective merged-feed flows.
      */
-    val ignoredChannels: IgnoredChannelsStore = IgnoredChannelsStore(context)
+    val ignoredChannels: IgnoredChannelsStore = IgnoredChannelsStore(
+        dev.lyo.hortay.data.createPreferencesDataStore(IgnoredChannelsStore.FILE_NAME),
+    )
 
     val postsRepository: PostsRepository = PostsRepository(
         td = tdClient,
@@ -295,7 +297,7 @@ class AppGraph(context: Context) {
      * for the entire process lifetime — re-opening the DB per call would cost
      * 50-100 ms of WAL-mode setup on every read.
      */
-    val webDatabase: WebDatabase = WebDatabaseProvider.create(context)
+    val webDatabase: WebDatabase = WebDatabaseProvider.create()
 
     val webRepository: WebRepository = WebRepository(webDatabase, res)
 
@@ -317,7 +319,7 @@ class AppGraph(context: Context) {
      * opened to t.me.
      */
     val webHttpClient: io.ktor.client.HttpClient =
-        WebTelegramClient.defaultHttpClient(File(context.cacheDir, "web-http"))
+        dev.lyo.hortay.data.web.defaultWebHttpClient(cacheRootPath = context.cacheDir.absolutePath)
 
     val webClient: WebTelegramClient = WebTelegramClient(webHttpClient)
 
