@@ -1,5 +1,3 @@
-@file:Suppress("INVISIBLE_REFERENCE", "INVISIBLE_MEMBER")
-
 package dev.lyo.hortay.ui.media
 
 import androidx.compose.animation.core.animateFloatAsState
@@ -154,14 +152,17 @@ private fun StickerSkeletonOverlay(
         label = "sticker-skeleton-alpha",
     )
 
-    // Vector outline silhouette: TDLib-side, offline, JNI-microseconds. Only attempt
-    // a fetch when we have a sticker fileId — guest/web mode (fileId == null) skips
-    // the lookup entirely and falls back to the rounded-square branch below.
-    val outlineStore = LocalStickerOutline.current
+    // Vector outline silhouette: TDLib-side, offline, JNI-microseconds. Only
+    // attempt a fetch when we have a sticker fileId — guest/web mode
+    // (fileId == null) skips the lookup entirely and falls back to the
+    // rounded-square branch below. iOS leaves the loader at its default
+    // no-op so the fallback square is what users see while the
+    // WEBP/Lottie/WebM lands.
+    val outlineLoader = LocalStickerOutline.current
     var outline by remember(media.fileId) { mutableStateOf<Path?>(null) }
     LaunchedEffect(media.fileId) {
         val id = media.fileId ?: return@LaunchedEffect
-        outline = outlineStore.load(id)
+        outline = outlineLoader(id)
     }
 
     if (skeletonAlpha <= 0.005f) return

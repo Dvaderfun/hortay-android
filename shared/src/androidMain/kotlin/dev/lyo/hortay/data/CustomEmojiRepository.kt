@@ -42,14 +42,14 @@ import java.util.concurrent.ConcurrentHashMap
  * comparisons. We don't bound the map — typical channel feeds reference at most a few
  * hundred unique custom emojis per session, well under any GC pressure threshold.
  */
-class CustomEmojiRepository(
+actual class CustomEmojiRepository(
     private val td: TdSender,
     private val scope: CoroutineScope,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
 
     private val _stickers = MutableStateFlow<PersistentMap<Long, CustomEmojiSticker>>(persistentMapOf())
-    val stickers: StateFlow<PersistentMap<Long, CustomEmojiSticker>> = _stickers.asStateFlow()
+    actual val stickers: StateFlow<PersistentMap<Long, CustomEmojiSticker>> = _stickers.asStateFlow()
 
     /** Ids TDLib explicitly returned no sticker for — never re-fetched in-session. */
     private val missing = ConcurrentHashMap.newKeySet<Long>()
@@ -85,7 +85,7 @@ class CustomEmojiRepository(
      * Hint: schedule resolution for these ids. Idempotent — already-resolved or known-missing
      * ids are skipped at zero cost. Safe to call from a Composable's `LaunchedEffect`.
      */
-    fun request(ids: Iterable<Long>) {
+    actual fun request(ids: Iterable<Long>) {
         if (!ids.iterator().hasNext()) return
         scope.launch {
             pendingLock.withLock {
