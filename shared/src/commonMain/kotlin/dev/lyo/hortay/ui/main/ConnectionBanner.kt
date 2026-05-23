@@ -88,7 +88,7 @@ fun ConnectionBanner(
             return@produceState
         }
         while (true) {
-            val now = System.currentTimeMillis()
+            val now = dev.lyo.hortay.nowMs()
             val remaining = ((floodWaitUntilMs - now + 999L) / 1_000L).coerceAtLeast(0L)
             value = remaining
             if (remaining <= 0L) break
