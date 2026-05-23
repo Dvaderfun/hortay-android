@@ -65,7 +65,7 @@ class MainActivity : ComponentActivity() {
                 CompositionLocalProvider(
                     LocalMediaCache provides graph.mediaCache,
                     LocalCustomEmoji provides graph.customEmoji,
-                    LocalStickerOutline provides graph.stickerOutline,
+                    LocalStickerOutline provides { id -> graph.stickerOutline.load(id) },
                     LocalVideoPlayerPool provides graph.videoPlayerPool,
                     LocalWebHttpClient provides graph.webHttpClient,
                     LocalAvatarFileLoader provides { fileId, cd, modifier ->
