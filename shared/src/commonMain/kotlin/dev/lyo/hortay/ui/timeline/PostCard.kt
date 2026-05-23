@@ -23,7 +23,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -961,9 +960,5 @@ private fun SheetItem(
     }
 }
 
-private fun formatViews(count: Int): String = when {
-    count < 1_000 -> count.toString()
-    count < 1_000_000 -> "%.1fK".format(count / 1_000.0).trimEnd('0').trimEnd('.')
-    else -> "%.1fM".format(count / 1_000_000.0).trimEnd('0').trimEnd('.')
-}
+private fun formatViews(count: Int): String = formatSubscribers(count)
 
