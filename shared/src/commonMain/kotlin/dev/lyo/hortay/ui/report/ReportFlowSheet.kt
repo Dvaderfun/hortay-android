@@ -1,8 +1,6 @@
-@file:Suppress("INVISIBLE_REFERENCE", "INVISIBLE_MEMBER")
-
 // CSAE-COMPLIANCE: Google Play Child Safety Standards
 // Policy: https://support.google.com/googleplay/android-developer/answer/14747720
-// Hortay published standards: BuildConfig.CHILD_SAFETY_POLICY_URL
+// Hortay published standards: AppConfig.CHILD_SAFETY_POLICY_URL
 // Architecture: delegation to Telegram moderation via TDLib reportChat dynamic flow
 
 @file:OptIn(
@@ -36,7 +34,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -48,11 +45,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.lyo.hortay.data.report.ReportExplainerStore
 import dev.lyo.hortay.data.report.ReportFlowController
 import dev.lyo.hortay.data.report.ReportOption
 import dev.lyo.hortay.data.report.ReportState
+import dev.lyo.hortay.data.report.ReportStep
 import dev.lyo.hortay.ui.icons.Symbol
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -76,8 +73,17 @@ import org.jetbrains.compose.resources.stringResource
  * [ReportExplainerStore]), shows [ReportAboutDialog] first. On its dismissal the
  * explainer flag is persisted and the sheet body opens.
  *
- * The ViewModel is keyed on (chatId, messageId) so a reopened report on the same
- * post restores progress across recompositions and configuration changes.
+ * State scope: keyed on (chatId, messageId, openToken) so a reopened report on
+ * the same post restores progress, while a fresh tap (openToken changes) starts
+ * a brand-new flow.
+ *
+ * Why no ViewModel: the only reason the previous Android-only implementation
+ * used a ViewModel was to survive configuration changes. Compose Multiplatform
+ * has no Activity-recreate concept on iOS, and on Android the per-tap openToken
+ * already forces a new instance every time anyway — a ViewModel adds no
+ * survival benefit and would require an Android-only `lifecycle-viewmodel-
+ * compose` dependency. `rememberCoroutineScope` + `remember(openToken)` covers
+ * the same surface in commonMain.
  *
  * Why [produceState] for the explainer check: DataStore reads are suspending and
  * must not block the first composition frame. [produceState] suspends in the
@@ -89,11 +95,9 @@ fun ReportFlowSheet(
     chatId: Long,
     messageId: Long?,
     /**
-     * Per-tap session token from the parent scaffold (System.nanoTime). Part of the
-     * ViewModel key so each fresh tap on Report gets a brand-new VM instance — the
-     * Activity-scoped ViewModelStore would otherwise cache the prior session's
-     * terminal state (Success / Error / FloodWait), causing the sheet to auto-
-     * dismiss immediately or silently fail on the very next open.
+     * Per-tap session token from the parent scaffold (`Clock.System.now()...`).
+     * Re-keys the internal state so each fresh tap on Report restarts the flow
+     * regardless of previous terminal state.
      */
     openToken: Long,
     @Suppress("UNUSED_PARAMETER") channelUsername: String?,
@@ -127,35 +131,36 @@ fun ReportFlowSheet(
                 explainerDismissed = true
             },
         )
-        // Don't render the bottom sheet until the explainer is dismissed.
         return
     }
 
-    // Local view of dismiss(success). Helper keeps the call sites narrow.
     val dismissAsSuccess: () -> Unit = { onDismiss(true) }
     val dismissManual: () -> Unit = { onDismiss(false) }
 
-    // openToken makes each tap on Report a fresh VM scope. Without it, the
-    // Activity ViewModelStore returns the previous session's VM, whose state may
-    // be Success / Error / FloodWait — causing the auto-dismiss LaunchedEffect
-    // below to fire immediately on reopen, or the user to see stale chrome.
-    val vmKey = "report:$chatId:${messageId ?: 0}:$openToken"
-    val vm: ReportFlowViewModel = viewModel(
-        key = vmKey,
-        factory = object : androidx.lifecycle.ViewModelProvider.Factory {
-            @Suppress("UNCHECKED_CAST")
-            override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T =
-                ReportFlowViewModel(reportController, chatId, messageId) as T
-        },
-    )
+    // openToken makes each tap on Report a fresh state slot — the previous Android
+    // ViewModelStore-based session caching, replaced.
+    var state by remember(chatId, messageId, openToken) {
+        mutableStateOf<ReportState>(ReportState.Loading)
+    }
+    var pendingOptionId by remember(chatId, messageId, openToken) {
+        mutableStateOf(byteArrayOf())
+    }
+    var retryCounter by remember(chatId, messageId, openToken) { mutableStateOf(0) }
+
+    fun applyStep(step: ReportStep) {
+        step.pendingOptionId?.let { pendingOptionId = it }
+        state = step.state
+    }
+
+    LaunchedEffect(chatId, messageId, openToken, retryCounter) {
+        state = ReportState.Loading
+        applyStep(reportController.start(chatId, messageId))
+    }
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val state by vm.state.collectAsState()
 
     // Auto-dismiss on Success — flag the dismiss as a successful completion so the
-    // parent scaffold can dispatch its "Report sent to Telegram" snackbar. Manual
-    // dismissals (scrim tap / back gesture / drag-down) route through dismissManual
-    // and skip the snackbar.
+    // parent scaffold can dispatch its "Report sent to Telegram" snackbar.
     LaunchedEffect(state) {
         if (state is ReportState.Success) dismissAsSuccess()
     }
@@ -177,12 +182,27 @@ fun ReportFlowSheet(
                 is ReportState.OptionSelection -> OptionSelectionContent(
                     title = s.title,
                     options = s.options,
-                    onSelect = { vm.selectOption(it) },
+                    onSelect = { option ->
+                        scope.launch {
+                            state = ReportState.Loading
+                            applyStep(reportController.selectOption(chatId, messageId, option))
+                        }
+                    },
                 )
                 is ReportState.TextRequired -> TextRequiredContent(
                     isOptional = s.isOptional,
-                    onSubmit = { text -> vm.submitText(text) },
-                    onSkip = if (s.isOptional) ({ vm.submitText("") }) else null,
+                    onSubmit = { text ->
+                        scope.launch {
+                            state = ReportState.Loading
+                            applyStep(reportController.submitText(chatId, messageId, pendingOptionId, text))
+                        }
+                    },
+                    onSkip = if (s.isOptional) ({
+                        scope.launch {
+                            state = ReportState.Loading
+                            applyStep(reportController.submitText(chatId, messageId, pendingOptionId, ""))
+                        }
+                    }) else null,
                 )
                 is ReportState.Success -> {
                     // LaunchedEffect above handles dismiss; brief success text in case
@@ -201,7 +221,7 @@ fun ReportFlowSheet(
                 }
                 is ReportState.Error -> ErrorContent(
                     message = s.message,
-                    onRetry = { vm.retry() },
+                    onRetry = { retryCounter += 1 },
                 )
                 is ReportState.FloodWait -> FloodWaitContent(seconds = s.retryAfterSeconds)
             }
