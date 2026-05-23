@@ -45,8 +45,6 @@ import dev.lyo.hortay.data.web.WebTelegramClient
 import dev.lyo.hortay.data.web.db.WebDatabase
 import dev.lyo.hortay.data.web.db.WebDatabaseProvider
 import java.io.File
-import androidx.lifecycle.ProcessLifecycleOwner
-import dev.lyo.hortay.ui.media.CustomEmojiAnimator
 import dev.lyo.hortay.ui.media.VideoPlayerPool
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -208,20 +206,6 @@ class AppGraph(context: Context) {
     // request stream is debounced 50ms so a screen-full of posts coalesces into a
     // single TDLib call.
     val customEmoji: CustomEmojiRepository = CustomEmojiRepository(tdClient, appScope)
-
-    /**
-     * Process-wide frame driver for inline custom-emoji TGS playback. One
-     * [com.airbnb.lottie.LottieDrawable] + one shared progress state per `customEmojiId`,
-     * driven by a single [android.view.Choreographer.FrameCallback] master clock. Inline
-     * emoji repeats (the same `customEmojiId` mounted N times in a post) share one
-     * playback session — see [CustomEmojiAnimator] KDoc for the full rationale.
-     *
-     * Wired with [ProcessLifecycleOwner] so background pauses are honoured globally —
-     * when the app moves below STARTED the master clock stops posting frame callbacks.
-     */
-    val customEmojiAnimator: CustomEmojiAnimator = CustomEmojiAnimator(
-        processLifecycle = ProcessLifecycleOwner.get().lifecycle,
-    )
 
     // Vector-silhouette cache for the outline → thumb → sticker visual ladder. TDLib's
     // [TdApi.GetStickerOutlineSvgPath] is offline (microseconds over JNI) but we still
@@ -536,7 +520,6 @@ class AppGraph(context: Context) {
         runCatching { commentsRepository.clear() }
         runCatching { mediaCache.clear() }
         runCatching { customEmoji.clear() }
-        runCatching { customEmojiAnimator.clear() }
         runCatching { stickerOutline.clear() }
         runCatching { chatFoldersRepository.clear() }
         runCatching { translations.clear() }

@@ -27,7 +27,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
  *      Web-mode call sites skip this (no slot to release).
  *   4. **Web-mode no-op** shape: when [fileId] is null OR [isRemote] is true the
  *      binding stays in [MediaState.Idle] and the renderer falls through to its
- *      own URL-streaming path (Coil / ExoPlayer HTTP DataSource / LottieUrlStore).
+ *      own URL-streaming path (Coil / VideoPlayer HTTP DataSource / Compottie URL spec).
  *
  * Replaces 4-step boilerplate previously duplicated across [TdMediaImage],
  * [TdVideoPlayer], [LottieStickerView], [WebmStickerPlayer] and

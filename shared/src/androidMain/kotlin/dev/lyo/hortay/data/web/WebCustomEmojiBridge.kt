@@ -40,11 +40,12 @@ import kotlinx.coroutines.sync.withLock
  *     [TdMediaImage]'s remote-URL fast path renders the asset without going
  *     through TDLib's MediaCache. The resolver's discovered type is published
  *     faithfully as [StickerFormat]:
- *       • [StickerFormat.Tgs] — animated. [LottieUrlStore] pulls the .tgs
- *         payload from the t.me CDN, sniffs the gzip header (handles both
- *         pre-decompressed JSON and raw .tgs blobs), parses through
- *         LottieCompositionFactory, and feeds the same Lottie-Compose
- *         pipeline TDLib mode uses. Real animation, not a static thumb.
+ *       • [StickerFormat.Tgs] — animated. [LottieStickerView] pulls the .tgs
+ *         payload from the t.me CDN via the shared Ktor client, sniffs the
+ *         gzip header (handles both pre-decompressed JSON and raw .tgs blobs),
+ *         parses through Compottie's `LottieCompositionSpec.JsonString`, and
+ *         feeds the same Compottie pipeline TDLib mode uses. Real animation,
+ *         not a static thumb.
  *       • [StickerFormat.Webm] — falls back to the static WEBP thumb at
  *         inline size (same as TDLib mode). The t.me/i/emoji endpoint
  *         serves WebMs pre-rendered as yuv420p baked against srgb(0,0,0);

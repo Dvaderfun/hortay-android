@@ -36,8 +36,8 @@ import java.util.LinkedHashMap
  *    `TdClient.loggedOut` fan-out so a fresh account doesn't see another account's
  *    "no outline" verdicts.
  *
- * Why a class rather than an `object` (cf. [LottieCompositionStore]): outline resolution
- * needs [TdSender]. Holding it inside a class lets us inject via composition local
+ * Why a class rather than an `object`: outline resolution needs [TdSender]. Holding
+ * it inside a class lets us inject via composition local
  * (`LocalStickerOutline`) and keep the per-call surface a clean `load(fileId)` — UI
  * call sites don't need to know about TdSender plumbing.
  */

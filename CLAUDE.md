@@ -61,11 +61,10 @@ The Xcode "Compile Kotlin Framework" build phase invokes `:shared:embedAndSignAp
 
 - **Replaced (KMP-native, done):**
   - `org.jsoup:jsoup` → `com.fleeksoft.ksoup:ksoup` 0.2.6 — `WebTextRenderer`, `WebPostAdapter`, `TmePageParser`. Drop-in API.
-  - `okhttp` direct usage → `io.ktor:ktor-client-*` 3.5.0. Engines: `ktor-client-okhttp` on Android (wraps OkHttp, keeps disk cache + connection pool config); `ktor-client-darwin` on iOS. Public surface in `WebTelegramClient`, `WebCustomEmojiResolver`, `LottieUrlStore`, `LocalWebHttpClient` is now Ktor's `HttpClient`. OkHttp lib itself stays as transitive dep + Coil's image fetcher.
+  - `okhttp` direct usage → `io.ktor:ktor-client-*` 3.5.0. Engines: `ktor-client-okhttp` on Android (wraps OkHttp, keeps disk cache + connection pool config); `ktor-client-darwin` on iOS. Public surface in `WebTelegramClient`, `WebCustomEmojiResolver`, `LocalWebHttpClient` is now Ktor's `HttpClient`. OkHttp lib itself stays as transitive dep + Coil's image fetcher.
   - `androidx.datastore` 1.2.0 → 1.2.1 with `datastore-preferences-core` added to commonMain (KMP variant). Okio 3.10.2 added for KMP path handling. Store-by-store migration + `expect/actual` factory lands together in Phase C.
   - `app.cash.sqldelight:android-driver` split — added `sqldelight-native-driver` for iOS. `.sq` files moved from `androidMain/sqldelight/` to `commonMain/sqldelight/`. `expect class DriverFactory { fun createDriver(): SqlDriver }` in commonMain; `actual` per-platform (Android: PRAGMA WAL/NORMAL/FK on; iOS: NativeSqliteDriver — WAL is iOS default).
 - **Pending (deferred — nice-to-have, not blocking iOS guest-mode):**
-  - `lottie-compose` → `io.github.alexzhirkevich:compottie` (custom emoji TGS playback).
   - `coil-network-okhttp` → `coil-network-ktor3` (cosmetic, align with Ktor stack).
   - `compose-ui-text-google-fonts` → bundled `.ttf` in `commonMain/composeResources/font/`.
 - **Stays Android-only (behind expect/actual or skipped on iOS):** `androidx.media3` (ExoPlayer; iOS uses AVPlayer expect/actual), `coil-gif` / `coil-video`, `core-splashscreen`, `androidx.appcompat`, `androidx.browser`, `leakcanary`, `androidx.profileinstaller`, `androidx.graphics:graphics-shapes` (if not in CMP material3).
@@ -103,9 +102,6 @@ UI:
 - Phase E — iOS verification on Mac (build + simulator launch)
 - Phase F — Real iOS UI with DataStore persistence
 
-**Partial:**
-- Phase A1 — Compottie: only `LottieStickerView` migrated. Inline-emoji animator path (`CustomEmojiAnimator` + `InlineCustomEmojiRenderer` + stores) stays Airbnb Lottie on Android (Compottie has no `LottieDrawable` for bitmap-bg-rasterisation).
-
 **Deferred:**
 - Phase A5 — Google Fonts → bundled fonts (cosmetic).
 
@@ -115,8 +111,12 @@ UI:
 - **G6** — Web data pipeline (`WebFeedSource`, `WebRepository`, `WebTelegramClient`, `WebPostAdapter`, `WebCustomEmojiResolver`, `WebFeedScheduler`, `WebPost`, `TmePageParser`, `WebTextRenderer`) lives in commonMain. HTTP client via `expect defaultWebHttpClient` (OkHttp / Darwin). `WebDatabaseProvider` expect/actual.
 - **G7** — `IosAppGraph` + real iOS guest-mode UI in `MainViewController.kt` driven by the shared `WebFeedSource`. Coil-compose + coil-network-ktor3 moved to commonMain for image rendering on both targets.
 
+**Completed in Phase H so far:**
+- **H1** — `VideoPlayer` / `VideoPlayerPool` / `VideoPlayerView` expect/actual in commonMain. Android wraps ExoPlayer (two-sub-pool muted/audio split intact); iOS wraps AVPlayer for guest-mode CDN playback. `TdVideoPlayer` / `WebmStickerPlayer` / `VideoNoteBubble` / `VideoPlayerControls` consume the abstraction.
+- **H2** — Compottie now drives every Lottie surface: inline custom emoji route through `LottieStickerView` (per-glyph LottieAnimation, accepting the perf regression). `CustomEmojiAnimator`, `InlineCustomEmojiRenderer`, `LottieUrlStore`, `LottieCompositionStore`, `LocalCustomEmojiAnimator` deleted. Airbnb `lottie-compose` dependency dropped.
+
 **Still pending:**
-- **G2** — TDLib `HortayBackend` expect/actual so authenticated-mode repositories can move to commonMain (iOS would get web-only stubs). Multi-day work — large translation layer over `TdApi.*` Java types.
-- **G3** — `expect interface VideoPlayer` so PostBody's video rendering can move out of androidMain (AVPlayer on iOS).
-- **G4** — Compottie rewrite of `CustomEmojiAnimator` / `InlineCustomEmojiRenderer` so inline custom emoji animate on iOS (currently Airbnb Lottie via `LottieDrawable.draw(canvas)`).
-- Bulk UI move depends on G2/G3/G4 — PostCard's transitive graph touches ExoPlayer / Lottie / TDLib repos. Without those abstractions, individual UI files can't move because they import androidMain helpers (`ExoPlayerPool.acquire/release`, `MediaCache.observe`, `CustomEmojiRepository`, `Country` data class colocated with `CountryRepository`, etc.).
+- **H3** — TDLib `HortayBackend` expect/actual so authenticated-mode repositories can move to commonMain (iOS gets web-only stubs). Multi-day work — large translation layer over `TdApi.*` Java types.
+- **H4** — Android system services (Clipboard, Share, Toast, ImageBitmap decode, status bar) expect/actual.
+- **H5** — iOS UI parity ship: replace `MainViewController`'s parallel renderer with the real `WebModeScaffold` tree from commonMain.
+- Bulk UI move depends on H3 — PostCard's transitive graph still touches TDLib repos. Without that abstraction, individual UI files can't move because they import androidMain helpers (`MediaCache.observe`, `CustomEmojiRepository`, etc.).

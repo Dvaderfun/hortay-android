@@ -141,14 +141,6 @@ kotlin {
             implementation(libs.media3.ui)
             implementation(libs.media3.common)
 
-            // Lottie-compose stays Android-only for now. Phase A1 rewrite to
-            // Compottie is deferred — 5 files use sophisticated APIs
-            // (PorterDuffColorFilter recoloring, Choreographer master-clock,
-            // LRU + in-flight dedup + negative cache) that need a careful
-            // translation, not a search-and-replace. iOS gets static fallback
-            // thumbs for TGS until the rewrite lands.
-            implementation(libs.lottie.compose)
-
             // OkHttp stays — Ktor's android engine wraps it, and Coil's
             // image fetcher still uses it directly. AppGraph creates the
             // OkHttp.Builder() that Ktor's HttpClient(OkHttp) reuses for
