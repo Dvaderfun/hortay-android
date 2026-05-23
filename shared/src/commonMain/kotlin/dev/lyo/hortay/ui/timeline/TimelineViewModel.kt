@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import dev.lyo.hortay.data.BookmarkStore
 import dev.lyo.hortay.data.FeedSource
 import dev.lyo.hortay.data.TimelinePost
+import dev.lyo.hortay.nowMs
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toPersistentList
@@ -90,7 +91,7 @@ class TimelineViewModel(
                 // in their natural date position (the consumer sorts by date)
                 // rather than buffered under a "X новi постiв" pill that
                 // would mislead the user about freshness.
-                val cutoff = System.currentTimeMillis() - PENDING_NEW_RECENCY_WINDOW_MS
+                val cutoff = dev.lyo.hortay.nowMs() - PENDING_NEW_RECENCY_WINDOW_MS
                 live.filter { p ->
                     val mark = hw[p.chatId] ?: return@filter true
                     p.date <= mark || p.date < cutoff
@@ -116,7 +117,7 @@ class TimelineViewModel(
                 // milliseconds — [MessageMapper.toChannelPost] does the
                 // `* 1000L` conversion on `TdApi.Message.date` (Unix seconds)
                 // so `TimelinePost.date` is consistently ms.
-                val cutoff = System.currentTimeMillis() - PENDING_NEW_RECENCY_WINDOW_MS
+                val cutoff = dev.lyo.hortay.nowMs() - PENDING_NEW_RECENCY_WINDOW_MS
                 live.filter { p ->
                     val mark = hw[p.chatId] ?: return@filter false
                     p.date > mark && p.date >= cutoff
@@ -212,7 +213,7 @@ class TimelineViewModel(
                         val maxDate = live.asSequence()
                             .filter { it.chatId == chatId }
                             .maxOfOrNull { it.date } ?: continue
-                        updated.putIfAbsent(chatId, maxDate)
+                        if (chatId !in updated) updated[chatId] = maxDate
                     }
                     updated
                 }

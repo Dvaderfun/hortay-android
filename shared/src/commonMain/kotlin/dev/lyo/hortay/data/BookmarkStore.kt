@@ -1,22 +1,24 @@
 package dev.lyo.hortay.data
 
-import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringSetPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
 /**
  * Persistent set of bookmarked posts, keyed by `chatId/messageId`.
  *
- * Backed by a Preferences DataStore — async I/O, survives process death, no main-thread
- * blocking. The set is exposed as a [Flow] so that bookmarks toggle live across the UI
- * without an event bus.
+ * Backed by a Preferences DataStore — async I/O, survives process death, no
+ * main-thread blocking. The set is exposed as a [Flow] so bookmarks toggle
+ * live across the UI without an event bus.
+ *
+ * KMP: constructor takes the platform-provided [DataStore] handle from
+ * [createPreferencesDataStore] — same pattern every other commonMain store
+ * uses (IgnoredChannelsStore, GuestModeStore, MigrationStore).
  */
-class BookmarkStore(context: Context) {
-
-    private val dataStore = context.applicationContext.bookmarkDataStore
+class BookmarkStore(private val dataStore: DataStore<Preferences>) {
 
     val bookmarks: Flow<Set<String>> = dataStore.data.map { prefs ->
         prefs[KEY] ?: emptySet()
@@ -30,11 +32,10 @@ class BookmarkStore(context: Context) {
         }
     }
 
-    private companion object {
-        val KEY = stringSetPreferencesKey("bookmarks")
+    companion object {
+        const val FILE_NAME: String = "bookmarks"
+        private val KEY = stringSetPreferencesKey("bookmarks")
     }
 }
-
-private val Context.bookmarkDataStore by preferencesDataStore(name = "bookmarks")
 
 fun TimelinePost.bookmarkKey(): String = "$chatId/$id"
