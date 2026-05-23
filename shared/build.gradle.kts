@@ -59,14 +59,18 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            // CMP runtime + foundation. Required for Compose compiler plugin to
-            // validate on every target (iOS, Android, future Desktop). Without
-            // this, iOS Kotlin compile fails with "Compose Runtime not on classpath".
-            implementation(compose.runtime)
-            implementation(compose.foundation)
-            implementation(compose.ui)
-            implementation(compose.material3)
-            implementation(compose.components.resources)
+            // CMP runtime + foundation, declared via DIRECT Maven coordinates
+            // (org.jetbrains.compose.material3:material3 etc.) instead of the
+            // `compose.material3` DSL accessor. The DSL accessor was deprecated
+            // in CMP 1.12 and resolves to a stub variant that hides Material3
+            // Expressive symbols on iOS — going through the real coords exposes
+            // them. See `composeMultiplatform` block in libs.versions.toml for
+            // the full rationale.
+            implementation(libs.jetbrains.compose.runtime)
+            implementation(libs.jetbrains.compose.foundation)
+            implementation(libs.jetbrains.compose.ui)
+            implementation(libs.jetbrains.compose.material3)
+            implementation(libs.jetbrains.compose.components.resources)
 
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.serialization.json)
