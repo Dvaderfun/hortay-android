@@ -105,6 +105,7 @@ fun TimelineScreen(
      */
     onChannelOpen: (chatId: Long, scrollToMessageId: Long?) -> Unit = { _, _ -> },
     tdlibRepo: PostsRepository? = null,
+    backend: dev.lyo.hortay.data.HortayBackend? = null,
     commentsRepo: CommentsRepository? = null,
     folders: ChatFoldersRepository? = null,
     translations: TranslationsStore? = null,
@@ -1210,7 +1211,7 @@ fun TimelineScreen(
                 // remoteVideoUrl and ExoPlayer would spin trying to prepare nothing.
                 val items = (post.content as? dev.lyo.hortay.data.PostContent.PhotoAlbum)?.items.orEmpty()
                 if (items.getOrNull(idx)?.isUnplayableVideo == true) {
-                    scope.launch { dev.lyo.hortay.ui.actions.PostActions.openInTelegram(context, tdlibRepo, post) }
+                    scope.launch { dev.lyo.hortay.ui.actions.PostActions.openInTelegram(uriHandler, backend, post) }
                 } else {
                     viewer.openFor(post.content, idx)
                 }
@@ -1267,11 +1268,11 @@ fun TimelineScreen(
                 }
             },
             onBookmarkClick = { post -> vm.toggleBookmark(post) },
-            onShareClick = { post -> scope.launch { PostActions.share(context, tdlibRepo, post) } },
-            onCopyClick = { post -> PostActions.copyText(context, post) },
+            onShareClick = { post -> scope.launch { PostActions.share(backend, post) } },
+            onCopyClick = { post -> PostActions.copyText(post) },
             onOpenClick = { post ->
                 markPostReadState.value(post)
-                scope.launch { PostActions.openInTelegram(context, tdlibRepo, post) }
+                scope.launch { PostActions.openInTelegram(uriHandler, backend, post) }
             },
             onTranslateClick = { post ->
                 val t = translations ?: return@PostInteractions

@@ -2,7 +2,6 @@
 
 package dev.lyo.hortay.ui.main
 
-import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -230,7 +229,7 @@ internal fun DeepLinkDispatcher(
                 onPushChannel(targetChat, tdMessageId)
             } catch (t: Throwable) {
                 if (t is kotlin.coroutines.cancellation.CancellationException) throw t
-                Log.w("MainScaffold", "deep-link dispatch failed for $link", t)
+                dev.lyo.hortay.PlatformLog.w("MainScaffold", "deep-link dispatch failed for $link", t)
             }
         }
     }

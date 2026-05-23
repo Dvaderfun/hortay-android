@@ -161,4 +161,12 @@ expect class HortayBackend {
      * dwell window.
      */
     suspend fun viewThreadMessages(threadChatId: Long, messageIds: List<Long>)
+
+    /**
+     * TDLib-minted canonical share URL for [post]: handles album-anchor,
+     * topic, message-thread shapes Telegram considers canonical. Returns
+     * null when no message link is available (restricted source chat,
+     * `canGetLink = false`) — callers fall back to a hand-rolled URL.
+     */
+    suspend fun canonicalShareUrl(post: TimelinePost): String?
 }
