@@ -1,11 +1,5 @@
 package dev.lyo.hortay.ui.users
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
-import android.content.Intent
-import android.os.Build
-import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -39,22 +33,26 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
-import dev.lyo.hortay.data.ChannelActionsRepository
+import dev.lyo.hortay.PlatformClipboard
+import dev.lyo.hortay.data.HortayBackend
 import dev.lyo.hortay.data.PersonalChannelLink
 import dev.lyo.hortay.data.PresenceStatus
 import dev.lyo.hortay.data.SenderVerification
 import dev.lyo.hortay.data.UserProfile
+import dev.lyo.hortay.nowMs
+import dev.lyo.hortay.rememberToaster
+import dev.lyo.hortay.ui.channels.formatThousandsKmp
 import dev.lyo.hortay.ui.icons.Symbol
 import dev.lyo.hortay.ui.media.TdAvatar
-import java.text.NumberFormat
-import java.util.Locale
-import java.util.concurrent.TimeUnit
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 import hortay.shared.generated.resources.Res
 import hortay.shared.generated.resources.cd_premium_badge
 import hortay.shared.generated.resources.cd_verified_badge
@@ -89,25 +87,25 @@ import org.jetbrains.compose.resources.stringResource
  *   - comment authors in the discussion thread;
  *   - personal-author posts in a channel (admin posting under their own identity);
  *   - the "forwarded from <user>" chip on top of a forwarded post;
- *   - in-text user mentions that carry a [TdApi.TextEntityTypeMentionName.userId].
+ *   - in-text user mentions that carry a TdApi.TextEntityTypeMentionName.userId.
  *
- * Resolves [UserProfile] from [ChannelActionsRepository.userProfile] on entry; the
- * sheet stays visible during the loading window so the trigger feels instant — fields
- * populate inline as TDLib responds (mirrors the [dev.lyo.hortay.ui.channels.ChannelInfoSheet]
+ * Resolves [UserProfile] from [HortayBackend.userProfile] on entry; the sheet stays
+ * visible during the loading window so the trigger feels instant — fields populate
+ * inline as TDLib responds (mirrors the [dev.lyo.hortay.ui.channels.ChannelInfoSheet]
  * pattern by design, so users get one consistent affordance for both kinds of header).
  *
  * Visual structure (top → bottom):
  *   1. **Hero header** — 88dp avatar centred on a tonal disc, name + verification mark,
  *      `@handle` (tap to copy), presence line ("у мережі" / "нещодавно в мережі" / "у мережі Х тому").
- *   2. **Action chips row** — Material 3 `FilledTonalButton` pair. "Написати" opens the
- *      official Telegram app on a `tg://user?id=…` deep link (falls back to https://t.me/<handle>
- *      if the handle is set, or to the raw `tg://user` URL on the rare handle-less user).
- *      "Скопіювати @ʼ" copies the username (only if present).
+ *   2. **Action chip** — Material 3 `FilledTonalButton`. "Написати" opens the official
+ *      Telegram app on a `tg://user?id=…` deep link via [LocalUriHandler] (falls back to
+ *      https://t.me/<handle> when the handle is set so the OS chooser can route to a
+ *      browser if no Telegram client is installed).
  *   3. **Bio card** — surfaceContainerHigh tonal card, plain text. Bots: short/long description.
  *   4. **Personal channel** — tappable [ListItem] with channel avatar + title + handle +
  *      subscriber count. Tap drills into [dev.lyo.hortay.ui.main.MainScaffold]'s channel
- *      overlay via the [LocalChannelOpener] callback — same path as a regular subscribed
- *      channel tap; sheet auto-dismisses so the focus shifts cleanly.
+ *      overlay via [onOpenChannel] — same path as a regular subscribed channel tap; sheet
+ *      auto-dismisses so the focus shifts cleanly.
  *   5. **Meta rows** — birthdate (when visible), groups-in-common count.
  *
  * The hero verification glyph mirrors the feed `VerificationBadge`: blue check for
@@ -119,7 +117,7 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 fun UserProfileSheet(
     userId: Long,
-    actions: ChannelActionsRepository,
+    backend: HortayBackend,
     /** Optional name we already know from the trigger (sender row, mention, forward chip).
      *  Used as the visible label until the resolver lands so the hero is never blank. */
     seedName: String? = null,
@@ -132,7 +130,7 @@ fun UserProfileSheet(
     var profile by remember(userId) { mutableStateOf<UserProfile?>(null) }
 
     LaunchedEffect(userId) {
-        profile = actions.userProfile(userId)
+        profile = backend.userProfile(userId)
     }
 
     ModalBottomSheet(
@@ -155,9 +153,7 @@ fun UserProfileSheet(
             )
             Spacer(Modifier.height(20.dp))
 
-            MessageAction(
-                onMessage = { openInTelegram(it, profile, userId) },
-            )
+            MessageAction(profile = profile, fallbackUserId = userId)
 
             profile?.bio?.let { bio ->
                 Spacer(Modifier.height(20.dp))
@@ -268,7 +264,8 @@ private fun ProfileHero(
             // the @username row in a profile card and the username lands on the
             // clipboard. Avoids the dedicated Copy button (read as visual clutter
             // when the @handle is already on screen one row above).
-            val context = LocalContext.current
+            val toast = rememberToaster()
+            val copiedMessage = stringResource(Res.string.user_profile_handle_copied)
             Spacer(Modifier.height(2.dp))
             Text(
                 text = handle,
@@ -276,7 +273,10 @@ private fun ProfileHero(
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
-                    .clickable { copyHandle(context, handle) }
+                    .clickable {
+                        PlatformClipboard.writeText(label = handle, text = handle)
+                        toast(copiedMessage)
+                    }
                     .padding(horizontal = 6.dp, vertical = 2.dp),
             )
         }
@@ -311,12 +311,21 @@ private fun ProfileHero(
  * Copy half got folded into the `@handle` row above (Telegram-Android idiom: tap the
  * handle to copy). Single FilledTonalButton at full width is the MD3E pattern for a
  * "one primary action" header — Telegram-X's user-info card uses the same shape.
+ *
+ * Routes through [LocalUriHandler] which is KMP — Android delegates to the OS
+ * chooser (browser fallback if no Telegram client installed); iOS hands off to
+ * `UIApplication.openURL`. Prefers `https://t.me/<handle>` when a handle exists
+ * so the https scheme survives "no client installed"; falls back to
+ * `tg://user?id=<id>` for handle-less users (works in the official Telegram
+ * client, no-op on bare browsers).
  */
 @Composable
-private fun MessageAction(onMessage: (Context) -> Unit) {
-    val context = LocalContext.current
+private fun MessageAction(profile: UserProfile?, fallbackUserId: Long) {
+    val uriHandler = LocalUriHandler.current
+    val handle = profile?.handle?.removePrefix("@")?.takeUnless { it.isBlank() }
+    val targetUri = if (handle != null) "https://t.me/$handle" else "tg://user?id=$fallbackUserId"
     FilledTonalButton(
-        onClick = { onMessage(context) },
+        onClick = { runCatching { uriHandler.openUri(targetUri) } },
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp),
@@ -387,7 +396,7 @@ private fun PersonalChannelRow(
             val subs = channel.subscribers
             val parts = listOfNotNull(
                 handle,
-                subs?.let { stringResource(Res.string.channels_subscribers, formatThousands(it)) },
+                subs?.let { stringResource(Res.string.channels_subscribers, formatThousandsKmp(it)) },
             )
             if (parts.isNotEmpty()) {
                 Text(
@@ -519,25 +528,24 @@ private fun profileMetaRows(profile: UserProfile): List<MetaRowSpec> = buildList
             MetaRowSpec(
                 symbol = "person",
                 label = stringResource(Res.string.user_profile_groups_in_common),
-                value = formatThousands(profile.groupsInCommon),
+                value = formatThousandsKmp(profile.groupsInCommon),
             ),
         )
     }
 }
 
-@Composable
 private fun formatBirthdate(profile: UserProfile): String? {
     val month = profile.birthMonth ?: return null
     val day = profile.birthDay ?: return null
-    // LocalConfiguration is observable — Compose re-renders when the user flips the
-    // per-app language picker in Settings → About. Locale.getDefault() looks correct
-    // but is invisible to recomposition (lint flags it as NonObservableLocale).
-    val locale = LocalConfiguration.current.locales[0]
-    val monthName = java.text.DateFormatSymbols(locale).months
-        .getOrNull(month - 1)
-        ?.takeUnless { it.isBlank() } ?: month.toString()
+    // KMP-locale-safe: month-as-number label until a CMP month-name API ships.
+    // Telegram's own profile cards in Ukrainian render "12 листопада" but the
+    // commonMain platform doesn't ship `java.text.DateFormatSymbols`; the
+    // numeric fallback ("12.11") is still unambiguous and consistent across
+    // every locale until we can wire `kotlinx-datetime` localised names.
     val year = profile.birthYear
-    return if (year != null) "$day $monthName $year" else "$day $monthName"
+    val mm = month.toString().padStart(2, '0')
+    val dd = day.toString().padStart(2, '0')
+    return if (year != null) "$dd.$mm.$year" else "$dd.$mm"
 }
 
 @Composable
@@ -552,61 +560,23 @@ private fun presenceLabel(status: PresenceStatus): String? = when (status) {
 
 @Composable
 private fun formatOfflineLabel(wasOnlineSec: Long): String {
-    val now = System.currentTimeMillis() / 1000L
-    val delta = (now - wasOnlineSec).coerceAtLeast(0)
+    val now = nowMs() / 1000L
+    val deltaSec = (now - wasOnlineSec).coerceAtLeast(0L)
+    val delta = deltaSec.seconds
     return when {
-        delta < TimeUnit.MINUTES.toSeconds(1) ->
-            stringResource(Res.string.user_profile_status_just_now)
-        delta < TimeUnit.HOURS.toSeconds(1) -> {
-            val mins = TimeUnit.SECONDS.toMinutes(delta).toInt().coerceAtLeast(1)
+        delta < 1.minutes -> stringResource(Res.string.user_profile_status_just_now)
+        delta < 1.hours -> {
+            val mins = delta.inWholeMinutes.toInt().coerceAtLeast(1)
             pluralStringResource(Res.plurals.user_profile_status_was_minutes_ago, mins, mins)
         }
-        delta < TimeUnit.DAYS.toSeconds(1) -> {
-            val hours = TimeUnit.SECONDS.toHours(delta).toInt().coerceAtLeast(1)
+        delta < 1.days -> {
+            val hours = delta.inWholeHours.toInt().coerceAtLeast(1)
             pluralStringResource(Res.plurals.user_profile_status_was_hours_ago, hours, hours)
         }
-        delta < TimeUnit.DAYS.toSeconds(7) -> {
-            val days = TimeUnit.SECONDS.toDays(delta).toInt().coerceAtLeast(1)
+        delta < 7.days -> {
+            val days = delta.inWholeDays.toInt().coerceAtLeast(1)
             pluralStringResource(Res.plurals.user_profile_status_was_days_ago, days, days)
         }
         else -> stringResource(Res.string.user_profile_status_was_long_ago)
-    }
-}
-
-private fun formatThousands(n: Int): String =
-    NumberFormat.getNumberInstance(Locale.forLanguageTag("uk")).format(n)
-
-/**
- * Hand the OS the right Telegram URL for "open a chat with this user". Prefers the
- * https://t.me/<handle> form when a handle exists — same logic as [dev.lyo.hortay.ui.actions.PostActions]:
- * the https scheme survives "no client installed" by deferring to the OS chooser,
- * whereas tg:// throws ActivityNotFoundException when no handler is registered.
- * Falls back to `tg://user?id=<id>` when the user has no public handle (works in
- * the official Telegram client; no-op everywhere else, but at least it doesn't crash).
- */
-private fun openInTelegram(context: Context, profile: UserProfile?, fallbackUserId: Long) {
-    val handle = profile?.handle?.removePrefix("@")?.takeUnless { it.isBlank() }
-    val uri = if (handle != null) {
-        "https://t.me/$handle".toUri()
-    } else {
-        "tg://user?id=$fallbackUserId".toUri()
-    }
-    val intent = Intent(Intent.ACTION_VIEW, uri).apply {
-        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    }
-    runCatching { context.startActivity(intent) }
-}
-
-private fun copyHandle(context: Context, handle: String) {
-    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
-    cm.setPrimaryClip(ClipData.newPlainText(handle, handle))
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-        Toast.makeText(
-            context,
-            kotlinx.coroutines.runBlocking {
-                org.jetbrains.compose.resources.getString(Res.string.user_profile_handle_copied)
-            },
-            Toast.LENGTH_SHORT,
-        ).show()
     }
 }

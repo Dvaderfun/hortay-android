@@ -14,15 +14,19 @@ import androidx.compose.ui.Modifier
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.lyo.hortay.data.AuthStage
+import dev.lyo.hortay.data.DownloadPriority
 import dev.lyo.hortay.data.LocaleStore
+import dev.lyo.hortay.data.TdMedia
 import dev.lyo.hortay.ui.auth.AuthScreen
 import dev.lyo.hortay.ui.main.MainScaffold
+import dev.lyo.hortay.ui.media.LocalAvatarFileLoader
 import dev.lyo.hortay.ui.media.LocalCustomEmoji
 import dev.lyo.hortay.ui.media.LocalMediaCache
 import dev.lyo.hortay.ui.media.LocalStickerOutline
 import dev.lyo.hortay.ui.media.LocalVideoPlayerPool
 import dev.lyo.hortay.ui.media.LocalWebHttpClient
 import dev.lyo.hortay.ui.media.MediaViewerHost
+import dev.lyo.hortay.ui.media.TdMediaImage
 import dev.lyo.hortay.ui.theme.HortayTheme
 import dev.lyo.hortay.ui.web.MigrationProposalSheet
 import dev.lyo.hortay.ui.web.WebModeScaffold
@@ -64,6 +68,23 @@ class MainActivity : ComponentActivity() {
                     LocalStickerOutline provides graph.stickerOutline,
                     LocalVideoPlayerPool provides graph.videoPlayerPool,
                     LocalWebHttpClient provides graph.webHttpClient,
+                    LocalAvatarFileLoader provides { fileId, cd, modifier ->
+                        TdMediaImage(
+                            media = TdMedia(
+                                fileId = fileId,
+                                width = 0,
+                                height = 0,
+                                minithumbBytes = null,
+                            ),
+                            contentDescription = cd,
+                            modifier = modifier,
+                            placeholderColor = null,
+                            showProgress = false,
+                            priority = DownloadPriority.Avatar,
+                        )
+                    },
+                    dev.lyo.hortay.LocalPlatformToaster provides
+                        dev.lyo.hortay.AndroidToaster(applicationContext),
                 ) {
                     Surface(modifier = Modifier.fillMaxSize()) {
                         val auth by graph.tdClient.authStage.collectAsStateWithLifecycle()

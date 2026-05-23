@@ -96,7 +96,7 @@ internal fun MainScaffoldDialogs(
     pendingUserId?.let { userId ->
         UserProfileSheet(
             userId = userId,
-            actions = graph.channelActions,
+            backend = graph.backend,
             onDismiss = onUserSheetDismiss,
             onOpenChannel = { chatId -> onPushChannel(chatId, null) },
         )
