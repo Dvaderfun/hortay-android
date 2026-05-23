@@ -28,6 +28,9 @@ import dev.lyo.hortay.ui.media.LocalWebHttpClient
 import dev.lyo.hortay.ui.media.MediaViewerHost
 import dev.lyo.hortay.ui.media.TdMediaImage
 import dev.lyo.hortay.ui.theme.HortayTheme
+import dev.lyo.hortay.ui.theme.LocalStatusBarController
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 import dev.lyo.hortay.ui.web.MigrationProposalSheet
 import dev.lyo.hortay.ui.web.WebModeScaffold
 import kotlinx.coroutines.launch
@@ -61,6 +64,14 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
+            val view = LocalView.current
+            val window = this.window
+            val statusBar: (Boolean) -> Unit = { light ->
+                if (!view.isInEditMode) {
+                    WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = light
+                }
+            }
+            CompositionLocalProvider(LocalStatusBarController provides statusBar) {
             HortayTheme {
                 CompositionLocalProvider(
                     LocalMediaCache provides graph.mediaCache,
@@ -134,6 +145,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
+            }
             }
         }
     }

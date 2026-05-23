@@ -5,15 +5,20 @@
 
 package dev.lyo.hortay.data.report
 
-import android.content.Context
-import kotlinx.coroutines.Dispatchers
+import dev.lyo.hortay.applicationFilesPath
+import dev.lyo.hortay.ioDispatcher
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import java.io.File
+import okio.BufferedSink
+import okio.FileSystem
+import okio.Path
+import okio.SYSTEM
+import okio.buffer
+import okio.use
 
 @Serializable
 data class ReportLogEntry(
@@ -32,10 +37,10 @@ data class ReportLogEntry(
 /**
  * Append-only JSONL audit log for child-safety reporting events.
  *
- * Storage: [Context.filesDir]/report_log.jsonl — one JSON object per line.
+ * Storage: `<applicationFilesPath>/report_log.jsonl` — one JSON object per line.
  * Rotation: when the file exceeds [MAX_ENTRIES] records, rewrites with the
- * most-recent 200 lines. All I/O on [Dispatchers.IO]; all mutations serialised
- * via [mutex] to avoid partial-line writes.
+ * most-recent 200 lines. All I/O on the platform IO dispatcher; all mutations
+ * serialised via [mutex] to avoid partial-line writes.
  *
  * Why JSONL instead of Room: project forbids Room (see ARCHITECTURE.md). JSONL is
  * the lightest format that is both append-only fast and human-readable for a
@@ -43,23 +48,30 @@ data class ReportLogEntry(
  * single file read. Nothing here is queried or joined, only appended and
  * occasionally streamed.
  */
-class ReportLogStore(private val context: Context) {
+class ReportLogStore(
+    fileName: String = DEFAULT_FILE_NAME,
+    private val fileSystem: FileSystem = FileSystem.SYSTEM,
+    private val path: Path = applicationFilesPath(fileName),
+) {
 
-    private val file = File(context.filesDir, "report_log.jsonl")
     private val mutex = Mutex()
     private val json = Json { ignoreUnknownKeys = true }
 
-    suspend fun log(entry: ReportLogEntry): Unit = withContext(Dispatchers.IO) {
+    suspend fun log(entry: ReportLogEntry): Unit = withContext(ioDispatcher) {
         mutex.withLock {
-            file.appendText(json.encodeToString(entry) + "\n")
+            ensureParent()
+            fileSystem.appendingSink(path).buffer().use { sink ->
+                sink.writeUtf8(json.encodeToString(entry))
+                sink.writeUtf8("\n")
+            }
             rotateIfNeeded()
         }
     }
 
-    suspend fun snapshot(): List<ReportLogEntry> = withContext(Dispatchers.IO) {
+    suspend fun snapshot(): List<ReportLogEntry> = withContext(ioDispatcher) {
         mutex.withLock {
-            if (!file.exists()) return@withLock emptyList()
-            file.readLines()
+            if (!fileSystem.exists(path)) return@withLock emptyList()
+            readAllLines()
                 .filter { it.isNotBlank() }
                 .mapNotNull { line ->
                     runCatching { json.decodeFromString<ReportLogEntry>(line) }.getOrNull()
@@ -67,23 +79,41 @@ class ReportLogStore(private val context: Context) {
         }
     }
 
+    private fun ensureParent() {
+        path.parent?.let { parent ->
+            if (!fileSystem.exists(parent)) fileSystem.createDirectories(parent)
+        }
+    }
+
+    private fun readAllLines(): List<String> =
+        fileSystem.source(path).buffer().use { src ->
+            buildList {
+                while (true) {
+                    val line = src.readUtf8Line() ?: break
+                    add(line)
+                }
+            }
+        }
+
     private fun rotateIfNeeded() {
-        if (!file.exists()) return
-        val lines = file.readLines().filter { it.isNotBlank() }
+        if (!fileSystem.exists(path)) return
+        val lines = readAllLines().filter { it.isNotBlank() }
         if (lines.size > ROTATE_THRESHOLD) {
             val trimmed = lines.takeLast(MAX_ENTRIES)
-            val tmp = File(file.parentFile, file.name + ".tmp")
-            tmp.writeText(trimmed.joinToString("\n") + "\n")
-            if (!tmp.renameTo(file)) {
-                // Fallback for platforms where rename fails when target exists.
-                file.delete()
-                tmp.renameTo(file)
+            val tmpPath = path.parent!!.resolve(path.name + ".tmp")
+            fileSystem.sink(tmpPath).buffer().use { sink: BufferedSink ->
+                trimmed.forEach { line ->
+                    sink.writeUtf8(line)
+                    sink.writeUtf8("\n")
+                }
             }
+            fileSystem.atomicMove(tmpPath, path)
         }
     }
 
     companion object {
         const val MAX_ENTRIES = 200
+        const val DEFAULT_FILE_NAME = "report_log.jsonl"
         private const val ROTATE_THRESHOLD = MAX_ENTRIES * 11 / 10
     }
 }

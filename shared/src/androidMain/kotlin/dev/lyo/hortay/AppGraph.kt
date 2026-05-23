@@ -75,7 +75,9 @@ class AppGraph(context: Context) {
     // Declared before [tdClient] because TdClient consumes it for OptimizeStorage
     // throttling (the cleanup needs a persisted "last run at" timestamp to skip on
     // every cold start).
-    val settingsStore: SettingsStore = SettingsStore(context)
+    val settingsStore: SettingsStore = SettingsStore(
+        dev.lyo.hortay.data.createPreferencesDataStore(SettingsStore.FILE_NAME),
+    )
 
     // Tiny `(chatId, messageId)` snapshot of the top of the feed, persisted across
     // process death so cold start renders real content sub-100ms instead of a blank
@@ -445,7 +447,7 @@ class AppGraph(context: Context) {
      * File lives in [Context.filesDir]/report_log.jsonl — not in cacheDir so it
      * survives cache clears and can be inspected by compliance auditors.
      */
-    val reportLogStore: ReportLogStore = ReportLogStore(context)
+    val reportLogStore: ReportLogStore = ReportLogStore()
 
     /**
      * DataStore flag that persists whether the one-time "reports go to Telegram
