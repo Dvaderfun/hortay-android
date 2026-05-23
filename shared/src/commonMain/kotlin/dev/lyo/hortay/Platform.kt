@@ -67,3 +67,19 @@ fun rememberToaster(): (String) -> Unit {
     val toaster = LocalPlatformToaster.current
     return { text -> toaster.show(text) }
 }
+
+/**
+ * Multiplier applied to UI animation / skeleton-grace durations.
+ *
+ *   - 1.0 (default) — use the natural duration.
+ *   - 0.5 / 2.0 — developer-options animation-speed slider; longer / shorter
+ *     transitions track the user's preference.
+ *   - 0.0 — animations disabled (Android Developer Options or accessibility
+ *     "Remove animations"; iOS Reduce Motion). Skeleton-grace collapses to 0
+ *     so feedback paints immediately when there's no transition to hide
+ *     behind.
+ *
+ * Android reads `android.animation.ValueAnimator.getDurationScale()`. iOS
+ * reads `UIAccessibility.isReduceMotionEnabled` (0.0 when on; 1.0 otherwise).
+ */
+expect fun systemAnimatorDurationScale(): Float

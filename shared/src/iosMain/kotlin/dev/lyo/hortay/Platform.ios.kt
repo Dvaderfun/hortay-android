@@ -2,6 +2,7 @@
 
 package dev.lyo.hortay
 
+import platform.UIKit.UIAccessibilityIsReduceMotionEnabled
 import platform.UIKit.UIActivityViewController
 import platform.UIKit.UIApplication
 import platform.UIKit.UIPasteboard
@@ -38,3 +39,6 @@ private fun topMostViewController(): UIViewController? {
     }
     return current
 }
+
+actual fun systemAnimatorDurationScale(): Float =
+    if (UIAccessibilityIsReduceMotionEnabled()) 0f else 1f
