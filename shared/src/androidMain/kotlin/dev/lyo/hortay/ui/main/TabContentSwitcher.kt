@@ -173,7 +173,7 @@ internal fun TabContentSwitcher(
                     stats = graph.statsRepository,
                     contentPadding = padding,
                     ignoredChannels = graph.ignoredChannels,
-                    channelActions = graph.channelActions,
+                    backend = graph.backend,
                     onLogout = { scope.launch { graph.tdClient.logOut() } },
                     // Symmetric "auth → guest" path. Flip the guest flag FIRST so
                     // the routing pass that follows the TDLib logout settles on
