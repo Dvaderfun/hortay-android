@@ -309,6 +309,14 @@ expect class HortayBackend {
     suspend fun viewThreadMessages(threadChatId: Long, messageIds: List<Long>)
 
     /**
+     * Warm the comments-thread cache for [chatId] / [candidateMessageIds]
+     * — usually invoked when a post settles in the viewport so that
+     * tapping the comments affordance opens the overlay without an extra
+     * RPC round-trip.
+     */
+    suspend fun prefetchThread(chatId: Long, candidateMessageIds: List<Long>)
+
+    /**
      * TDLib-minted canonical share URL for [post]: handles album-anchor,
      * topic, message-thread shapes Telegram considers canonical. Returns
      * null when no message link is available (restricted source chat,

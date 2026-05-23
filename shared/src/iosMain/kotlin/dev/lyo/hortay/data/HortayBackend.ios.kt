@@ -108,6 +108,7 @@ actual class HortayBackend(
         flowOf(ThreadState.Loading)
 
     actual suspend fun viewThreadMessages(threadChatId: Long, messageIds: List<Long>) {}
+    actual suspend fun prefetchThread(chatId: Long, candidateMessageIds: List<Long>) {}
     actual suspend fun canonicalShareUrl(post: TimelinePost): String? = null
 
     actual val isAuthenticated: StateFlow<Boolean> = MutableStateFlow(false).asStateFlow()

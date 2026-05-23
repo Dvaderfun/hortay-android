@@ -186,12 +186,8 @@ private fun RenderNavEntry(
     when (entry) {
         is NavEntry.Channel -> ChannelScreen(
             chatId = entry.chatId,
-            repo = graph.postsRepository,
-            commentsRepo = graph.commentsRepository,
-            bookmarks = graph.bookmarkStore,
-            translations = graph.translations,
-            channelActions = graph.channelActions,
             backend = graph.backend,
+            bookmarks = graph.bookmarkStore,
             ignoredChannels = graph.ignoredChannels,
             contentPadding = padding,
             onBack = onPopNav,

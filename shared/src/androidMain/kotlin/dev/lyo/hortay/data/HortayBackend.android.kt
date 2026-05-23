@@ -130,6 +130,9 @@ actual class HortayBackend(
         commentsRepo.viewMessages(threadChatId, messageIds)
     }
 
+    actual suspend fun prefetchThread(chatId: Long, candidateMessageIds: List<Long>) =
+        commentsRepo.prefetchThread(chatId, candidateMessageIds)
+
     actual suspend fun canonicalShareUrl(post: TimelinePost): String? =
         postsRepo.canonicalShareUrl(post)
 
