@@ -24,9 +24,9 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.graphics.shapes.Cubic
 import androidx.graphics.shapes.Morph
 import androidx.graphics.shapes.RoundedPolygon
-import androidx.graphics.shapes.toPath
 
 /**
  * Two-layer shape system, mapped to the three reading-density tiers used in this app:
@@ -147,7 +147,13 @@ class MorphShape(
         layoutDirection: LayoutDirection,
         density: Density,
     ): Outline {
-        val composePath: Path = morph.toPath(progress).asComposePath()
+        val composePath = Path()
+        var first = true
+        morph.asCubics(progress).forEach { c ->
+            if (first) { composePath.moveTo(c.anchor0X, c.anchor0Y); first = false }
+            composePath.cubicTo(c.control0X, c.control0Y, c.control1X, c.control1Y, c.anchor1X, c.anchor1Y)
+        }
+        composePath.close()
         val matrix = Matrix()
         matrix.scale(size.width, size.height)
         composePath.transform(matrix)
@@ -166,7 +172,13 @@ class PolygonShape(private val polygon: RoundedPolygon) : Shape {
         layoutDirection: LayoutDirection,
         density: Density,
     ): Outline {
-        val composePath: Path = polygon.toPath().asComposePath()
+        val composePath = Path()
+        var first = true
+        polygon.cubics.forEach { c: Cubic ->
+            if (first) { composePath.moveTo(c.anchor0X, c.anchor0Y); first = false }
+            composePath.cubicTo(c.control0X, c.control0Y, c.control1X, c.control1Y, c.anchor1X, c.anchor1Y)
+        }
+        composePath.close()
         val matrix = Matrix()
         matrix.scale(size.width, size.height)
         composePath.transform(matrix)
