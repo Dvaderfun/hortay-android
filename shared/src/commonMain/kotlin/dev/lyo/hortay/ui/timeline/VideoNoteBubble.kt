@@ -371,7 +371,7 @@ private fun formatRemaining(remainingMs: Long): String {
     val totalSec = (remainingMs + 500L) / 1000L
     val m = totalSec / 60
     val s = totalSec % 60
-    return "-%d:%02d".format(m, s)
+    return "-$m:${s.toString().padStart(2, '0')}"
 }
 
 internal val VIDEO_NOTE_DIAMETER = 220.dp

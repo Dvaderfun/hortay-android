@@ -22,7 +22,6 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
@@ -935,7 +934,7 @@ private fun LocationBlock(content: PostContent.Location) {
                     Text(it, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 }
                 Text(
-                    text = content.address ?: "%.5f, %.5f".format(content.latitude, content.longitude),
+                    text = content.address ?: "${fixed5(content.latitude)}, ${fixed5(content.longitude)}",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1455,7 +1454,19 @@ private fun formatDuration(seconds: Int): String {
     val h = seconds / 3600
     val m = (seconds % 3600) / 60
     val s = seconds % 60
-    return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
+    val mm = m.toString().padStart(2, '0')
+    val ss = s.toString().padStart(2, '0')
+    return if (h > 0) "$h:$mm:$ss" else "$m:$ss"
+}
+
+/** KMP-safe Double → "12.34567" (5 decimals, sign-preserving). */
+private fun fixed5(value: Double): String {
+    val sign = if (value < 0) "-" else ""
+    val abs = if (value < 0) -value else value
+    val scaled = (abs * 100000).toLong()
+    val whole = scaled / 100000
+    val frac = (scaled % 100000).toString().padStart(5, '0')
+    return "$sign$whole.$frac"
 }
 
 /**
@@ -1525,5 +1536,8 @@ private fun formatFileSize(bytes: Long, units: List<String>): String {
         idx++
     }
     val whole = size >= 100 || idx == 0 || size == size.toLong().toDouble()
-    return if (whole) "${size.toLong()} ${units[idx]}" else "%.1f %s".format(size, units[idx])
+    if (whole) return "${size.toLong()} ${units[idx]}"
+    val w = size.toLong()
+    val tenth = ((size * 10).toLong()) % 10
+    return "$w.$tenth ${units[idx]}"
 }

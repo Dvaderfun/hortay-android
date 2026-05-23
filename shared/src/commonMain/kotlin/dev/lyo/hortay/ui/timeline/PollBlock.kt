@@ -60,7 +60,6 @@ import dev.lyo.hortay.ui.icons.Symbol
 import dev.lyo.hortay.ui.media.TdMediaImage
 import dev.lyo.hortay.ui.text.rememberAnnotatedString
 import kotlinx.coroutines.delay
-import java.util.concurrent.TimeUnit
 import kotlin.math.max
 import hortay.shared.generated.resources.Res
 import hortay.shared.generated.resources.poll_action_add_option
@@ -216,10 +215,10 @@ private fun PollHeaderChips(content: PostContent.Poll) {
 @Composable
 private fun PollCountdownChip(content: PostContent.Poll) {
     if (content.closeDate <= 0 || content.isClosed) return
-    var nowSec by remember { mutableStateOf(System.currentTimeMillis() / 1000L) }
+    var nowSec by remember { mutableStateOf(dev.lyo.hortay.nowMs() / 1000L) }
     LaunchedEffect(content.closeDate) {
         while (true) {
-            nowSec = System.currentTimeMillis() / 1000L
+            nowSec = dev.lyo.hortay.nowMs() / 1000L
             if (nowSec >= content.closeDate) break
             delay(1000L)
         }
@@ -243,13 +242,13 @@ private fun PollCountdownChip(content: PostContent.Poll) {
 private fun formatCountdown(seconds: Long): String {
     val total = max(seconds, 0L)
     return if (total >= 3600L) {
-        val h = TimeUnit.SECONDS.toHours(total)
-        val m = TimeUnit.SECONDS.toMinutes(total) % 60
-        "%d:%02d".format(h, m)
+        val h = total / 3600
+        val m = (total % 3600) / 60
+        "$h:${m.toString().padStart(2, '0')}"
     } else {
-        val m = TimeUnit.SECONDS.toMinutes(total)
+        val m = total / 60
         val s = total % 60
-        "%d:%02d".format(m, s)
+        "$m:${s.toString().padStart(2, '0')}"
     }
 }
 

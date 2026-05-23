@@ -536,8 +536,8 @@ private fun buildFromFormatted(
         }
     }
     }
-    val spoilerGroups = groupDstRanges
-        .toSortedMap()
+    val spoilerGroups = groupDstRanges.entries
+        .sortedBy { it.key }
         .map { (groupId, ranges) ->
             // Seed combines groupId + first range start so two distinct groups in the
             // same message look like distinct clouds (different particle layouts), but
