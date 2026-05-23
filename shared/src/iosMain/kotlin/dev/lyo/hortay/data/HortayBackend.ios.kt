@@ -34,6 +34,8 @@ actual class HortayBackend(
     actual val reportLogStore: ReportLogStore,
     actual val reportExplainerStore: ReportExplainerStore,
 ) {
+    actual val stats: StatsFacade? = null
+    actual val autoDownload: AutoDownloadFacade? = null
     actual val authStage: StateFlow<AuthStage> = MutableStateFlow<AuthStage>(AuthStage.WaitPhone).asStateFlow()
     actual val authError: StateFlow<String?> = MutableStateFlow<String?>(null).asStateFlow()
     actual val countries: StateFlow<List<Country>> = MutableStateFlow<List<Country>>(emptyList()).asStateFlow()

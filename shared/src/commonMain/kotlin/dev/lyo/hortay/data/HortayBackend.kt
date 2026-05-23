@@ -409,6 +409,18 @@ expect class HortayBackend {
     val settingsStore: SettingsStore
 
     /**
+     * TDLib network + storage stats for the Settings UI. Null on iOS guest
+     * mode — SettingsScreen hides the Traffic + Storage cards.
+     */
+    val stats: StatsFacade?
+
+    /**
+     * Auto-download policy store. Null on iOS guest mode (no MediaCache, no
+     * policy applies). SettingsScreen hides the AutoDownload entry row.
+     */
+    val autoDownload: AutoDownloadFacade?
+
+    /**
      * In-memory translation cache (TDLib `TranslateMessageText` on Android).
      * Null on iOS guest mode — no TDLib backing service, and the translate
      * button is hidden in the post chrome when this is null.

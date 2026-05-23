@@ -1,8 +1,10 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+@file:OptIn(
+    androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class,
+    androidx.compose.ui.ExperimentalComposeUiApi::class,
+)
 
 package dev.lyo.hortay.ui.settings
 
-import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.selectable
@@ -13,14 +15,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import coil3.SingletonImageLoader
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedContentTransitionScope.SlideDirection
 import androidx.compose.animation.fadeIn
@@ -29,13 +29,13 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.runtime.saveable.rememberSaveable
 import dev.lyo.hortay.AppConfig
-import dev.lyo.hortay.data.AutoDownloadStore
+import dev.lyo.hortay.data.AutoDownloadFacade
 import dev.lyo.hortay.data.FeedOrder
+import dev.lyo.hortay.data.HortayBackend
 import dev.lyo.hortay.data.IgnoredChannelsStore
-import dev.lyo.hortay.data.LocaleStore
 import dev.lyo.hortay.data.NetworkUsage
 import dev.lyo.hortay.data.SettingsStore
-import dev.lyo.hortay.data.StatsRepository
+import dev.lyo.hortay.data.StatsFacade
 import dev.lyo.hortay.data.StorageUsage
 import dev.lyo.hortay.ui.components.HortayTopBar
 import dev.lyo.hortay.ui.components.HortayTopBarSize
@@ -139,7 +139,7 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 fun SettingsScreen(
     settings: SettingsStore,
-    stats: StatsRepository?,
+    stats: StatsFacade?,
     contentPadding: PaddingValues,
     onLogout: (() -> Unit)? = null,
     onSignIn: (() -> Unit)? = null,
@@ -153,7 +153,7 @@ fun SettingsScreen(
      * guest mode was a fresh install — discoverable only by accident.
      */
     onEnterGuest: (() -> Unit)? = null,
-    autoDownload: AutoDownloadStore? = null,
+    autoDownload: AutoDownloadFacade? = null,
     /**
      * Hidden-channels store. Surfaces a "Hidden channels (N)" row + manage
      * sub-screen. Optional so a test harness or a stripped build can drop it
@@ -165,7 +165,7 @@ fun SettingsScreen(
      * title / handle for each hidden chatId. Null in guest mode (the
      * web-channel resolver below covers that path).
      */
-    backend: dev.lyo.hortay.data.HortayBackend? = null,
+    backend: HortayBackend? = null,
     /**
      * Guest-mode resolver for the Hidden Channels sub-screen. Looks up a
      * channel by its stable hash-derived chatId from
@@ -264,7 +264,7 @@ private enum class SettingsSection(val depth: Int) {
 @Composable
 private fun SettingsMain(
     settings: SettingsStore,
-    stats: StatsRepository?,
+    stats: StatsFacade?,
     contentPadding: PaddingValues,
     onLogout: (() -> Unit)?,
     onSignIn: (() -> Unit)?,
@@ -276,7 +276,6 @@ private fun SettingsMain(
     onOpenHiddenChannels: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    val context = LocalContext.current
     val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     var confirmLogout by remember { mutableStateOf(false) }
@@ -407,7 +406,7 @@ private fun SettingsMain(
                             stats.clearCache()
                             // Coil's disk cache lives outside TDLib's filesDir; clear both
                             // so the user sees the actual freed space.
-                            SingletonImageLoader.get(context).diskCache?.clear()
+                            clearImageDiskCache()
                             refreshStats()
                             clearing = false
                         }
@@ -531,18 +530,7 @@ private fun SettingsMain(
                     chevron = true,
                     index = 0,
                     count = 2,
-                    onClick = {
-                        try {
-                            androidx.browser.customtabs.CustomTabsIntent.Builder()
-                                .build()
-                                .launchUrl(
-                                    context,
-                                    android.net.Uri.parse(dev.lyo.hortay.AppConfig.childSafetyPolicyUrl),
-                                )
-                        } catch (_: android.content.ActivityNotFoundException) {
-                            uriHandler.openUri(dev.lyo.hortay.AppConfig.childSafetyPolicyUrl)
-                        }
-                    },
+                    onClick = { uriHandler.openUri(AppConfig.childSafetyPolicyUrl) },
                 )
                 SettingsRow(
                     symbol = "shield",
@@ -551,18 +539,7 @@ private fun SettingsMain(
                     chevron = true,
                     index = 1,
                     count = 2,
-                    onClick = {
-                        try {
-                            androidx.browser.customtabs.CustomTabsIntent.Builder()
-                                .build()
-                                .launchUrl(
-                                    context,
-                                    android.net.Uri.parse(dev.lyo.hortay.AppConfig.privacyPolicyUrl),
-                                )
-                        } catch (_: android.content.ActivityNotFoundException) {
-                            uriHandler.openUri(dev.lyo.hortay.AppConfig.privacyPolicyUrl)
-                        }
-                    },
+                    onClick = { uriHandler.openUri(AppConfig.privacyPolicyUrl) },
                 )
             }
 
@@ -1318,11 +1295,11 @@ private fun HideOnlineStatusRow(
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun LanguageRow(index: Int, count: Int) {
-    val context = LocalContext.current
+    val picker = LocalLanguagePicker.current
     var showDialog by remember { mutableStateOf(false) }
     // Re-read on every dialog open so the row reflects an out-of-band change (e.g. the
     // user flipped the language via the system per-app picker on API 33+ and came back).
-    val activeTag = remember(showDialog) { LocaleStore.read(context) }
+    val activeTag = remember(showDialog) { picker.current() }
     val summary = when (activeTag) {
         "uk" -> stringResource(Res.string.settings_language_summary_uk)
         "en" -> stringResource(Res.string.settings_language_summary_en)
@@ -1344,13 +1321,7 @@ private fun LanguageRow(index: Int, count: Int) {
             onSelect = { tag ->
                 showDialog = false
                 if (tag == activeTag) return@LanguageDialog
-                LocaleStore.write(context, tag)
-                // On API 33+ the platform LocaleManager recreates the activity stack
-                // itself; on older API levels we have to do it so attachBaseContext
-                // re-wraps with the new locale.
-                if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) {
-                    (context as? android.app.Activity)?.recreate()
-                }
+                picker.apply(tag)
             },
         )
     }

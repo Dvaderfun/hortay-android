@@ -35,6 +35,8 @@ actual class HortayBackend(
     actual val reportLogStore: ReportLogStore,
     actual val reportExplainerStore: ReportExplainerStore,
     actual val settingsStore: SettingsStore,
+    actual val stats: StatsFacade?,
+    actual val autoDownload: AutoDownloadFacade?,
     private val translationsStore: TranslationsStore,
     private val backendScope: CoroutineScope,
 ) {
