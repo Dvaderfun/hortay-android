@@ -181,14 +181,8 @@ class CustomEmojiRepository(
  * time (Telegram Premium emoji-status / inline status pills behaviour). The renderer
  * applies this via a Compose `ColorFilter`.
  */
-@Immutable
-data class CustomEmojiSticker(
-    val customEmojiId: Long,
-    val media: TdMedia,
-    val thumb: TdMedia?,
-    val format: StickerFormat,
-    val needsRepainting: Boolean,
-)
+// CustomEmojiSticker lives in commonMain/data/CustomEmojiSticker.kt so the
+// inline-emoji renderer + FormattedTextRenderer can use it from shared UI.
 
 internal fun TdApi.Sticker.toCustomEmojiSticker(customEmojiId: Long): CustomEmojiSticker {
     val needsRepainting = (fullType as? TdApi.StickerFullTypeCustomEmoji)?.needsRepainting == true
