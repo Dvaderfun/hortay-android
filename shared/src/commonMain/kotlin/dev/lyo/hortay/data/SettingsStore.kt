@@ -1,11 +1,11 @@
 package dev.lyo.hortay.data
 
-import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -13,12 +13,15 @@ import kotlinx.coroutines.flow.map
 enum class ThemeMode { System, Light, Dark }
 
 /**
- * User preferences persisted across launches: theme, notifications opt-in, etc.
+ * User preferences persisted across launches: theme, feed-order, snap-scroll,
+ * inline-video-autoplay, hide-online-status, last storage-optimize timestamp.
  * Backed by Preferences DataStore for async, blocking-free reads/writes.
+ *
+ * DataStore handle is supplied externally — the platform graph constructs it
+ * via [createPreferencesDataStore] and hands it in, so this class itself is
+ * platform-agnostic.
  */
-class SettingsStore(context: Context) {
-
-    private val dataStore = context.applicationContext.settingsDataStore
+class SettingsStore(private val dataStore: DataStore<Preferences>) {
 
     val themeMode: Flow<ThemeMode> = dataStore.data.map { prefs ->
         prefs[KEY_THEME]?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() } ?: ThemeMode.System
@@ -124,14 +127,14 @@ class SettingsStore(context: Context) {
         dataStore.edit { it[KEY_LAST_STORAGE_OPTIMIZE_AT] = epochMs }
     }
 
-    private companion object {
-        val KEY_THEME = stringPreferencesKey("theme_mode")
-        val KEY_LAST_STORAGE_OPTIMIZE_AT = longPreferencesKey("last_storage_optimize_at")
-        val KEY_FEED_ORDER = stringPreferencesKey("feed_order")
-        val KEY_SNAP_SCROLL = booleanPreferencesKey("snap_scroll")
-        val KEY_INLINE_VIDEO_AUTOPLAY = booleanPreferencesKey("inline_video_autoplay")
-        val KEY_HIDE_ONLINE_STATUS = booleanPreferencesKey("hide_online_status")
+    companion object {
+        const val FILE_NAME = "settings"
+
+        private val KEY_THEME = stringPreferencesKey("theme_mode")
+        private val KEY_LAST_STORAGE_OPTIMIZE_AT = longPreferencesKey("last_storage_optimize_at")
+        private val KEY_FEED_ORDER = stringPreferencesKey("feed_order")
+        private val KEY_SNAP_SCROLL = booleanPreferencesKey("snap_scroll")
+        private val KEY_INLINE_VIDEO_AUTOPLAY = booleanPreferencesKey("inline_video_autoplay")
+        private val KEY_HIDE_ONLINE_STATUS = booleanPreferencesKey("hide_online_status")
     }
 }
-
-private val Context.settingsDataStore by preferencesDataStore(name = "settings")
