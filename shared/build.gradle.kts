@@ -86,6 +86,12 @@ kotlin {
             // renderer, no Android Canvas dependency.
             implementation(libs.compottie)
             implementation(libs.compottie.network)
+
+            // Coil 3 is KMP — Compose adapter + Ktor3 network fetcher work on
+            // both Android (OkHttp engine) and iOS (Darwin engine). Used by
+            // the iOS guest-mode feed UI for channel avatars + photo posts.
+            implementation(libs.coil.compose)
+            implementation(libs.coil.network.ktor3)
         }
 
         androidMain.dependencies {
@@ -106,10 +112,6 @@ kotlin {
 
             implementation(libs.kotlinx.coroutines.android)
 
-            implementation(libs.coil.compose)
-            // coil-network-ktor3 is KMP — works on Android (via ktor-client-okhttp)
-            // and iOS (via ktor-client-darwin), both already on the classpath.
-            implementation(libs.coil.network.ktor3)
             implementation(libs.coil.gif)
             implementation(libs.coil.video)
 
