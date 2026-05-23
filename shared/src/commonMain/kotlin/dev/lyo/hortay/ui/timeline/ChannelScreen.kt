@@ -2,46 +2,74 @@
 
 package dev.lyo.hortay.ui.timeline
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
-import androidx.compose.runtime.*
+import androidx.compose.material3.rememberTopAppBarState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.layout.layout
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import dev.lyo.hortay.data.BookmarkStore
-import dev.lyo.hortay.data.ChannelActionsRepository
-import dev.lyo.hortay.data.CommentsRepository
 import dev.lyo.hortay.data.DownloadPriority
 import dev.lyo.hortay.data.FeedOrder
+import dev.lyo.hortay.data.FormattedText
 import dev.lyo.hortay.data.ForwardOrigin
+import dev.lyo.hortay.data.HortayBackend
 import dev.lyo.hortay.data.IgnoredChannelsStore
-import dev.lyo.hortay.data.posts.PostsRepository
+import dev.lyo.hortay.data.PostContent
+import dev.lyo.hortay.data.SCREEN_MOUNT_GRACE_MS
+import dev.lyo.hortay.data.StartupCoordinator
 import dev.lyo.hortay.data.TimelinePost
-import dev.lyo.hortay.data.TranslationsStore
+import dev.lyo.hortay.data.TranslationKey
 import dev.lyo.hortay.data.bookmarkKey
 import dev.lyo.hortay.data.isUnplayableVideo
 import dev.lyo.hortay.data.orderedFor
@@ -50,18 +78,18 @@ import dev.lyo.hortay.ui.channels.ChannelInfoSheet
 import dev.lyo.hortay.ui.components.HortayTopBar
 import dev.lyo.hortay.ui.components.HortayTopBarSize
 import dev.lyo.hortay.ui.icons.Symbol
-import dev.lyo.hortay.ui.main.rememberFloatingTopBarBehavior
 import dev.lyo.hortay.ui.media.LocalIsCenteredItem
 import dev.lyo.hortay.ui.media.LocalIsHighlightedItem
 import dev.lyo.hortay.ui.media.LocalMediaCache
 import dev.lyo.hortay.ui.media.LocalMediaViewer
 import dev.lyo.hortay.ui.media.LocalScrollGate
-import dev.lyo.hortay.ui.media.TdAvatar
 import dev.lyo.hortay.ui.media.rememberDeferredLoading
 import dev.lyo.hortay.ui.theme.HortayExpressive
-import dev.lyo.hortay.ui.theme.asComposeShape
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import hortay.shared.generated.resources.Res
@@ -76,47 +104,24 @@ import hortay.shared.generated.resources.timeline_subscribers
 import org.jetbrains.compose.resources.stringResource
 
 // FlowPreview opt-in stays: Flow.debounce(Long) is still preview-marked in
-// kotlinx-coroutines 1.10.1 even though Flow.debounce(Duration) graduated.
-// Remove only when the Long overload is stabilised upstream.
+// kotlinx-coroutines 1.10.1.
 
 /**
- * Single-channel post feed. Replaces the `channelFilter != null` branch that used to
- * live inside [TimelineScreen] — each channel now gets a proper dedicated Composable
- * with its own [ChannelViewModel] instance (keyed on [chatId]) and its own list state,
- * so navigating between channels or back to the all-feed never shares stale scroll /
- * search / loading state.
- *
- * Top bar follows the same two-zone status-bar pattern as [TimelineScreen] and
- * [CommentsScreen]: a persistent background strip for the system status bar (zone 1),
- * then the floating-bar layout-shrinker (zone 2). [rememberFloatingTopBarBehavior]
- * with `enabled = { !searchActive }` keeps the bar pinned while the BasicTextField is
- * visible — identical semantics to the old in-channel search pin in [TimelineScreen].
- *
- * When [searchActive] is true, a Compact bar with a BasicTextField replaces the normal
- * Medium bar via a `when { }` switch — mirrors the pattern from [TimelineScreen]'s
- * [TimelineTopBar].
- *
- * Scroll-to-message, highlight, read-ack, pagination, and prefetch all follow the
- * corresponding [TimelineScreen] patterns verbatim; differences are called out in
- * their inline comments.
+ * Single-channel post feed. Each channel gets a proper dedicated Composable with
+ * its own [ChannelViewModel] instance (keyed on [chatId]) and its own list state,
+ * so navigating between channels or back to the all-feed never shares stale
+ * scroll / search / loading state.
  *
  * @param onChannelOpen Called when the user taps a channel header, a forward-source
- *   chip, or an inline reply / quote card whose target is a DIFFERENT channel than the
- *   one currently displayed. The back-stack router in [MainScaffold] pushes the new
- *   chatId and creates a fresh [ChannelScreen]. The second parameter is the optional
- *   messageId to land on inside the destination channel — used by the cross-channel
- *   quote-tap path so the freshly pushed screen highlights the replied-to message
- *   instead of opening cold. Same-channel taps are no-ops (already here).
+ *   chip, or an inline reply / quote card whose target is a DIFFERENT channel than
+ *   the one currently displayed. The second parameter is the optional messageId to
+ *   land on inside the destination channel.
  */
 @OptIn(ExperimentalMaterial3Api::class, FlowPreview::class)
 @Composable
 fun ChannelScreen(
     chatId: Long,
-    repo: PostsRepository,
-    commentsRepo: CommentsRepository,
-    translations: TranslationsStore,
-    channelActions: ChannelActionsRepository,
-    backend: dev.lyo.hortay.data.HortayBackend,
+    backend: HortayBackend,
     bookmarks: BookmarkStore,
     contentPadding: PaddingValues,
     onBack: () -> Unit,
@@ -127,43 +132,12 @@ fun ChannelScreen(
     onScrollMissed: () -> Unit = {},
     onReportClick: (TimelinePost) -> Unit = {},
     canReport: (TimelinePost) -> Boolean = { false },
-    /**
-     * Channel-level Report entry point — invoked when the user taps the Report row
-     * inside [ChannelInfoSheet]. The scaffold routes it to the same ReportFlowSheet
-     * the long-press path uses, with `messageId = null` (TDLib's reportChat flow
-     * accepts a channel-level report against the whole chat). Null hides the row.
-     */
     onReportChannel: (() -> Unit)? = null,
-    /**
-     * Hidden-channels store. When non-null, propagated to [ChannelInfoSheet]
-     * which renders a "Hide from feed" toggle row. Optional so the screen
-     * still composes from call sites that haven't been wired yet.
-     */
     ignoredChannels: IgnoredChannelsStore? = null,
-    /**
-     * Per-user feed ordering, from [dev.lyo.hortay.data.SettingsStore.feedOrder]. Mirrors
-     * the same setting [TimelineScreen] respects on the all-feed: [FeedOrder.Newest]
-     * is the canonical newest-at-top arrangement; [FeedOrder.OldestUnreadFirst]
-     * (the default) sorts ascending by date (oldest read posts on top, unread
-     * queue below, newest at the bottom — chat-app idiom) and the cold-entry
-     * effect below lands the user at the read→unread boundary so the channel
-     * opens "where you left off".
-     */
     feedOrder: FeedOrder = FeedOrder.OldestUnreadFirst,
-    /**
-     * Process-wide cold-start gate, TDLib mode only. While in
-     * [StartupCoordinator.Phase.Booting] the comments-thread prefetch collector
-     * silently skips its work to keep the TDLib RPC pipe clear for TDLib's own
-     * initial sync — matches the gate [TimelineScreen] applies on the all-feed
-     * path. A deep-link drill into a channel within the first ~3 s after auth
-     * would otherwise bypass that budget. Null = unguarded (guest mode / tests).
-     */
-    startupPhase: kotlinx.coroutines.flow.StateFlow<dev.lyo.hortay.data.StartupCoordinator.Phase>? = null,
+    startupPhase: StateFlow<StartupCoordinator.Phase>? = null,
 ) {
-    // Per-channel VM. viewModel() keys the instance by (class, key), so each chatId
-    // gets its own VM rather than sharing the all-feed TimelineViewModel. The factory is
-    // consulted only on first creation — once the VM is live, subsequent compositions
-    // with the same key reuse the existing instance regardless of the factory parameter.
+    // Per-channel VM keyed by chatId — each channel gets its own instance.
     val vm: ChannelViewModel = viewModel(
         key = "channel:$chatId",
         factory = remember(backend, bookmarks, chatId, scrollToMessage) {
@@ -180,15 +154,10 @@ fun ChannelScreen(
         },
     )
 
-    // Single-state read: `data` is the channel's `Loading | Loaded(posts)`
-    // sealed union. `posts` is derived from `data` inside the same Compose
-    // snapshot, so consumers can never observe an inconsistent (posts,
-    // loading) pair across two state updates — see [ChannelData] KDoc for
-    // the race the previous two-flow design exposed.
     val data by vm.data.collectAsStateWithLifecycle()
     val posts = when (val d = data) {
         is ChannelData.Loaded -> d.posts
-        ChannelData.Loading -> kotlinx.collections.immutable.persistentListOf()
+        ChannelData.Loading -> persistentListOf()
     }
     val attemptedAround by vm.attemptedAround.collectAsStateWithLifecycle()
     val refreshing by vm.refreshing.collectAsStateWithLifecycle()
@@ -200,8 +169,8 @@ fun ChannelScreen(
     val searchActive by vm.searchActive.collectAsStateWithLifecycle()
     val searchQuery by vm.searchQuery.collectAsStateWithLifecycle()
     val searchResults by vm.searchResults.collectAsStateWithLifecycle()
-    val translationsMap = translations.translations.collectAsStateWithLifecycle().value
-    val context = LocalContext.current
+    val translationsFacade = backend.translations
+    val translationsMap = translationsFacade?.translations?.collectAsStateWithLifecycle()?.value.orEmpty()
     val uriHandler = LocalUriHandler.current
     val scope = rememberCoroutineScope()
     val viewer = LocalMediaViewer.current
@@ -209,47 +178,20 @@ fun ChannelScreen(
     // Info sheet: hoisted local state, dismissed by setting false.
     var infoSheetVisible by remember { mutableStateOf(false) }
 
-    // Search-mode back-handler. When search is active, system back / predictive-back
-    // should collapse the search overlay back to the channel's normal Medium top bar
-    // — NOT pop the channel itself off the back-stack. Without this BackHandler, the
-    // gesture bubbles up to MainScaffold's nav-stack popNav() and yanks the
-    // user out to the originating tab (typically Channels), losing both the search
-    // and the channel context. Composable-local BackHandler near the leaf takes
-    // priority over parent BackHandlers, which is exactly the dispatch rule we need.
+    // Search-mode back-handler. Collapses search overlay instead of popping the
+    // channel off the back-stack — leaf-scoped BackHandler takes priority over
+    // parent BackHandlers, which is exactly the dispatch rule we need.
+    @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
     BackHandler(enabled = searchActive) { vm.setSearchActive(false) }
 
-    // Pinned-only top bar on the channel detail surface. Standard M3 pinned
-    // behaviour keeps the surface tint reactive to scroll without moving the
-    // bar — the header stays visible at all times so "where am I" + search
-    // affordance never become hidden gestures.
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
 
-    // Source-of-truth for what the LazyColumn renders. One TimelinePost → one
-    // [FeedItem] row — see [FeedItem] for why row identity is kept 1:1 with the
-    // backing post instead of folding reply chains into stacked Thread slots.
-    // [feedOrder] is honoured here so OldestUnreadFirst flips the channel into
-    // the reverse-feed layout exactly like TimelineScreen does on the all-feed;
-    // search results stay in their RPC relevance order regardless.
     val cursorHolder = LocalReadCursors.current
     val displayedItems = remember(posts, searchActive, searchResults, feedOrder) {
         val source = if (searchActive) searchResults else posts.orderedFor(feedOrder)
         source.map(::FeedItem).toPersistentList()
     }
 
-    // [ChannelUiState] is the single source of truth for what gets mounted on
-    // this screen. The VM owns the deep-link around-load — when the candidate
-    // resolves to [ChannelUiState.Resolving], the channel paints a [SkeletonFeed]
-    // instead of flashing the head post at index 0 for a frame before the deep
-    // link lands. On [ChannelUiState.Missing] the screen falls back to the
-    // normal newest-first view and surfaces a snackbar via [onScrollMissed].
-    //
-    // Cursors snapshot is latched on (chatId, feedOrder) — the only inputs
-    // that change the boundary semantics for a single-channel feed (channel
-    // identity + sort direction). [continueReadingIndex] inside
-    // [buildChannelUiState] is one-shot per Ready latch in
-    // [rememberLatchedChannelUiState], so we don't need live cursors here;
-    // capturing once per channel open also avoids the per-recomposition
-    // `map.toMap().toPersistentMap()` allocation the inline call had.
     val channelCursors = remember(chatId, feedOrder) { cursorHolder.snapshot() }
     val candidateChannelUiState = buildChannelUiState(
         data = data,
@@ -265,29 +207,13 @@ fun ChannelScreen(
         candidate = candidateChannelUiState,
         routeKey = chatId,
     )
-    // Notify the host that the deep-link request has been consumed by the VM —
-    // ChannelViewModel reads [scrollToMessage] from its constructor and drives
-    // the around-load itself. Fires once on first composition with a non-null
-    // request, matching the previous LaunchedEffect(scrollToMessage) contract.
     LaunchedEffect(scrollToMessage) {
         if (scrollToMessage != null) onScrollHandled()
     }
-    // Missing → snackbar via the existing scaffold-wide route. Single fire per
-    // latched Missing transition; reusing [onScrollMissed] keeps the snackbar
-    // plumbing untouched (the host already surfaces a localized message and
-    // dedups against concurrent posts).
     LaunchedEffect(channelUiState) {
         if (channelUiState is ChannelUiState.Missing) onScrollMissed()
     }
 
-    // [highlightedPostKey] has two producers:
-    //   1. Deep-link landing: derived from the latched [Ready.highlightedMessageId]
-    //      so the target pulses after the LazyColumn mounts at the resolved index.
-    //   2. In-channel quote-tap: [onQuotedSourceClick] sets [pendingScrollToMessage]
-    //      below; [rememberPendingScrollToMessage] resolves it and writes the key
-    //      on its [onLanded] callback.
-    // Newest-mode (no deep link) and the Missing fallback produce null on path 1.
-    // Auto-clear after CHANNEL_HIGHLIGHT_DURATION_MS for both paths.
     var highlightedPostKey by remember(chatId) { mutableStateOf<Pair<Long, Long>?>(null) }
     LaunchedEffect(channelUiState, chatId) {
         val mid = (channelUiState as? ChannelUiState.Ready)?.highlightedMessageId ?: return@LaunchedEffect
@@ -295,29 +221,12 @@ fun ChannelScreen(
     }
     LaunchedEffect(highlightedPostKey) {
         if (highlightedPostKey == null) return@LaunchedEffect
-        kotlinx.coroutines.delay(CHANNEL_HIGHLIGHT_DURATION_MS)
+        delay(CHANNEL_HIGHLIGHT_DURATION_MS)
         highlightedPostKey = null
     }
-    // In-channel quote-tap pending target. Deep-link scroll is owned by the VM
-    // (see [ChannelViewModel.scrollToMessageId] + [attemptedAround] → builder
-    // gates Ready behind it), so this state holds ONLY the quoted-message
-    // jump path — same-channel reply navigation from a [PostInteractions.onQuotedSourceClick]
-    // tap. [rememberPendingScrollToMessage] resolves the target and clears it.
     var pendingScrollToMessage by remember(chatId) { mutableStateOf<Pair<Long, Long>?>(null) }
 
-    // Scroll state. First paint lands at the correct row in one frame
-    // (cold-start landing) AND drill-out/drill-in preserves user scroll, even
-    // when boundary moved while the user was elsewhere. The trick: pin the
-    // seed at the FIRST Ready transition via [rememberSaveable], use it as
-    // both the [LazyListState] constructor arg and the [rememberSaveable] key
-    // — so subsequent boundary movements don't yank the saver bundle out from
-    // under the restoration path. The previous design keyed on the LIVE
-    // boundary, which lost scroll on drill-back if cursors had moved while
-    // the user was inside another channel. See the matching pattern in
-    // [TimelineScreen]'s home-feed listState — same problem, same shape.
-    val pinnedChannelSeed = rememberSaveable(chatId) {
-        androidx.compose.runtime.mutableIntStateOf(-1)
-    }
+    val pinnedChannelSeed = rememberSaveable(chatId) { mutableIntStateOf(-1) }
     val candidateInitialIndex = (channelUiState as? ChannelUiState.Ready)?.initialIndex
     LaunchedEffect(chatId, candidateInitialIndex) {
         if (pinnedChannelSeed.intValue < 0 && candidateInitialIndex != null) {
@@ -331,19 +240,15 @@ fun ChannelScreen(
     }
     val listState = rememberSaveable(
         chatId, initialIndexSeed,
-        saver = androidx.compose.foundation.lazy.LazyListState.Saver,
+        saver = LazyListState.Saver,
     ) {
-        androidx.compose.foundation.lazy.LazyListState(initialIndexSeed, 0)
+        LazyListState(initialIndexSeed, 0)
     }
 
-    // Resolve in-channel quote-tap scroll-to-message once the target row appears.
-    // Shared with [TimelineScreen]; deep-link landings DO NOT use this path — VM
-    // owns those. On miss the helper invokes [onScrollMissed] so the host posts a
-    // "link not found" snackbar instead of leaving the user staring at nothing.
     rememberPendingScrollToMessage(
         displayedItems = displayedItems,
         pendingTarget = pendingScrollToMessage,
-        loadHistoryAround = { cid, mid -> repo.loadHistoryAround(cid, mid) },
+        loadHistoryAround = { cid, mid -> backend.loadHistoryAround(cid, mid) },
         onLanded = { cid, mid, idx ->
             highlightedPostKey = cid to mid
             listState.scrollToItem(idx)
@@ -356,27 +261,9 @@ fun ChannelScreen(
     )
 
     // Pagination: direction-aware near-edge snapshotFlow → VM.loadOlderIfPossible().
-    // Older history lives at opposite ends of the list depending on feedOrder, so the
-    // "near the older edge" condition flips with it:
-    //
-    //   - Newest (newest-first sort):        older = BOTTOM → trigger on
-    //     `lastVisibleIndex >= total - threshold`.
-    //   - OldestUnreadFirst (asc-by-date):   older = TOP → trigger on
-    //     `firstVisibleIndex <= threshold`.
-    //
-    // Using the Newest-mode trigger in OldestUnreadFirst was a load-bearing bug:
-    // [buildChannelUiState] lands the channel at `lastIndex` (newest, at the BOTTOM
-    // of the asc-sort) on cold entry, so `lastVisibleIndex == total - 1` immediately
-    // — the trigger fires before any user gesture. Each [loadOlder] inserts ~30 older
-    // posts at the TOP of the asc-sort; LazyColumn's keyed anchor preserves the
-    // user's row, so its index shifts deeper into the list, `lastVisibleIndex` stays
-    // ~= `total - 1`, and the trigger re-fires. Runaway pagination continued until
-    // TDLib exhausted its local history and `pageEnded` flipped — at which point
-    // further scroll-up never paginates because the chat is already marked
-    // "page-ended" — exactly the user-reported "ліміт скільки листаю вверх, далі
-    // запиняє прогружати" symptom.
+    // Older history lives at opposite ends of the list depending on feedOrder.
     LaunchedEffect(listState, chatId, feedOrder) {
-        androidx.compose.runtime.snapshotFlow {
+        snapshotFlow {
             val info = listState.layoutInfo
             val total = info.totalItemsCount
             val firstVisible = info.visibleItemsInfo.firstOrNull()?.index ?: -1
@@ -396,19 +283,13 @@ fun ChannelScreen(
             }
     }
 
-    // Read-state acks: viewport-stable dwell → viewMessages. Extracted to
-    // [rememberReadAckDwell] — shared with [TimelineScreen]. Scoped to chatId. The
-    // returned set is the same one [markPostReadState] below extends with
-    // explicit-tap acks.
+    // Read-state acks: viewport-stable dwell → viewMessages.
     val ackedRead = rememberReadAckDwell(
         listState = listState,
         displayedItems = displayedItems,
         ackKey = chatId,
         markAsRead = { fresh ->
             fresh.groupBy { it.chatId }.forEach { (cid, group) ->
-                // Expand albums to every member id so TDLib's
-                // lastReadInboxMessageId advances past the highest member,
-                // matching the explicit-tap path below ([markPostReadState]).
                 val ids = group.flatMap { post ->
                     post.albumMessageIds.ifEmpty { listOf(post.id) }
                 }.distinct()
@@ -420,14 +301,12 @@ fun ChannelScreen(
     )
 
     // Comments-thread prefetch — extracted to [rememberCommentsPrefetch], shared
-    // with [TimelineScreen]. Same cap (1) and debounce (1200 ms); same cold-start
-    // gate so a deep-link drill in the first ~3 s after auth doesn't bypass the
-    // post-auth RPC budget.
+    // with [TimelineScreen].
     rememberCommentsPrefetch(
         listState = listState,
         displayedItems = displayedItems,
         startupPhase = startupPhase,
-        prefetchThread = commentsRepo::prefetchThread,
+        prefetchThread = backend::prefetchThread,
         debounceMs = CHANNEL_PREFETCH_DEBOUNCE_MS,
         maxConcurrent = CHANNEL_COMMENTS_PREFETCH_LIMIT,
     )
@@ -446,24 +325,22 @@ fun ChannelScreen(
         }
     })
 
-    // Translation lookup helper — same album-scan fallback as TimelineScreen.
-    fun lookupTranslation(post: TimelinePost): dev.lyo.hortay.data.FormattedText? {
+    fun lookupTranslation(post: TimelinePost): FormattedText? {
+        val facade = translationsFacade ?: return null
         val map = translationsState.value
-        val lang = translations.currentTargetLanguage()
-        map[dev.lyo.hortay.data.TranslationKey(post.chatId, post.id, lang)]?.let { return it }
+        val lang = facade.currentTargetLanguage()
+        map[TranslationKey(post.chatId, post.id, lang)]?.let { return it }
         post.albumMessageIds.forEach { id ->
-            map[dev.lyo.hortay.data.TranslationKey(post.chatId, id, lang)]?.let { return it }
+            map[TranslationKey(post.chatId, id, lang)]?.let { return it }
         }
         return null
     }
 
-    // PostInteractions — keyed on the long-lived dependencies to avoid stale captures
-    // across logout/login, mirrors TimelineScreen's keying rationale.
-    val interactions = remember(vm, viewer, translations, channelActions, repo, bookmarks, onReportClick, canReport) {
+    val interactions = remember(vm, viewer, translationsFacade, backend, bookmarks, onReportClick, canReport) {
         PostInteractions(
             onMediaClick = { post, idx ->
                 markPostReadState.value(post)
-                val items = (post.content as? dev.lyo.hortay.data.PostContent.PhotoAlbum)?.items.orEmpty()
+                val items = (post.content as? PostContent.PhotoAlbum)?.items.orEmpty()
                 if (items.getOrNull(idx)?.isUnplayableVideo == true) {
                     scope.launch { PostActions.openInTelegram(uriHandler, backend, post) }
                 } else {
@@ -471,13 +348,9 @@ fun ChannelScreen(
                 }
             },
             onChannelClick = { post ->
-                // Same-channel tap: already here, no-op. Different-channel: drill in.
                 if (post.chatId != chatId) onChannelOpenState.value(post.chatId, null)
             },
             onAuthorChatClick = { id ->
-                // Foreign-chat-as-sender header tap. Same-id is impossible (the
-                // mapper only sets `senderChatId` when it differs from the host),
-                // but stay defensive — drill in only when distinct.
                 if (id != chatId) onChannelOpenState.value(id, null)
             },
             onForwardSourceClick = { post ->
@@ -492,16 +365,10 @@ fun ChannelScreen(
                     is ForwardOrigin.Chat -> origin.sourceHandle
                     else -> null
                 }
-                // Only Channel origins carry a permalink message id — group/chat
-                // forwards have no per-message anchor on the TDLib side.
                 val sourceMessageId = (origin as? ForwardOrigin.Channel)?.sourceMessageId
                 when {
                     sourceId != null -> onChannelOpenState.value(sourceId, sourceMessageId)
                     !sourceHandle.isNullOrBlank() -> {
-                        // Username-only: route through HortayUriHandler so the public
-                        // channel handle resolves via SearchPublicChat. Append the
-                        // message id when available so the resolver can drill straight
-                        // to the original post.
                         val handle = sourceHandle.removePrefix("@")
                         val url = if (sourceMessageId != null) "https://t.me/$handle/$sourceMessageId"
                             else "https://t.me/$handle"
@@ -511,20 +378,9 @@ fun ChannelScreen(
             },
             onQuotedSourceClick = { post ->
                 post.reply?.let { r ->
-                    // `replyToChatId` is normalised at the mapping boundary
-                    // ([MessageMapper.mapReply]): TDLib's "unknown chat"
-                    // sentinel `chat_id = 0` for same-chat replies is rewritten
-                    // to the host post's own chatId before it reaches the UI.
                     if (r.replyToChatId == chatId) {
-                        // Same channel: queue an in-place scroll to the target message.
                         pendingScrollToMessage = chatId to r.replyToMessageId
                     } else {
-                        // Different channel: drill in WITH the replied-to messageId
-                        // baked into the new NavEntry.Channel — the freshly mounted
-                        // ChannelScreen lands at the target and pulses the highlight
-                        // there. Without the messageId the new screen would open cold
-                        // (newest-first) and the user would have to scroll-hunt for
-                        // the thing they tapped on.
                         onChannelOpenState.value(r.replyToChatId, r.replyToMessageId)
                     }
                 }
@@ -537,48 +393,44 @@ fun ChannelScreen(
                 scope.launch { PostActions.openInTelegram(uriHandler, backend, post) }
             },
             onTranslateClick = { post ->
+                val facade = translationsFacade ?: return@PostInteractions
                 scope.launch {
                     val ids = post.albumMessageIds.ifEmpty { listOf(post.id) }
-                    translations.translate(post.chatId, ids.first())
+                    facade.translate(post.chatId, ids.first())
                 }
             },
             onClearTranslationClick = { post ->
+                val facade = translationsFacade ?: return@PostInteractions
                 val ids = post.albumMessageIds.ifEmpty { listOf(post.id) }
-                ids.forEach { translations.clear(post.chatId, it) }
+                ids.forEach { facade.clear(post.chatId, it) }
             },
             isTranslated = { post -> lookupTranslation(post) != null },
             translationFor = ::lookupTranslation,
-            translateEnabled = true,
+            translateEnabled = translationsFacade != null,
             onReactionToggle = { post, item ->
-                // Optimistic UI: flip the chip first via [PostsRepository]
-                // ([TimelineScreen.onReactionToggle] uses the same pattern), then
-                // dispatch the RPC, then revert on failure. Keeps the channel-drill
-                // tap latency identical to the feed.
                 val target = post.albumMessageIds.ifEmpty { listOf(post.id) }.first()
                 val nowChosen = !item.isChosen
-                repo.applyOptimisticReaction(post.chatId, target, item.kind, nowChosen)
+                backend.applyOptimisticReaction(post.chatId, target, item.kind, nowChosen)
                 scope.launch {
-                    val ok = channelActions.toggleReaction(
+                    val ok = backend.toggleReaction(
                         chatId = post.chatId,
                         messageId = target,
                         kind = item.kind,
                         isChosen = item.isChosen,
                     )
-                    if (!ok) repo.applyOptimisticReaction(post.chatId, target, item.kind, item.isChosen)
+                    if (!ok) backend.applyOptimisticReaction(post.chatId, target, item.kind, item.isChosen)
                 }
             },
             onPostClick = { post ->
                 markPostReadState.value(post)
                 onOpenCommentsState.value(post)
             },
-            // See [TimelineScreen.onPollVote] for the full rationale of the optimistic-flip
-            // → RPC → clearPending pattern.
             onPollVote = { post, indices ->
                 val target = post.albumMessageIds.ifEmpty { listOf(post.id) }.first()
-                repo.applyOptimisticPollAnswer(post.chatId, target, indices)
+                backend.applyOptimisticPollAnswer(post.chatId, target, indices)
                 scope.launch {
-                    val ok = channelActions.setPollAnswer(post.chatId, target, indices)
-                    repo.clearPollPending(post.chatId, target, revert = !ok)
+                    val ok = backend.setPollAnswer(post.chatId, target, indices)
+                    backend.clearPollPending(post.chatId, target, revert = !ok)
                 }
             },
             pollVotingEnabled = true,
@@ -593,10 +445,6 @@ fun ChannelScreen(
             .fillMaxSize()
             .nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            // Pinned: status-bar strip + ChannelTopBar in a Column. No layout
-            // shrinker, no nested-scroll offset — the bar stays fully visible
-            // throughout the user's scroll. The status-bar strip continues to
-            // own the system-bar inset so we never double-pad.
             Column(modifier = Modifier.background(MaterialTheme.colorScheme.background)) {
                 Spacer(
                     modifier = Modifier
@@ -639,83 +487,35 @@ fun ChannelScreen(
                     )
                 },
             ) {
-                // Render gate. The latched [ChannelUiState] is the single source of
-                // truth for what mounts:
-                //   • Resolving → [SkeletonFeed]: history-loading or deep-link
-                //     around-load in flight. No LazyColumn = no flash of the
-                //     channel's head post before the deep-link target lands.
-                //   • Missing   → snackbar is fired by the LaunchedEffect above;
-                //     the LazyColumn renders the normal newest-first view at
-                //     index 0 so the user isn't stuck on a skeleton.
-                //   • Ready     → LazyColumn mounted at [Ready.initialIndex], so
-                //     deep-link / OldestUnreadFirst landings hit the correct row
-                //     in one frame.
                 val displayedList = when (channelUiState) {
                     is ChannelUiState.Ready -> channelUiState.items
                     ChannelUiState.Missing -> displayedItems
                     ChannelUiState.Resolving -> displayedItems
                 }
                 val isResolving = channelUiState is ChannelUiState.Resolving
-                // Anti-flicker grace for the resolving-state skeleton. Most
-                // channel entries land Ready in 50-200 ms — local-cache
-                // history when the channel has surfaced in the merged feed,
-                // helped by `pushChannel` which awaits
-                // [PostsRepository.loadChannelHistory] before pushing
-                // [NavEntry.Channel]. Without a grace window
-                // [SkeletonFeed] paints for one or two frames and unmounts
-                // — read as flicker. Gated on [SCREEN_MOUNT_GRACE_MS]
-                // (120 ms) so fast resolves paint zero skeleton; only
-                // genuinely slow opens (cold deep-link, FLOOD_WAIT, post-DC
-                // migration) cross the threshold and surface feedback.
-                // Animation-duration-scale aware via
-                // [effectiveSkeletonGrace] inside `rememberDeferredLoading`:
-                // when the user has disabled animations the grace becomes 0
-                // and the skeleton paints on the first Resolving frame —
-                // there's no transition to hide behind.
                 val showSkeleton = isResolving && rememberDeferredLoading(
                     pending = isResolving,
                     key = chatId,
-                    graceMs = dev.lyo.hortay.data.SCREEN_MOUNT_GRACE_MS,
+                    graceMs = SCREEN_MOUNT_GRACE_MS,
                 )
                 when {
                     showSkeleton -> {
                         SkeletonFeed(modifier = Modifier.fillMaxSize())
                     }
                     isResolving -> {
-                        // Inside the grace window: hold the body blank rather
-                        // than flashing [SkeletonFeed] or falling through to
-                        // [ChannelEmptyState]. The header has already painted
-                        // (title + subtitle reserve their slot regardless of
-                        // resolve state), so the user sees a continuous
-                        // "channel is opening" frame, not a flash of the wrong
-                        // affordance. If resolve completes before the grace
-                        // elapses the body transitions straight to Ready.
                         Box(modifier = Modifier.fillMaxSize())
                     }
                     displayedList.isEmpty() && !refreshing -> {
-                        // [ChannelData.Loading] is exhausted by the Resolving gate
-                        // above — when this branch fires the channel has resolved
-                        // Ready with an empty slice (genuinely empty channel /
-                        // search miss), never a load-in-flight state.
                         when {
                             searchActive && searchQuery.isNotBlank() -> ChannelSearchEmpty()
                             else -> ChannelEmptyState()
                         }
                     }
                     else -> {
-                        // Scroll gate: defer media ensure() while the list is scrolling.
-                        // See TimelineScreen for reasoning; identical gate, same intent.
                         val scrollGate = remember(listState) {
                             derivedStateOf { !listState.isScrollInProgress }
                         }
 
-                        // Viewport-centre priority key for the dominant card — same
-                        // VisibleCenter promotion as TimelineScreen.
-                        // Kept as State<Any?> so per-item subscribers read the
-                        // value inside their own derivedStateOf — see
-                        // TimelineScreen.TimelineFeedColumn for the full
-                        // rationale (avoids invalidating every items() body
-                        // on every centre flip during fling).
                         val centeredItemKeyState: androidx.compose.runtime.State<Any?> =
                             remember(listState) {
                                 derivedStateOf {
@@ -731,11 +531,6 @@ fun ChannelScreen(
                                 }
                             }
 
-                        // Eager prefetch: warm [CHANNEL_PREFETCH_AHEAD] posts ahead of
-                        // the viewport at [DownloadPriority.Prefetch] (lane 8). Visible
-                        // posts self-ensure at VisibleMedia (16) via rememberMediaBinding,
-                        // so the priority gap prevents LIFO contention on the TDLib pool —
-                        // same rationale as TimelineScreen's prefetch block.
                         val cache = LocalMediaCache.current
                         val prefetchAnchor by remember(listState) {
                             derivedStateOf {
@@ -814,22 +609,6 @@ fun ChannelScreen(
 // Top bar
 // ---------------------------------------------------------------------------
 
-/**
- * Top bar for the channel screen. Two modes driven by [searchActive]:
- *
- *   - Normal ([searchActive] = false): Medium-size bar with avatar + title row
- *     in the title slot and subscriber count as subtitle. Navigation icon = back.
- *     Actions: search toggle, info.
- *
- *   - Search ([searchActive] = true): Compact bar with a BasicTextField in the title
- *     slot (auto-focuses on mount) and a clear icon when the query is non-empty.
- *     Navigation icon = back (also closes search). Mirrors the in-channel search
- *     bar that previously lived in TimelineScreen's TimelineTopBar.
- *
- * Window insets are [WindowInsets.Zero] here because the caller ([ChannelScreen]) already
- * owns a persistent zone-1 status-bar strip above this composable — passing zero
- * prevents double-padding (same contract as TimelineScreen's TimelineTopBar).
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ChannelTopBar(
@@ -846,25 +625,11 @@ private fun ChannelTopBar(
     scrollBehavior: TopAppBarScrollBehavior,
 ) {
     val barInsets = WindowInsets(0)
-    // M3E motion: search-mode swap rides MotionScheme spring instead of a hard
-    // instant snap. Both bar variants are the same Compact size (64 dp), so there
-    // is no height delta to negotiate — just the content inside the title slot
-    // crossfades. Crossfade (vs AnimatedContent) is the right primitive here:
-    // no enter/exit slide, no SizeTransform, just an alpha swap. Matches the
-    // FloatingNavBar / ConnectionBanner motion vocabulary.
     androidx.compose.animation.Crossfade(
         targetState = searchActive,
         animationSpec = MaterialTheme.motionScheme.fastEffectsSpec(),
         label = "channel-bar-search-swap",
     ) { isSearch ->
-        // Both variants render as the canonical M3 Compact (Small) top app bar
-        // — 64 dp, single row. This is the right typeform for a chat-detail
-        // surface per Material 3 guidance: Medium / Large Flexible bars are for
-        // top-level destinations with prominent brand identity (Feed, Settings),
-        // while a channel screen is a secondary detail surface that reads as a
-        // sibling of every other "open a thing, see its content" navigation
-        // step (CommentsScreen, future post-detail). Mirrors Telegram-Android
-        // and X / Twitter chat-screen header sizing.
         if (isSearch) {
             HortayTopBar(
                 size = HortayTopBarSize.Compact,
@@ -897,13 +662,6 @@ private fun ChannelTopBar(
                     )
                 },
                 navigationIcon = {
-                    // Search-mode back-arrow collapses the search overlay back to
-                    // the normal channel header — it does NOT pop the channel
-                    // off the back-stack. Standard chat-search UX (TG / X / Gmail
-                    // all do this) — back-arrow + search-overlay = close overlay,
-                    // back-arrow + normal-state = pop screen. The system-back
-                    // gesture is wired the same way via the leaf-scoped
-                    // BackHandler(enabled = searchActive) in [ChannelScreen].
                     IconButton(onClick = onSearchToggle) {
                         Symbol(
                             name = "arrow_back",
@@ -928,11 +686,6 @@ private fun ChannelTopBar(
             val subtitleText = channelSubscribers?.let {
                 stringResource(Res.string.timeline_subscribers, formatSubscribers(it))
             }
-            // Telegram / X chat-screen header convention: avatar + name on the
-            // first line, subscribers on the second, entire title row tappable
-            // for the info sheet. Shared with the guest-mode WebChannelScreen
-            // via [ChannelHeaderBar] — single source of truth for chat-screen
-            // chrome so any visual tweak lands in both modes together.
             ChannelHeaderBar(
                 titleText = channelTitle.orEmpty(),
                 subtitleText = subtitleText,
@@ -945,10 +698,6 @@ private fun ChannelTopBar(
                 onTitleTap = onTitleTap,
                 scrollBehavior = scrollBehavior,
                 actions = {
-                    // Only the search action stays as a dedicated icon — info
-                    // is triggered by tapping the title row. Keeps the action
-                    // bar uncluttered and gives the title region a real
-                    // affordance instead of decorative chrome.
                     IconButton(onClick = onSearchToggle) {
                         Symbol(
                             name = "search",
@@ -962,7 +711,7 @@ private fun ChannelTopBar(
 }
 
 // ---------------------------------------------------------------------------
-// Empty-state + skeleton composables
+// Empty-state composables
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -1020,20 +769,9 @@ private fun ChannelEmptyState() {
 // Constants local to ChannelScreen
 // ---------------------------------------------------------------------------
 
-/** How many items from the end of the channel list trigger an older-history fetch. */
 private const val CHANNEL_PAGINATION_THRESHOLD = 6
-
-/** Viewport-stable dwell before marking posts as read. Matches TimelineScreen's READ_DWELL_MS. */
 private const val CHANNEL_READ_DWELL_MS = 500L
-
-/** How long the surface-tint highlight lingers after scroll-to-message. Matches TimelineScreen. */
 private const val CHANNEL_HIGHLIGHT_DURATION_MS = 2200L
-
-/** Viewport-stable debounce before triggering comments prefetch. Matches TimelineScreen. */
 private const val CHANNEL_PREFETCH_DEBOUNCE_MS = 1200L
-
-/** Cap on prefetchThread fan-out per viewport-stable burst. Matches TimelineScreen. */
 private const val CHANNEL_COMMENTS_PREFETCH_LIMIT = 1
-
-/** Posts ahead of first visible to eagerly prefetch. Matches TimelineScreen's PREFETCH_AHEAD. */
 private const val CHANNEL_PREFETCH_AHEAD = 2
