@@ -1,3 +1,5 @@
+@file:Suppress("INVISIBLE_REFERENCE", "INVISIBLE_MEMBER")
+
 package dev.lyo.hortay.ui.media
 
 import androidx.compose.animation.core.LinearEasing

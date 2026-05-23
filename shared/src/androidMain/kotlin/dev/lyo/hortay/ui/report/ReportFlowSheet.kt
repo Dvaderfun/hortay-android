@@ -1,3 +1,5 @@
+@file:Suppress("INVISIBLE_REFERENCE", "INVISIBLE_MEMBER")
+
 // CSAE-COMPLIANCE: Google Play Child Safety Standards
 // Policy: https://support.google.com/googleplay/android-developer/answer/14747720
 // Hortay published standards: BuildConfig.CHILD_SAFETY_POLICY_URL
