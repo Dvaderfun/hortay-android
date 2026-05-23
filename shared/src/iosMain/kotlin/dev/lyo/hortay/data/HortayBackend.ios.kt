@@ -53,6 +53,7 @@ actual class HortayBackend(
     actual suspend fun setMuted(chatId: Long, muted: Boolean) {}
     actual suspend fun joinChat(chatId: Long) {}
     actual suspend fun leaveChat(chatId: Long) {}
+    actual suspend fun joinByInvite(inviteLink: String): Long? = null
     actual suspend fun userProfile(userId: Long): UserProfile? = null
     actual suspend fun resolveLink(uri: String): DeepLink? = null
 

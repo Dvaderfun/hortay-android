@@ -58,6 +58,7 @@ actual class HortayBackend(
         channelActions.setMuted(chatId, muted)
     actual suspend fun joinChat(chatId: Long) = channelActions.joinChat(chatId)
     actual suspend fun leaveChat(chatId: Long) = channelActions.leaveChat(chatId)
+    actual suspend fun joinByInvite(inviteLink: String): Long? = channelActions.joinByInvite(inviteLink)
     actual suspend fun userProfile(userId: Long): UserProfile? =
         channelActions.userProfile(userId)
 
