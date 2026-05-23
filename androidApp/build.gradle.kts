@@ -192,6 +192,7 @@ dependencies {
 
     implementation(libs.okhttp)
     implementation(libs.ktor.client.core)
+    implementation(libs.kotlinx.collections.immutable)
 
     debugImplementation(libs.compose.ui.tooling)
     debugImplementation(libs.compose.ui.tooling.preview)

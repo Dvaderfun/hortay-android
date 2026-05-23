@@ -156,6 +156,11 @@ actual class HortayBackend(
         .stateIn(backendScope, SharingStarted.Eagerly, client.authStage.value == AuthStage.Ready)
 
     actual suspend fun logOut() = client.logOut()
+    actual val connection: StateFlow<ConnectionStatus> get() = client.connection
+    actual val floodWaitUntilMs: StateFlow<Long> get() = client.floodWaitUntilMs
+    actual suspend fun previewChatInvite(inviteLink: String): ChatInvitePreview? =
+        channelActions.previewChatInvite(inviteLink)
+    actual fun primeCommentsForOpen(post: TimelinePost) = commentsRepo.primeCommentsForOpen(post)
 
     actual val reportController: ReportFlowController get() = reportRepo
 

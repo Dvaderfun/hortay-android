@@ -372,6 +372,31 @@ expect class HortayBackend {
      */
     suspend fun logOut()
 
+    /** Live TDLib connection state — drives the ConnectionBanner. */
+    val connection: StateFlow<ConnectionStatus>
+
+    /**
+     * Active FLOOD_WAIT deadline (epoch ms) or 0 when not throttled. The
+     * ConnectionBanner reads this so users see the countdown the moment
+     * TDLib reports a 420/429.
+     */
+    val floodWaitUntilMs: StateFlow<Long>
+
+    /**
+     * Resolve a `t.me/+xyz` invite link to a preview (title, photo, member
+     * count, request-to-join flag). Returns null when TDLib rejects (e.g.
+     * the invite expired between paste and tap).
+     */
+    suspend fun previewChatInvite(inviteLink: String): ChatInvitePreview?
+
+    /**
+     * Warm the comments-thread cache for the given anchor's chat. Differs
+     * from [prefetchThread] in that it auto-resolves the thread anchor and
+     * primes the first page of history; called when a post settles in the
+     * viewport so the comments overlay opens with no round-trip latency.
+     */
+    fun primeCommentsForOpen(post: TimelinePost)
+
     // ---- Reporting (CSAE) --------------------------------------------
 
     /**

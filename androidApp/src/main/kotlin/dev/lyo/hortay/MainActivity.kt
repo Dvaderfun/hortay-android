@@ -117,7 +117,22 @@ class MainActivity : ComponentActivity() {
                         //   3. Otherwise → AuthScreen, where the user can either sign in
                         //      or flip the guest-mode flag.
                         when {
-                            auth == AuthStage.Ready -> MediaViewerHost { MainScaffold(graph = graph) }
+                            auth == AuthStage.Ready -> MediaViewerHost {
+                                MainScaffold(
+                                    feed = graph.postsRepository,
+                                    backend = graph.backend,
+                                    bookmarks = graph.bookmarkStore,
+                                    ignoredChannels = graph.ignoredChannels,
+                                    guestMode = graph.guestMode,
+                                    userMessages = graph.userMessages,
+                                    linkDialogs = graph.linkDialogs,
+                                    deepLinkRouter = graph.deepLinkRouter,
+                                    startupPhase = graph.startupCoordinator.phase,
+                                    nav = graph.nav,
+                                    appScope = graph.appScope,
+                                    chatReadCursors = graph.postsRepository.chatReadCursors,
+                                )
+                            }
                             // Guest mode also needs MediaViewerHost: TimelineScreen reads
                             // LocalMediaViewer to open photo/video previews on tap, and
                             // PostCard's full media-rendering chain assumes the host is
