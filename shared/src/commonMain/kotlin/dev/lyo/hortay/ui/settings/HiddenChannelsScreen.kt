@@ -1,5 +1,3 @@
-@file:Suppress("INVISIBLE_REFERENCE", "INVISIBLE_MEMBER")
-
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 
 package dev.lyo.hortay.ui.settings
@@ -26,10 +24,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,9 +34,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.lyo.hortay.data.ChannelActionsRepository
+import dev.lyo.hortay.data.HortayBackend
 import dev.lyo.hortay.data.IgnoredChannelsStore
-import dev.lyo.hortay.data.web.WebPostAdapter
 import dev.lyo.hortay.ui.components.HortayTopBar
 import dev.lyo.hortay.ui.components.HortayTopBarSize
 import dev.lyo.hortay.ui.icons.Symbol
@@ -67,12 +62,12 @@ import org.jetbrains.compose.resources.stringResource
  *     row fades on the next [IgnoredChannelsStore.ignored] emit.
  *
  * Channel metadata resolution:
- *   - TDLib mode (auth): [channelActions] is non-null; we call channelInfo()
+ *   - TDLib mode (auth): [backend] is non-null; we call backend.channelInfo()
  *     for each hidden chatId. Best fidelity — server-side title, handle,
  *     subscriber count are accurate.
  *   - Guest mode: [webChannelByChatId] resolves through the local DB
  *     (web_feed_source.channels). chatIds in guest mode come from
- *     [WebPostAdapter.stableChatId] so the same chatId-keyed store works.
+ *     WebPostAdapter.stableChatId so the same chatId-keyed store works.
  *   - Both: cross-mode users see a mix — a channel hidden under TDLib mode
  *     might not be in the guest channels list if they later sign out, in
  *     which case we render a "Unknown channel" placeholder with the bare id.
@@ -88,8 +83,8 @@ fun HiddenChannelsScreen(
     store: IgnoredChannelsStore,
     contentPadding: PaddingValues,
     onBack: () -> Unit,
-    /** TDLib mode resolver. Null in guest mode. */
-    channelActions: ChannelActionsRepository? = null,
+    /** TDLib backend. Null in guest mode. */
+    backend: HortayBackend? = null,
     /** Guest-mode resolver: chatId → (title, username) or null. */
     webChannelByChatId: ((Long) -> WebChannelDescriptor?)? = null,
 ) {
@@ -114,7 +109,7 @@ fun HiddenChannelsScreen(
         // metadata for the other 47 in the list.
         hiddenList.forEach { chatId ->
             if (chatId in resolved) return@forEach
-            val display = resolve(chatId, channelActions, webChannelByChatId)
+            val display = resolve(chatId, backend, webChannelByChatId)
             if (display != null) resolved[chatId] = display
         }
     }
@@ -252,12 +247,12 @@ private fun EmptyState(modifier: Modifier = Modifier) {
 
 private suspend fun resolve(
     chatId: Long,
-    channelActions: ChannelActionsRepository?,
+    backend: HortayBackend?,
     webChannelByChatId: ((Long) -> WebChannelDescriptor?)?,
 ): HiddenChannelDisplay? {
     // TDLib first when available — server-side title beats local cache.
-    if (channelActions != null) {
-        runCatching { channelActions.channelInfo(chatId) }.getOrNull()?.let { info ->
+    if (backend != null) {
+        runCatching { backend.channelInfo(chatId) }.getOrNull()?.let { info ->
             return HiddenChannelDisplay(
                 title = info.title.ifBlank { "—" },
                 handle = info.handle?.removePrefix("@"),

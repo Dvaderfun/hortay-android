@@ -30,7 +30,6 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.runtime.saveable.rememberSaveable
 import dev.lyo.hortay.AppConfig
 import dev.lyo.hortay.data.AutoDownloadStore
-import dev.lyo.hortay.data.ChannelActionsRepository
 import dev.lyo.hortay.data.FeedOrder
 import dev.lyo.hortay.data.IgnoredChannelsStore
 import dev.lyo.hortay.data.LocaleStore
@@ -166,7 +165,7 @@ fun SettingsScreen(
      * title / handle for each hidden chatId. Null in guest mode (the
      * web-channel resolver below covers that path).
      */
-    channelActions: ChannelActionsRepository? = null,
+    backend: dev.lyo.hortay.data.HortayBackend? = null,
     /**
      * Guest-mode resolver for the Hidden Channels sub-screen. Looks up a
      * channel by its stable hash-derived chatId from
@@ -229,7 +228,7 @@ fun SettingsScreen(
                     store = store,
                     contentPadding = contentPadding,
                     onBack = { showHiddenChannels = false },
-                    channelActions = channelActions,
+                    backend = backend,
                     webChannelByChatId = webChannelByChatId,
                 )
             }
