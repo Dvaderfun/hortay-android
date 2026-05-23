@@ -6,7 +6,7 @@ Continuation of Phase H. Target: every UI screen + repository compiles on iOS, t
 
 ## Progress (session of 2026-05-23 → 2026-05-24)
 
-**Counts:** 57 androidMain / 158 commonMain / 17 iosMain
+**Counts:** 56 androidMain / 159 commonMain / 17 iosMain
 (started session at 61 / 150 / 17, started Phase H at 111 / 87 / 9).
 
 **Wave order revised bottom-up** because dependencies run leaf → root:
@@ -36,30 +36,49 @@ first, move leaves, then containers.
   `reportLogStore`, `reportExplainerStore`, `settingsStore`, `translations`.
   `IosAppGraph` now owns its own `SettingsStore` / `ReportLogStore` /
   `ReportExplainerStore` so the iOS stub backend has real instances to vend.
+- **Wave C finish** (`657a3e9`) — feed + channel + reactions + handle
+  resolution. `newArrivals` / `refreshFeed` / `loadOlder(chatId)` /
+  `loadHistoryAround` / `openChat` / `closeChat` / `loadChannelHistory` /
+  `hasWarmChannelHistory` / `chatTitle` / `channelSubscribers` /
+  `channelSubscribersCached` / `chatAvatar` / `searchInChannel` /
+  `applyOptimisticReaction` / `applyOptimisticPollAnswer` /
+  `clearPollPending` / `toggleReaction` / `setPollAnswer` /
+  `resolvePublicHandle` / `resolveChatKind` all live on `HortayBackend`.
+  iOS stub returns zero / empty / `NotFound` for everything.
+- **Wave D wave 1 (partial)** (`e4d2aa9`) — `MainScaffoldDialogs` moves to
+  commonMain; takes `backend` + `linkDialogs` + `userMessages` instead of
+  `graph`. `joinByInvite` added to `HortayBackend` to support the invite-
+  confirm path. `NavOverlayRenderer` + `TabContentSwitcher` deferred —
+  they render `ChannelScreen` / `TimelineScreen` / `SettingsScreen`, which
+  are still androidMain, so they can't go to commonMain until Wave 3.
 
 ### Next session resume points
-1. **Finish Wave C**: add the feed-orchestration half of `HortayBackend` —
-   `feedPosts` already exists; add `newArrivals`, `refreshFeed`, `loadOlder`,
-   `loadHistoryAround`, `openChat`, `closeChat`, `loadChannelHistory`,
-   `hasWarmChannelHistory`, `chatTitle`, `channelSubscribersFlow`, `chatAvatar`,
-   `searchInChannel`, the optimistic-reaction quartet
-   (`applyOptimisticReaction` / `applyOptimisticPollAnswer` / `clearPollPending`
-   / `toggleReaction` / `setPollAnswer`), and `resolvePublicHandle` /
-   `resolveChatKind`. Stats + AutoDownloadStore exposures too (the facades
-   landed already in `2ec888e`).
-2. **Wave D wave 1**: move `MainScaffoldDialogs`, `NavOverlayRenderer`,
-   `TabContentSwitcher` (already mostly KMP — refactor each to take
-   `backend: HortayBackend` + the stores they read, drop direct AppGraph
-   reference).
-3. **Wave D wave 2 (the big one)**: `MainScaffold` (~557 lines).
-4. **Wave D wave 3**: `TimelineScreen`, `ChannelScreen`, `ChannelViewModel` —
-   biggest UI bite; split across two commits if needed.
-5. **Wave D wave 4-6**: WebModeScaffold + AddChannelSheet +
-   MigrationProposalSheet; SettingsScreen + AutoDownloadScreen;
-   ReportFlowSheet remnants (`MainScaffoldDialogs` still wires it from
-   `graph` — needs to switch to `backend.reportController`).
+1. **Wave D wave 3 (the BIG one)**: move `TimelineScreen` (2002 lines),
+   `ChannelScreen` (1039 lines), `ChannelViewModel` (480 lines). Each
+   needs the backend Wave-C surface in place (now landed). Drop direct
+   `PostsRepository` / `CommentsRepository` / `ChannelActionsRepository`
+   / `TranslationsStore` references and route through `backend.*`
+   instead. **Split across multiple commits** — Phase H taught this the
+   hard way. Probably: TimelineScreen alone, then ChannelScreen +
+   ChannelViewModel together, possibly more sub-splits.
+2. **Wave D wave 5**: `SettingsScreen` (1423 lines) + `AutoDownloadScreen`
+   (710 lines). `AutoDownloadFacade` interface landed already; settings
+   route through `backend.settingsStore`. Status-bar tweak / language
+   picker were already abstracted in I-A.
+3. **Wave D wave 1 finish**: `NavOverlayRenderer`, `TabContentSwitcher`
+   move now that ChannelScreen + TimelineScreen + SettingsScreen are in
+   commonMain.
+4. **Wave D wave 2**: `MainScaffold` (557 lines) — the container ties
+   everything together.
+5. **Wave D wave 4**: `WebModeScaffold`, `AddChannelSheet`,
+   `MigrationProposalSheet`. WebModeScaffold consumes
+   `LocalGuestReportDelegate` (slot already landed) for the report
+   delegation path. `MigrationProposalSheet` needs
+   `MigrationCoordinator.progress` exposed via backend.
 6. **Wave D wave 7**: `Theme.kt` — last UI file.
-7. **I-D + I-E** per the plan below.
+7. **I-D**: iOS UI parity ship — replace `MainViewController`'s parallel
+   renderer with the real `WebModeScaffold` tree.
+8. **I-E**: lint + detekt + baseline profile + CHANGELOG + ARCHITECTURE.
 
 ---
 
