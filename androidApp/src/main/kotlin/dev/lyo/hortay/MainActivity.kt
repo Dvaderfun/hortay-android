@@ -87,7 +87,12 @@ class MainActivity : ComponentActivity() {
                             // PostCard's full media-rendering chain assumes the host is
                             // present. Without this wrap the first measure pass crashes.
                             isGuest -> MediaViewerHost { WebModeScaffold(graph = graph) }
-                            else -> AuthScreen(graph = graph, stage = auth)
+                            else -> AuthScreen(
+                                backend = graph.backend,
+                                guestMode = graph.guestMode,
+                                scope = graph.appScope,
+                                stage = auth,
+                            )
                         }
 
                         // One-time post-sign-in migration proposal. Renders ON TOP of the

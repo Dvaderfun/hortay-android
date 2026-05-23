@@ -16,6 +16,7 @@ import dev.lyo.hortay.data.CommentsRepository
 import dev.lyo.hortay.data.CountryRepository
 import dev.lyo.hortay.data.CustomEmojiRepository
 import dev.lyo.hortay.data.DeepLinkRouter
+import dev.lyo.hortay.data.HortayBackend
 import dev.lyo.hortay.data.IgnoredChannelsStore
 import dev.lyo.hortay.data.MediaAutoDownloader
 import dev.lyo.hortay.data.MediaCache
@@ -200,6 +201,14 @@ class AppGraph(context: Context) {
         ChannelActionsRepository(tdClient, userMessages, tdClient.connection, res)
 
     val countries: CountryRepository = CountryRepository(tdClient, res, appScope)
+
+    /**
+     * Platform-agnostic delegate over TDLib for commonMain UI. Wraps the
+     * TDLib-typed repos so screens can take a single `HortayBackend` reference
+     * and compile on both Android and iOS. See [HortayBackend] KDoc for the
+     * rationale.
+     */
+    val backend: HortayBackend = HortayBackend(client = tdClient, countriesRepo = countries)
 
     // Custom-emoji resolver for inline emojis in formatted text and for custom-emoji
     // reaction buckets. Uses GetCustomEmojiStickers in batches of up to 200 ids; the
