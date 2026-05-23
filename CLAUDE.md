@@ -109,7 +109,7 @@ iOS UI in `shared/src/iosMain/kotlin/dev/lyo/hortay/MainViewController.kt`:
 - Phase A5 — Google Fonts → bundled fonts (cosmetic).
 
 **Pending — Phase G (next session):**
-Move the remaining 165 androidMain files. See plan at `C:\Users\dvade\.claude\plans\expressive-baking-sparkle.md`. Steps:
+Move the remaining 165 androidMain files. See plan at `.plans/phase-g-multiplatform-ui.md`. Steps:
 1. **G1** — Bulk `R.string` → `Res.string` migration script (37 UI files unblock).
 2. **G2** — TDLib expect/actual `HortayBackend` interface (25 TDLib-touching files).
 3. **G3** — `expect interface VideoPlayer` (5 ExoPlayer files).
