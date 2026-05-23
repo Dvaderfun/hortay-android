@@ -479,6 +479,7 @@ class AppGraph(context: Context) {
         linkResolver = linkResolver,
         postsRepo = postsRepository,
         commentsRepo = commentsRepository,
+        folders = chatFoldersRepository,
         reportRepo = reportRepository,
         reportDialogs = reportDialogs,
         reportLogStore = reportLogStore,

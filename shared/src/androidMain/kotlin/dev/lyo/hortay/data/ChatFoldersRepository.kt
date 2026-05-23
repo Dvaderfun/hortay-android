@@ -59,9 +59,9 @@ import java.util.concurrent.ConcurrentHashMap
 class ChatFoldersRepository(
     private val td: TdSender,
     private val scope: CoroutineScope,
-) {
+) : FoldersFacade {
     private val _folders = MutableStateFlow<List<TdApi.ChatFolderInfo>>(emptyList())
-    val folders: StateFlow<List<TdApi.ChatFolderInfo>> = _folders.asStateFlow()
+    val tdFolders: StateFlow<List<TdApi.ChatFolderInfo>> = _folders.asStateFlow()
 
     private val _fullFolders = MutableStateFlow<Map<Int, TdApi.ChatFolder>>(emptyMap())
     val fullFolders: StateFlow<Map<Int, TdApi.ChatFolder>> = _fullFolders.asStateFlow()
@@ -69,7 +69,16 @@ class ChatFoldersRepository(
     private val fullFoldersCache = ConcurrentHashMap<Int, TdApi.ChatFolder>()
 
     private val _folderChatIds = MutableStateFlow<Map<Int, Set<Long>>>(emptyMap())
-    val folderChatIds: StateFlow<Map<Int, Set<Long>>> = _folderChatIds.asStateFlow()
+    override val folderChatIds: StateFlow<Map<Int, Set<Long>>> = _folderChatIds.asStateFlow()
+
+    // Projected commonMain views. State-derived via `stateIn` would force the
+    // surrounding scope plumbing; cheaper to just write through whenever the
+    // underlying source mutates.
+    private val _dtoFolders = MutableStateFlow<List<FolderInfo>>(emptyList())
+    override val folders: StateFlow<List<FolderInfo>> = _dtoFolders.asStateFlow()
+
+    private val _dtoFolderRules = MutableStateFlow<Map<Int, FolderRule>>(emptyMap())
+    override val folderRules: StateFlow<Map<Int, FolderRule>> = _dtoFolderRules.asStateFlow()
 
     // Serialise the drain+get pair per folder so two concurrent callers don't both
     // pay the LoadChats round-trip when the answer is already in flight.
@@ -85,8 +94,16 @@ class ChatFoldersRepository(
             .onEach { upd ->
                 val list = upd.chatFolders.orEmpty().toList()
                 _folders.value = list
+                _dtoFolders.value = list.map { info ->
+                    FolderInfo(
+                        id = info.id,
+                        title = info.name?.text?.text.orEmpty(),
+                        iconName = info.icon?.name,
+                    )
+                }
                 fullFoldersCache.clear()
                 _fullFolders.value = emptyMap()
+                _dtoFolderRules.value = emptyMap()
                 _folderChatIds.value = emptyMap()
                 scope.launch { resolveAll(list) }
             }
@@ -139,9 +156,11 @@ class ChatFoldersRepository(
                 }
             }.awaitAll()
         }
-        _fullFolders.value = resolved
-            .mapNotNull { (id, full) -> full?.let { id to it } }
-            .toMap()
+        val resolvedMap = resolved.mapNotNull { (id, full) -> full?.let { id to it } }.toMap()
+        _fullFolders.value = resolvedMap
+        _dtoFolderRules.value = resolvedMap.mapValues { (_, full) ->
+            FolderRule(includesAllChannels = isEquivalentToAll(full))
+        }
         // Warm the membership cache so the tab bar can hide empty folders on the
         // first composition that sees [fullFolders] populated — without this the
         // visibility check has nothing to test against and falls back to "keep".
@@ -163,6 +182,7 @@ class ChatFoldersRepository(
             .getOrNull() ?: return null
         fullFoldersCache[folderId] = full
         _fullFolders.update { it + (folderId to full) }
+        _dtoFolderRules.update { it + (folderId to FolderRule(includesAllChannels = isEquivalentToAll(full))) }
         return full
     }
 
@@ -173,7 +193,7 @@ class ChatFoldersRepository(
      * for [TdApi.ChatListMain]: drain via [TdApi.LoadChats] until TDLib stops paging,
      * then snapshot via [TdApi.GetChats]. Cached and evicted as documented on the class.
      */
-    suspend fun folderChatIds(folderId: Int): Set<Long> {
+    override suspend fun folderChatIds(folderId: Int): Set<Long> {
         _folderChatIds.value[folderId]?.let { return it }
         val mutex = folderChatIdsMutex.getOrPut(folderId) { Mutex() }
         return mutex.withLock {
@@ -231,7 +251,9 @@ class ChatFoldersRepository(
      */
     fun clear() {
         _folders.value = emptyList()
+        _dtoFolders.value = emptyList()
         _fullFolders.value = emptyMap()
+        _dtoFolderRules.value = emptyMap()
         fullFoldersCache.clear()
         _folderChatIds.value = emptyMap()
         folderChatIdsMutex.clear()

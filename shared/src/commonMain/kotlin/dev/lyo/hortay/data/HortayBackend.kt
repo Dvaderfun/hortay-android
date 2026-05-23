@@ -165,6 +165,19 @@ expect class HortayBackend {
     suspend fun refreshFeed()
 
     /**
+     * Live set of chat ids the user has archived. The home feed hides these by
+     * default and surfaces them only under the dedicated Archive scope.
+     */
+    val archivedChatIds: StateFlow<Set<Long>>
+
+    /**
+     * Folder tab metadata facade — null when no TDLib session backs the
+     * timeline (iOS guest mode, pre-auth). Authenticated callers get a live
+     * projection of the user's chat folders.
+     */
+    val folders: FoldersFacade?
+
+    /**
      * Load older history for [chatId] (channel-screen pagination). Returns the
      * number of new posts that landed; zero means "no more history available".
      */

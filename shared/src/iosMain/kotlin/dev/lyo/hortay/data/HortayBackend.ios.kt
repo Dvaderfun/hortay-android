@@ -61,6 +61,9 @@ actual class HortayBackend(
         MutableStateFlow(persistentListOf<TimelinePost>()).asStateFlow()
     actual val newArrivals: SharedFlow<TimelinePost> =
         MutableSharedFlow<TimelinePost>().asSharedFlow()
+    actual val archivedChatIds: StateFlow<Set<Long>> =
+        MutableStateFlow(emptySet<Long>()).asStateFlow()
+    actual val folders: FoldersFacade? = null
 
     actual suspend fun refreshFeed() {}
     actual suspend fun loadOlder(chatId: Long): Int = 0
