@@ -472,7 +472,9 @@ fun WebModeScaffold(graph: AppGraph) {
                     }
 
                     NavTab.Channels -> WebChannelsScreen(
-                        graph = graph,
+                        webFeedSource = graph.webFeedSource,
+                        ignoredChannels = graph.ignoredChannels,
+                        subscriptions = graph.webSubscriptions,
                         contentPadding = padding,
                         onChannelClick = { username ->
                             pushWebChannel(username)
@@ -583,7 +585,9 @@ fun WebModeScaffold(graph: AppGraph) {
                             when (entry) {
                                 is NavEntry.WebChannel -> WebChannelScreen(
                                     username = entry.username,
-                                    graph = graph,
+                                    bookmarks = graph.bookmarkStore,
+                                    webRepository = graph.webRepository,
+                                    webFeedSource = graph.webFeedSource,
                                     contentPadding = padding,
                                     onBack = ::popNav,
                                     onPostClick = onGuestPostClick,

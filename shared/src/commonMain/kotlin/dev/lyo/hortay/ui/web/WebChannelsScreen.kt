@@ -49,7 +49,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.lyo.hortay.AppGraph
+import dev.lyo.hortay.data.IgnoredChannelsStore
+import dev.lyo.hortay.data.web.SubscriptionsStore
+import dev.lyo.hortay.data.web.WebFeedSource
 import dev.lyo.hortay.data.web.ChannelEntry
 import dev.lyo.hortay.data.web.ChannelFetchStatus
 import dev.lyo.hortay.data.web.WebPostAdapter
@@ -95,17 +97,19 @@ import org.jetbrains.compose.resources.stringResource
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun WebChannelsScreen(
-    graph: AppGraph,
+    webFeedSource: WebFeedSource,
+    ignoredChannels: IgnoredChannelsStore,
+    subscriptions: SubscriptionsStore,
     contentPadding: PaddingValues,
     onChannelClick: (String) -> Unit,
     onAddChannel: () -> Unit = {},
 ) {
-    val channels by graph.webFeedSource.channels.collectAsStateWithLifecycle()
+    val channels by webFeedSource.channels.collectAsStateWithLifecycle()
     // Hidden chatIds for the inline "hide from feed" toggle on each row. Same
     // store as TDLib mode; chatIds for guest channels come from the username
     // hash so a channel hidden in TDLib mode stays hidden if the user falls
     // back to guest, and vice versa.
-    val hiddenChatIds by graph.ignoredChannels.ignored.collectAsStateWithLifecycle(
+    val hiddenChatIds by ignoredChannels.ignored.collectAsStateWithLifecycle(
         initialValue = persistentSetOf(),
     )
     val scope = rememberCoroutineScope()
@@ -162,8 +166,8 @@ fun WebChannelsScreen(
                     count = subscribed.size,
                     isHidden = chatId in hiddenChatIds,
                     onClick = { onChannelClick(entry.info.username) },
-                    onRetryClick = { graph.webFeedSource.retry(entry.info.username) },
-                    onHideToggle = { scope.launch { graph.ignoredChannels.toggle(chatId) } },
+                    onRetryClick = { webFeedSource.retry(entry.info.username) },
+                    onHideToggle = { scope.launch { ignoredChannels.toggle(chatId) } },
                     onUnsubscribeClick = { pendingUnsubscribe = entry },
                 )
             }
@@ -179,7 +183,7 @@ fun WebChannelsScreen(
                 TextButton(onClick = {
                     val u = entry.info.username
                     pendingUnsubscribe = null
-                    scope.launch { graph.webSubscriptions.remove(u) }
+                    scope.launch { subscriptions.remove(u) }
                 }) {
                     Text(
                         stringResource(Res.string.web_unsubscribe_confirm),

@@ -32,7 +32,6 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.lyo.hortay.AppGraph
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -85,7 +84,9 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 fun WebChannelScreen(
     username: String,
-    graph: AppGraph,
+    bookmarks: dev.lyo.hortay.data.BookmarkStore,
+    webRepository: dev.lyo.hortay.data.web.WebRepository,
+    webFeedSource: dev.lyo.hortay.data.web.WebFeedSource,
     contentPadding: PaddingValues,
     onBack: () -> Unit,
     /**
@@ -103,11 +104,10 @@ fun WebChannelScreen(
      */
     feedOrder: FeedOrder = FeedOrder.OldestUnreadFirst,
 ) {
-    val bookmarks = graph.bookmarkStore
     val perChannelPosts by remember(username) {
-        graph.webRepository.observeFeedByChannel(username)
+        webRepository.observeFeedByChannel(username)
     }.collectAsStateWithLifecycle(initialValue = persistentListOf())
-    val channels by graph.webFeedSource.channels.collectAsStateWithLifecycle()
+    val channels by webFeedSource.channels.collectAsStateWithLifecycle()
     val bookmarkedKeys by bookmarks.bookmarks.collectAsStateWithLifecycle(initialValue = emptySet())
     val viewer = LocalMediaViewer.current
     val uriHandler = LocalUriHandler.current

@@ -5,22 +5,21 @@
 
 package dev.lyo.hortay.data.report
 
-import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
 /**
- * Persists whether the one-time reporting explainer has been shown to the user.
- * Default false — shows once, then stays permanently dismissed.
+ * Persists whether the one-time reporting explainer has been shown to the
+ * user. Default false — shows once, then stays permanently dismissed.
  *
- * Mirrors the [dev.lyo.hortay.data.web.GuestModeStore] DataStore pattern.
+ * KMP: constructor takes the platform-provided [DataStore] handle. Mirrors
+ * the [dev.lyo.hortay.data.web.GuestModeStore] pattern.
  */
-class ReportExplainerStore(context: Context) {
-
-    private val dataStore = context.applicationContext.reportExplainerDataStore
+class ReportExplainerStore(private val dataStore: DataStore<Preferences>) {
 
     /** Emits true once the user has seen and dismissed the explainer. */
     val shown: Flow<Boolean> = dataStore.data.map { prefs ->
@@ -31,9 +30,8 @@ class ReportExplainerStore(context: Context) {
         dataStore.edit { prefs -> prefs[KEY_SHOWN] = true }
     }
 
-    private companion object {
-        val KEY_SHOWN = booleanPreferencesKey("report_explainer_shown")
+    companion object {
+        const val FILE_NAME: String = "report_explainer"
+        private val KEY_SHOWN = booleanPreferencesKey("report_explainer_shown")
     }
 }
-
-private val Context.reportExplainerDataStore by preferencesDataStore(name = "report_explainer")

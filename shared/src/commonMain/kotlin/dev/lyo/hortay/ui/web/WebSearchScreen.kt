@@ -1,6 +1,6 @@
 package dev.lyo.hortay.ui.web
 
-import androidx.activity.compose.BackHandler
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,7 +32,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -105,7 +104,6 @@ fun WebSearchScreen(
     onDismiss: () -> Unit,
     contentPadding: PaddingValues = PaddingValues(),
 ) {
-    val context = LocalContext.current
     val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
     val keyboard = LocalSoftwareKeyboardController.current
     val scope = rememberCoroutineScope()
@@ -124,6 +122,7 @@ fun WebSearchScreen(
     // (unlike CommentsScreen) — this is a modal-style overlay mounted from
     // WebModeScaffold via `searchOpen`. The SearchBar's own collapse runs
     // briefly before the parent unmount tears down the Dialog.
+    @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
     BackHandler {
         scope.launch {
             runCatching { searchBarState.animateToCollapsed() }
