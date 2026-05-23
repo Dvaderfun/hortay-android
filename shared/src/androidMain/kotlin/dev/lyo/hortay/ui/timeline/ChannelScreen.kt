@@ -116,6 +116,7 @@ fun ChannelScreen(
     commentsRepo: CommentsRepository,
     translations: TranslationsStore,
     channelActions: ChannelActionsRepository,
+    backend: dev.lyo.hortay.data.HortayBackend,
     bookmarks: BookmarkStore,
     contentPadding: PaddingValues,
     onBack: () -> Unit,
@@ -801,7 +802,7 @@ fun ChannelScreen(
     if (infoSheetVisible) {
         ChannelInfoSheet(
             chatId = chatId,
-            actions = channelActions,
+            backend = backend,
             onDismiss = { infoSheetVisible = false },
             onReport = onReportChannel,
             ignoredChannels = ignoredChannels,
