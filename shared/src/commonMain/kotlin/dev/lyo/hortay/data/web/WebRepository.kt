@@ -48,7 +48,7 @@ import kotlinx.serialization.json.Json
 class WebRepository(
     private val db: WebDatabase,
     private val strings: StringResolver,
-    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val ioDispatcher: CoroutineDispatcher = dev.lyo.hortay.ioDispatcher,
 ) {
 
     private val json = Json {
@@ -221,7 +221,7 @@ class WebRepository(
             VISIBLE_MENTION_REGEX.findAll(row.text_html).forEach { match ->
                 val u = match.groupValues[1].lowercase()
                 if (u.length in MENTION_MIN_LEN..MENTION_MAX_LEN) {
-                    freq.merge(u, 1, Int::plus)
+                    freq[u] = (freq[u] ?: 0) + 1
                 }
             }
             // Forwarded-from JSON: `{"channelName":..., "channelLink":"https://t.me/<u>"}`.
@@ -231,7 +231,7 @@ class WebRepository(
                 FORWARD_LINK_REGEX.find(json)?.let { match ->
                     val u = match.groupValues[1].lowercase()
                     if (u.length in MENTION_MIN_LEN..MENTION_MAX_LEN) {
-                        freq.merge(u, 1, Int::plus)
+                        freq[u] = (freq[u] ?: 0) + 1
                     }
                 }
             }
@@ -630,7 +630,7 @@ class WebRepository(
     private fun parseIsoToMillis(iso: String): Long? = runCatching {
         // ISO-8601 with offset, e.g. "2026-04-12T18:43:00+00:00". java.time can do
         // this on API 26+ (we already require minSdk 26 for the rest of the app).
-        java.time.OffsetDateTime.parse(iso).toInstant().toEpochMilli()
+        dev.lyo.hortay.parseIsoToEpochMs(iso)
     }.getOrNull()
 
     companion object {

@@ -14,7 +14,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import java.util.concurrent.atomic.AtomicLong
+import kotlinx.atomicfu.atomic
+import kotlinx.atomicfu.updateAndGet
 
 /**
  * Resolves Telegram custom-emoji ids to renderable assets via the public
@@ -29,12 +30,9 @@ class WebCustomEmojiResolver(
     private val httpClient: HttpClient,
 ) {
 
-    private val cache = object : LinkedHashMap<String, ResolvedEmoji>(64, 0.75f, true) {
-        override fun removeEldestEntry(eldest: Map.Entry<String, ResolvedEmoji>?): Boolean =
-            size > CACHE_LIMIT
-    }
+    private val cache = LinkedHashMap<String, ResolvedEmoji>(64)
     private val cacheMutex = Mutex()
-    private val gateUntilMs = AtomicLong(0L)
+    private val gateUntilMs = atomic(0L)
 
     suspend fun resolve(emojiId: String): ResolvedEmoji? {
         cacheMutex.withLock { cache[emojiId] }?.let { return it }
@@ -54,7 +52,13 @@ class WebCustomEmojiResolver(
         )
 
         if (resolved != null) {
-            cacheMutex.withLock { cache[emojiId] = resolved }
+            cacheMutex.withLock {
+                if (cache.size >= CACHE_LIMIT) {
+                    val iterator = cache.entries.iterator()
+                    if (iterator.hasNext()) { iterator.next(); iterator.remove() }
+                }
+                cache[emojiId] = resolved
+            }
         }
         return resolved
     }
@@ -108,7 +112,7 @@ class WebCustomEmojiResolver(
     }
 
     private suspend fun awaitGate() {
-        val now = System.currentTimeMillis()
+        val now = dev.lyo.hortay.nowMs()
         val deadline = gateUntilMs.updateAndGet { existing -> maxOf(existing, now) + REQUEST_SPACING_MS }
         val wait = deadline - now - REQUEST_SPACING_MS
         if (wait > 0) delay(wait)

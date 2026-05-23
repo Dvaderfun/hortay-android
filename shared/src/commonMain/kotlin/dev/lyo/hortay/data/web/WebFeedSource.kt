@@ -1,5 +1,6 @@
 package dev.lyo.hortay.data.web
 
+import kotlin.concurrent.Volatile
 import dev.lyo.hortay.PlatformLog
 import dev.lyo.hortay.data.FeedSource
 import dev.lyo.hortay.data.IgnoredChannelsStore
@@ -28,7 +29,7 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.flow.SharingStarted
-import java.util.concurrent.ConcurrentHashMap
+
 
 /**
  * Multi-channel orchestrator for the anonymous web pipeline. Co-ordinates:
@@ -86,7 +87,8 @@ class WebFeedSource(
     // a retry against an in-flight sweep is benign (both write the same
     // channel page; SQLDelight upserts are idempotent). If/when the sweep
     // gains per-username concurrency it should register its jobs here too.
-    private val inFlightRetries = ConcurrentHashMap<String, Job>()
+    private val inFlightRetries = mutableMapOf<String, Job>()
+    private val retriesLock = kotlinx.atomicfu.locks.SynchronizedObject()
 
     // Last-known DataStore subscription set, used for delta computation in
     // [handleSubscriptionsChanged]. We deliberately diff against THIS rather
@@ -254,7 +256,7 @@ class WebFeedSource(
             return
         }
         try {
-            val nowMs = System.currentTimeMillis()
+            val nowMs = dev.lyo.hortay.nowMs()
             val targets = repository.subscribedUsernames()
             if (targets.isEmpty()) {
                 _refreshState.value = RefreshState.Idle
@@ -275,13 +277,13 @@ class WebFeedSource(
                             fetchOne(
                                 username = username,
                                 forceNetwork = force || username in staleMediaSet,
-                                fetchedAtMs = System.currentTimeMillis(),
+                                fetchedAtMs = dev.lyo.hortay.nowMs(),
                             )
                         }
                     }.awaitAll()
                 }
                 _consecutiveNoOpSweeps.value = nextNoOpStreak(outcomes, _consecutiveNoOpSweeps.value)
-                lastSuccessfulRefreshAtMs = System.currentTimeMillis()
+                lastSuccessfulRefreshAtMs = dev.lyo.hortay.nowMs()
                 _refreshState.value = RefreshState.Idle
             } catch (t: Throwable) {
                 PlatformLog.w(TAG, "refresh failed: ${t.message}")
@@ -298,14 +300,22 @@ class WebFeedSource(
         // Dedup: if a retry for this username is still in flight, hand back
         // the existing Job. Prevents two fast taps from launching parallel
         // fetches that race on the same channel's status / media writes.
-        inFlightRetries[key]?.let { existing ->
-            if (!existing.isCompleted) return existing
+        kotlinx.atomicfu.locks.synchronized(retriesLock) {
+            inFlightRetries[key]?.let { existing ->
+                if (!existing.isCompleted) return existing
+            }
         }
         val job = scope.launch {
-            fetchOne(key, forceNetwork = true, fetchedAtMs = System.currentTimeMillis())
+            fetchOne(key, forceNetwork = true, fetchedAtMs = dev.lyo.hortay.nowMs())
         }
-        inFlightRetries[key] = job
-        job.invokeOnCompletion { inFlightRetries.remove(key, job) }
+        kotlinx.atomicfu.locks.synchronized(retriesLock) {
+            inFlightRetries[key] = job
+        }
+        job.invokeOnCompletion {
+            kotlinx.atomicfu.locks.synchronized(retriesLock) {
+                if (inFlightRetries[key] === job) inFlightRetries.remove(key)
+            }
+        }
         return job
     }
 
@@ -314,7 +324,7 @@ class WebFeedSource(
         repository.markMediaStale(postId)
         val username = postId.substringBefore('/')
         if (username.isNotBlank()) {
-            fetchOne(username, forceNetwork = true, fetchedAtMs = System.currentTimeMillis())
+            fetchOne(username, forceNetwork = true, fetchedAtMs = dev.lyo.hortay.nowMs())
         }
     }
 
@@ -454,7 +464,7 @@ class WebFeedSource(
         // similar fire-and-forget rationale; the user expects "added — feed
         // updates as content lands" not a blocking spinner.
         scope.launch {
-            fetchOne(normalized, forceNetwork = true, fetchedAtMs = System.currentTimeMillis())
+            fetchOne(normalized, forceNetwork = true, fetchedAtMs = dev.lyo.hortay.nowMs())
         }
     }
 

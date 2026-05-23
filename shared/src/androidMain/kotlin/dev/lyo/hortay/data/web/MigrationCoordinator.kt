@@ -129,7 +129,7 @@ class MigrationCoordinator(
         // a partial-failure run leaves the proposal pending; the next auth.Ready
         // (foreground re-entry, sign out + sign in) re-evaluates and re-offers
         // just the failed subset (alreadyMigrated filter excludes successes).
-        val anyFailure = java.util.concurrent.atomic.AtomicBoolean(false)
+        val anyFailure = kotlinx.atomicfu.atomic(false)
         for ((i, username) in usernames.withIndex()) {
             // Cooperative cancellation: confirm() runs inside `mutex.withLock`,
             // and `dismiss()` takes the same lock. Without an explicit
@@ -148,11 +148,11 @@ class MigrationCoordinator(
                 throw cancellation
             } catch (t: Throwable) {
                 PlatformLog.w(TAG, "migration: SearchPublicChat($cleaned) failed: ${t.message}")
-                anyFailure.set(true)
+                anyFailure.value = true
                 null
             }
             if (chatId == null) {
-                if (!anyFailure.get()) {
+                if (!anyFailure.value) {
                     // null without exception = TDLib reports no such public chat.
                     // That's a permanent classification (handle was wrong, channel
                     // was deleted) — don't re-offer.
@@ -166,7 +166,7 @@ class MigrationCoordinator(
                     throw cancellation
                 } catch (t: Throwable) {
                     PlatformLog.w(TAG, "migration: JoinChat($cleaned) failed: ${t.message}")
-                    anyFailure.set(true)
+                    anyFailure.value = true
                 }
             }
             if (i < usernames.lastIndex) delay(THROTTLE_MS)
@@ -209,7 +209,7 @@ class MigrationCoordinator(
         // succeeded (in `migrated`) or was conclusively a no-op (null without
         // throw — wrong handle / deleted channel). Any transient failure leaves
         // the proposal pending so the user gets another bite at the apple.
-        if (!anyFailure.get()) {
+        if (!anyFailure.value) {
             migrationStore.markProposalShown()
         } else {
             PlatformLog.i(TAG, "migration: ${migrated.size}/${usernames.size} succeeded, retryable failures left — proposal stays pending")
