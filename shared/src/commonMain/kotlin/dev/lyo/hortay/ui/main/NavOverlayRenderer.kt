@@ -2,7 +2,6 @@
 
 package dev.lyo.hortay.ui.main
 
-import androidx.activity.BackEventCompat
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,14 +16,19 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
-import dev.lyo.hortay.AppGraph
+import dev.lyo.hortay.data.BookmarkStore
+import dev.lyo.hortay.data.ComposeResourcesStringResolver
 import dev.lyo.hortay.data.FeedOrder
+import dev.lyo.hortay.data.HortayBackend
+import dev.lyo.hortay.data.IgnoredChannelsStore
 import dev.lyo.hortay.data.NavEntry
+import dev.lyo.hortay.data.StartupCoordinator
 import dev.lyo.hortay.data.TimelinePost
 import dev.lyo.hortay.data.UserMessageBus
 import dev.lyo.hortay.ui.comments.CommentsScreen
 import dev.lyo.hortay.ui.timeline.ChannelScreen
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import hortay.shared.generated.resources.Res
 import hortay.shared.generated.resources.link_not_found
@@ -93,7 +97,11 @@ internal fun NavOverlayRenderer(
     navStateHolder: SaveableStateHolder,
     navBackProgress: Float,
     navBackEdge: Int,
-    graph: AppGraph,
+    backend: HortayBackend,
+    bookmarks: BookmarkStore,
+    ignoredChannels: IgnoredChannelsStore?,
+    userMessages: UserMessageBus,
+    startupPhase: StateFlow<StartupCoordinator.Phase>?,
     padding: PaddingValues,
     feedOrder: FeedOrder,
     scope: CoroutineScope,
@@ -105,7 +113,7 @@ internal fun NavOverlayRenderer(
     onPostReportClick: (TimelinePost) -> Unit,
     canReportPost: (TimelinePost) -> Boolean,
 ) {
-    val res = androidx.compose.runtime.remember { dev.lyo.hortay.data.ComposeResourcesStringResolver() }
+    val res = remember { ComposeResourcesStringResolver() }
 
     visibleEntries.forEachIndexed { idx, entry ->
         val isTop = idx == visibleEntries.lastIndex
@@ -120,7 +128,7 @@ internal fun NavOverlayRenderer(
                                     Modifier.graphicsLayer {
                                         val p = navBackProgress.coerceIn(0f, 2f)
                                         val signed = when (navBackEdge) {
-                                            BackEventCompat.EDGE_RIGHT -> -p
+                                            BackSwipeEdge.Right -> -p
                                             else -> p
                                         }
                                         translationX = signed * size.width * 0.25f
@@ -137,7 +145,10 @@ internal fun NavOverlayRenderer(
                         RenderNavEntry(
                             entry = entry,
                             isCurrent = isTop,
-                            graph = graph,
+                            backend = backend,
+                            bookmarks = bookmarks,
+                            ignoredChannels = ignoredChannels,
+                            startupPhase = startupPhase,
                             padding = padding,
                             feedOrder = feedOrder,
                             scope = scope,
@@ -151,7 +162,7 @@ internal fun NavOverlayRenderer(
                             onPostReportClick = onPostReportClick,
                             canReportPost = canReportPost,
                             onLinkNotFound = {
-                                graph.userMessages.post(
+                                userMessages.post(
                                     res.getString(Res.string.link_not_found),
                                     UserMessageBus.Severity.Info,
                                 )
@@ -168,7 +179,10 @@ internal fun NavOverlayRenderer(
 private fun RenderNavEntry(
     entry: NavEntry,
     isCurrent: Boolean,
-    graph: AppGraph,
+    backend: HortayBackend,
+    bookmarks: BookmarkStore,
+    ignoredChannels: IgnoredChannelsStore?,
+    startupPhase: StateFlow<StartupCoordinator.Phase>?,
     padding: PaddingValues,
     feedOrder: FeedOrder,
     scope: CoroutineScope,
@@ -186,9 +200,9 @@ private fun RenderNavEntry(
     when (entry) {
         is NavEntry.Channel -> ChannelScreen(
             chatId = entry.chatId,
-            backend = graph.backend,
-            bookmarks = graph.bookmarkStore,
-            ignoredChannels = graph.ignoredChannels,
+            backend = backend,
+            bookmarks = bookmarks,
+            ignoredChannels = ignoredChannels,
             contentPadding = padding,
             onBack = onPopNav,
             onChannelOpen = { cid, scrollTo -> onSafelyOpenChannel(cid, scrollTo) },
@@ -202,11 +216,11 @@ private fun RenderNavEntry(
             canReport = canReportPost,
             onReportChannel = { onOpenReport(entry.chatId, null) },
             feedOrder = feedOrder,
-            startupPhase = graph.startupCoordinator.phase,
+            startupPhase = startupPhase,
         )
         is NavEntry.Comments -> CommentsScreen(
             post = entry.anchor,
-            backend = graph.backend,
+            backend = backend,
             onDismiss = onPopNav,
             // The three "leave this detail view for somewhere else" hooks
             // below — channel-chip tap, foreign-author header tap, reply
@@ -253,45 +267,40 @@ private fun RenderNavEntry(
             onReactionToggle = { chatId, messageId, snapshot, kind, wasChosen ->
                 // Tap origin is encoded in [chatId]: the anchor's chat is the
                 // channel post's chatId; comments live in the linked discussion
-                // supergroup ([ThreadState.Ready.threadChatId]).
-                // We route the optimistic mutation to the repository that owns
-                // that state and let TDLib reconcile via the usual
-                // UpdateMessageInteractionInfo path.
+                // supergroup ([ThreadState.Ready.threadChatId]). The optimistic
+                // mutation routes to the matching store (feed vs comments) and
+                // TDLib reconciles via the usual UpdateMessageInteractionInfo.
                 val isAnchor = chatId == entry.anchor.chatId
                 val nowChosen = !wasChosen
                 if (isAnchor) {
-                    graph.postsRepository.applyOptimisticReaction(chatId, messageId, kind, nowChosen)
+                    backend.applyOptimisticReaction(chatId, messageId, kind, nowChosen)
                 } else {
-                    graph.commentsRepository.applyOptimisticReaction(chatId, messageId, snapshot, kind, nowChosen)
+                    backend.applyCommentOptimisticReaction(chatId, messageId, snapshot, kind, nowChosen)
                 }
                 scope.launch {
-                    val ok = graph.channelActions.toggleReaction(
+                    val ok = backend.toggleReaction(
                         chatId = chatId,
                         messageId = messageId,
                         kind = kind,
                         isChosen = wasChosen,
                     )
                     if (!ok) {
-                        // Revert: for the feed-backed anchor we re-toggle to the
-                        // pre-tap state (the inverse delta); for a comment we
-                        // simply drop the override so the chip falls back to
-                        // whatever TDLib last said.
                         if (isAnchor) {
-                            graph.postsRepository.applyOptimisticReaction(chatId, messageId, kind, wasChosen)
+                            backend.applyOptimisticReaction(chatId, messageId, kind, wasChosen)
                         } else {
-                            graph.commentsRepository.clearOptimisticReaction(chatId, messageId)
+                            backend.clearCommentOptimisticReaction(chatId, messageId)
                         }
                     }
                 }
             },
             onPollVote = { chatId, messageId, indices ->
                 // Optimistic flip on the anchor's poll → SetPollAnswer → clear pending.
-                // The pinned post in CommentsScreen is always the feed's anchor; the
-                // anchor lives in `PostsRepository`, not `CommentsRepository`.
-                graph.postsRepository.applyOptimisticPollAnswer(chatId, messageId, indices)
+                // The pinned post in CommentsScreen is always the feed's anchor, which
+                // lives in the feed posts store, not the comments thread.
+                backend.applyOptimisticPollAnswer(chatId, messageId, indices)
                 scope.launch {
-                    val ok = graph.channelActions.setPollAnswer(chatId, messageId, indices)
-                    graph.postsRepository.clearPollPending(chatId, messageId, revert = !ok)
+                    val ok = backend.setPollAnswer(chatId, messageId, indices)
+                    backend.clearPollPending(chatId, messageId, revert = !ok)
                 }
             },
             backProgress = if (isCurrent) navBackProgress else 0f,

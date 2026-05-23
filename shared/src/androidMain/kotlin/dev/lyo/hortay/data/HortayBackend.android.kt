@@ -135,6 +135,17 @@ actual class HortayBackend(
     actual suspend fun prefetchThread(chatId: Long, candidateMessageIds: List<Long>) =
         commentsRepo.prefetchThread(chatId, candidateMessageIds)
 
+    actual fun applyCommentOptimisticReaction(
+        threadChatId: Long,
+        messageId: Long,
+        current: Reactions,
+        kind: ReactionKind,
+        nowChosen: Boolean,
+    ) = commentsRepo.applyOptimisticReaction(threadChatId, messageId, current, kind, nowChosen)
+
+    actual fun clearCommentOptimisticReaction(threadChatId: Long, messageId: Long) =
+        commentsRepo.clearOptimisticReaction(threadChatId, messageId)
+
     actual suspend fun canonicalShareUrl(post: TimelinePost): String? =
         postsRepo.canonicalShareUrl(post)
 

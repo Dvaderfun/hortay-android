@@ -330,6 +330,22 @@ expect class HortayBackend {
     suspend fun prefetchThread(chatId: Long, candidateMessageIds: List<Long>)
 
     /**
+     * Optimistic reaction flip on a comments-thread message. Separate from
+     * [applyOptimisticReaction] (feed posts) because comments overrides live
+     * on the thread observer's own snapshot, not on the feed `_posts` stream.
+     */
+    fun applyCommentOptimisticReaction(
+        threadChatId: Long,
+        messageId: Long,
+        current: Reactions,
+        kind: ReactionKind,
+        nowChosen: Boolean,
+    )
+
+    /** Drop a previously-applied comment optimistic-reaction override. */
+    fun clearCommentOptimisticReaction(threadChatId: Long, messageId: Long)
+
+    /**
      * TDLib-minted canonical share URL for [post]: handles album-anchor,
      * topic, message-thread shapes Telegram considers canonical. Returns
      * null when no message link is available (restricted source chat,
