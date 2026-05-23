@@ -184,6 +184,13 @@ expect class HortayBackend {
     suspend fun closeChat(chatId: Long)
 
     /**
+     * Mark [messageIds] in [chatId] as viewed (TDLib `ViewMessages`). The
+     * channel screen's dwell-ack effect calls this when a message sits in
+     * the viewport past the read-mark dwell window.
+     */
+    suspend fun viewMessages(chatId: Long, messageIds: List<Long>)
+
+    /**
      * Warm the per-channel history slice — drains `GetChatHistory` once and
      * merges into `_posts`. Called from `pushChannel` before mounting the
      * channel screen so OldestUnreadFirst lands with the full slice in one

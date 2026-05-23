@@ -67,6 +67,7 @@ actual class HortayBackend(
     actual suspend fun loadHistoryAround(chatId: Long, anchorMessageId: Long): Boolean = false
     actual suspend fun openChat(chatId: Long) {}
     actual suspend fun closeChat(chatId: Long) {}
+    actual suspend fun viewMessages(chatId: Long, messageIds: List<Long>) {}
     actual suspend fun loadChannelHistory(chatId: Long): Result<Unit> = Result.success(Unit)
     actual fun hasWarmChannelHistory(chatId: Long): Boolean = false
 
