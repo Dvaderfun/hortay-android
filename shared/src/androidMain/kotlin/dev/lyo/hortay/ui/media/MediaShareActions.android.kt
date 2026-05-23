@@ -5,16 +5,17 @@ import android.content.ClipboardManager
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.Log
 import androidx.core.content.FileProvider
-import org.jetbrains.compose.resources.StringResource
 import androidx.core.content.getSystemService
 import coil3.SingletonImageLoader
 import dev.lyo.hortay.data.AlbumItem
+import dev.lyo.hortay.data.PlatformContextHolder
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -28,13 +29,9 @@ import hortay.shared.generated.resources.media_share_error_only_photos
 import hortay.shared.generated.resources.media_share_error_source_missing
 
 /**
- * "Save" / "Copy" actions for the fullscreen media viewer. The fileId TDLib
- * downloads into [Context.getFilesDir]/tdlib-files/... is opaque to the rest
- * of the device — we cannot just hand the raw path to a `Uri.fromFile()` or
- * a MediaStore row (Android Q+ scoped storage would reject the foreign path
- * on insert, and any pre-Q app that received a `file://` URI would see
- * FileUriExposedException). So both flows route through a copy:
+ * Android-side [MediaShareActions]. See the interface doc for the contract.
  *
+ * Routing:
  *   • Save → bytes are streamed through MediaStore's relative-path API into
  *     `Pictures/Hortay/...` (photos) or `Movies/Hortay/...` (videos). The
  *     Q+ path uses the `IS_PENDING` two-phase write so a half-streamed file
@@ -43,73 +40,39 @@ import hortay.shared.generated.resources.media_share_error_source_missing
  *
  *   • Copy → bytes stay where TDLib put them; we mint a temporary read URI
  *     through the app's [FileProvider] (authority
- *     `${applicationId}.fileprovider`) and put it into [ClipData]. Other apps
- *     paste the URI and resolve it back to bytes through ContentResolver. We
- *     only enable copy for photos: most chat apps and document editors accept
- *     image clipboard items, almost none accept video clipboard items, and a
- *     ClipData of a 200 MB video URI is a UX trap (the user pastes it into
- *     WhatsApp and the upload silently starts).
+ *     `${applicationId}.fileprovider`) and put it into [ClipData]. Photo only:
+ *     most chat apps and document editors accept image clipboard items,
+ *     almost none accept video clipboard items, and a ClipData of a 200 MB
+ *     video URI is a UX trap.
+ *
+ *   • Share → routes through `ACTION_SEND` with a FileProvider URI (bytes
+ *     stay in place — fast for big videos).
  *
  * Telegram-Android places its save folder at `Pictures/Telegram` /
- * `Movies/Telegram`; we use `Pictures/Hortay` / `Movies/Hortay` so the saved
- * media is recognisably ours in the gallery and doesn't mix with the user's
- * official Telegram screenshots.
+ * `Movies/Telegram`; we use `Pictures/Hortay` / `Movies/Hortay` so saved
+ * media is recognisably ours in the gallery.
  */
-object MediaShareActions {
+object AndroidMediaShareActions : MediaShareActions {
 
     private const val TAG = "MediaShareActions"
     private const val SUBFOLDER = "Hortay"
 
-    sealed interface Result {
-        data object Success : Result
-        /**
-         * Localised failure payload. [reasonResId] is the user-facing string,
-         * [args] feed any `%1$s` / `%2$d` format-args (currently only the
-         * mkdir branch carries one — the directory path). The call site does
-         * `context.getString(reasonResId, *args)` to resolve.
-         *
-         * [debugDetail] is an English diagnostic string surfaced to logcat /
-         * crash reports only — never to UI. Captures the underlying exception
-         * message when a `try/catch` collapsed an arbitrary throwable into a
-         * generic "save failed" result, so the localised toast stays clean
-         * but bug-report digging still has the original cause.
-         */
-        data class Failure(
-            val reasonResId: StringResource,
-            val args: List<Any> = emptyList(),
-            val debugDetail: String? = null,
-        ) : Result
-    }
-
-    /**
-     * True when [Result] of a save/copy is meaningful for the given item — i.e.
-     * the file is actually local. Callers gate their button enabled state on
-     * this so the affordance does not appear on a Failed / Downloading slot.
-     */
-    fun isPersistable(localPath: String?): Boolean =
+    override fun isPersistable(localPath: String?): Boolean =
         !localPath.isNullOrBlank() && File(localPath).run { exists() && length() > 0L }
 
-    /**
-     * Save the bytes at [localPath] into the public gallery. [item] decides
-     * the MediaStore collection (Images vs Video) and the display name
-     * extension. Runs on the calling thread — call from a coroutine on
-     * Dispatchers.IO; the actual byte copy is the only blocking step and
-     * is bounded by the source file size (single-digit MB for photos,
-     * tens of MB for videos).
-     */
-    fun saveToGallery(
-        context: Context,
+    override suspend fun saveToGallery(
         item: AlbumItem,
         localPath: String,
-    ): Result {
+    ): MediaShareActions.Result = withContext(Dispatchers.IO) {
+        val context = PlatformContextHolder.require()
         val src = File(localPath)
-        if (!src.exists()) return Result.Failure(Res.string.media_share_error_source_missing)
+        if (!src.exists()) return@withContext MediaShareActions.Result.Failure(Res.string.media_share_error_source_missing)
 
         val isVideo = item !is AlbumItem.Photo
         val mime = item.guessMimeType()
         val displayName = buildDisplayName(mime, isVideo)
 
-        return try {
+        try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 saveViaMediaStore(context, src, displayName, mime, isVideo)
             } else {
@@ -117,30 +80,24 @@ object MediaShareActions {
             }
         } catch (t: Throwable) {
             Log.w(TAG, "saveToGallery failed", t)
-            Result.Failure(
+            MediaShareActions.Result.Failure(
                 reasonResId = Res.string.media_share_error_insert_failed,
                 debugDetail = t.message ?: t.javaClass.simpleName,
             )
         }
     }
 
-    /**
-     * Photo-only. Puts a [ClipData] item carrying a [FileProvider] URI onto
-     * the system clipboard. The grant flag is set so any app reading the
-     * clipboard can resolve the URI through ContentResolver.openInputStream;
-     * without it Android 10+ refuses the read at the IPC boundary.
-     */
-    fun copyToClipboard(
-        context: Context,
+    override suspend fun copyToClipboard(
         item: AlbumItem,
         localPath: String,
-    ): Result {
-        if (item !is AlbumItem.Photo) return Result.Failure(Res.string.media_share_error_only_photos)
+    ): MediaShareActions.Result = withContext(Dispatchers.IO) {
+        val context = PlatformContextHolder.require()
+        if (item !is AlbumItem.Photo) return@withContext MediaShareActions.Result.Failure(Res.string.media_share_error_only_photos)
         val src = File(localPath)
-        if (!src.exists()) return Result.Failure(Res.string.media_share_error_source_missing)
+        if (!src.exists()) return@withContext MediaShareActions.Result.Failure(Res.string.media_share_error_source_missing)
         val mime = item.guessMimeType()
 
-        return try {
+        try {
             val uri = FileProvider.getUriForFile(
                 context,
                 context.packageName + ".fileprovider",
@@ -152,47 +109,35 @@ object MediaShareActions {
                 }
             }
             val cm = context.getSystemService<ClipboardManager>()
-                ?: return Result.Failure(Res.string.media_share_error_clipboard_unavailable)
+                ?: return@withContext MediaShareActions.Result.Failure(Res.string.media_share_error_clipboard_unavailable)
             cm.setPrimaryClip(clip)
             // Without the read-grant flag a paster on Q+ receives a SecurityException
-            // when resolving the URI. ClipData.newUri does NOT auto-grant on its own;
-            // the grant rides through the activity-token of the *consumer*, which is
-            // why a global grant via context.grantUriPermission with FLAG_READ is the
-            // pragmatic move for clipboard contents (the alternative — granting per
-            // foreground process — is racy across the clipboard hand-off). The grant
-            // is scoped to the file's content URI only.
+            // when resolving the URI. ClipData.newUri does NOT auto-grant on its own.
             context.grantUriPermission(
                 "android",
                 uri,
-                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION,
             )
-            Result.Success
+            MediaShareActions.Result.Success
         } catch (t: Throwable) {
             Log.w(TAG, "copyToClipboard failed", t)
-            Result.Failure(
+            MediaShareActions.Result.Failure(
                 reasonResId = Res.string.media_share_error_clipboard_unavailable,
                 debugDetail = t.message ?: t.javaClass.simpleName,
             )
         }
     }
 
-    /**
-     * Hands the file at [localPath] to the system share sheet via
-     * `Intent.ACTION_SEND`. Bytes stay where TDLib put them; we mint a
-     * FileProvider URI (same authority as [copyToClipboard]) and rely on the
-     * chooser-grant `FLAG_GRANT_READ_URI_PERMISSION` so the picked target app
-     * can read through ContentResolver — no copy step, fast for big videos.
-     */
-    fun shareMedia(
-        context: Context,
+    override suspend fun shareMedia(
         item: AlbumItem,
         localPath: String,
-    ): Result {
+    ): MediaShareActions.Result = withContext(Dispatchers.IO) {
+        val context = PlatformContextHolder.require()
         val src = File(localPath)
-        if (!src.exists()) return Result.Failure(Res.string.media_share_error_source_missing)
+        if (!src.exists()) return@withContext MediaShareActions.Result.Failure(Res.string.media_share_error_source_missing)
         val mime = item.guessMimeType()
 
-        return try {
+        try {
             val uri = FileProvider.getUriForFile(
                 context,
                 context.packageName + ".fileprovider",
@@ -208,44 +153,38 @@ object MediaShareActions {
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             if (send.resolveActivity(context.packageManager) == null) {
-                return Result.Failure(Res.string.media_share_error_intent_failed)
+                return@withContext MediaShareActions.Result.Failure(Res.string.media_share_error_intent_failed)
             }
             context.startActivity(chooser)
-            Result.Success
+            MediaShareActions.Result.Success
         } catch (t: Throwable) {
             Log.w(TAG, "shareMedia failed", t)
-            Result.Failure(
+            MediaShareActions.Result.Failure(
                 reasonResId = Res.string.media_share_error_intent_failed,
                 debugDetail = t.message ?: t.javaClass.simpleName,
             )
         }
     }
 
-    /**
-     * Guest-mode fallback: send the source CDN URL as `text/plain`. Used by
-     * the viewer's Share button when neither TDLib nor Coil has a local copy
-     * of the bytes — most commonly for web-mode videos (Coil is image-only,
-     * so the playback file never enters its disk cache). Recipients resolve
-     * the URL back to bytes via their own HTTP stack, or just open the link.
-     */
-    fun shareUrl(context: Context, url: String): Result {
-        if (url.isBlank()) return Result.Failure(Res.string.media_share_error_source_missing)
-        return try {
+    override suspend fun shareUrl(url: String): MediaShareActions.Result = withContext(Dispatchers.IO) {
+        val context = PlatformContextHolder.require()
+        if (url.isBlank()) return@withContext MediaShareActions.Result.Failure(Res.string.media_share_error_source_missing)
+        try {
             val send = Intent(Intent.ACTION_SEND).apply {
                 type = "text/plain"
                 putExtra(Intent.EXTRA_TEXT, url)
             }
             if (send.resolveActivity(context.packageManager) == null) {
-                return Result.Failure(Res.string.media_share_error_intent_failed)
+                return@withContext MediaShareActions.Result.Failure(Res.string.media_share_error_intent_failed)
             }
             val chooser = Intent.createChooser(send, null).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(chooser)
-            Result.Success
+            MediaShareActions.Result.Success
         } catch (t: Throwable) {
             Log.w(TAG, "shareUrl failed", t)
-            Result.Failure(
+            MediaShareActions.Result.Failure(
                 reasonResId = Res.string.media_share_error_intent_failed,
                 debugDetail = t.message ?: t.javaClass.simpleName,
             )
@@ -253,20 +192,16 @@ object MediaShareActions {
     }
 
     /**
-     * Resolve [url] in Coil's disk cache → absolute file path on disk, or
-     * null if Coil never loaded or evicted it. Lets the viewer route Save /
-     * Copy / Share through the existing local-file pipeline for guest-mode
-     * photos where TDLib hasn't materialised the bytes into filesDir.
-     *
      * Snapshot is opened then immediately closed — Coil's disk cache uses
      * journaled writes (Okio FileSystem snapshots survive past close), so
      * the returned path remains valid until cache eviction.
      */
-    fun coilCachePath(context: Context, url: String): String? {
-        if (url.isBlank()) return null
-        val cache = SingletonImageLoader.get(context).diskCache ?: return null
-        val snapshot = cache.openSnapshot(url) ?: return null
-        return try {
+    override suspend fun coilCachePath(url: String): String? = withContext(Dispatchers.IO) {
+        val context = PlatformContextHolder.require()
+        if (url.isBlank()) return@withContext null
+        val cache = SingletonImageLoader.get(context).diskCache ?: return@withContext null
+        val snapshot = cache.openSnapshot(url) ?: return@withContext null
+        try {
             snapshot.data.toString()
         } finally {
             snapshot.close()
@@ -279,7 +214,7 @@ object MediaShareActions {
         displayName: String,
         mime: String,
         isVideo: Boolean,
-    ): Result {
+    ): MediaShareActions.Result {
         val resolver = context.contentResolver
         val collection = if (isVideo) {
             MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
@@ -298,7 +233,7 @@ object MediaShareActions {
         }
 
         val uri = resolver.insert(collection, values)
-            ?: return Result.Failure(Res.string.media_share_error_insert_failed)
+            ?: return MediaShareActions.Result.Failure(Res.string.media_share_error_insert_failed)
         try {
             resolver.openOutputStream(uri, "w")?.use { out ->
                 src.inputStream().use { it.copyTo(out) }
@@ -306,7 +241,7 @@ object MediaShareActions {
 
             val finalise = ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }
             resolver.update(uri, finalise, null, null)
-            return Result.Success
+            return MediaShareActions.Result.Success
         } catch (t: Throwable) {
             resolver.delete(uri, null, null)
             throw t
@@ -320,11 +255,11 @@ object MediaShareActions {
         displayName: String,
         mime: String,
         isVideo: Boolean,
-    ): Result {
+    ): MediaShareActions.Result {
         val rootName = if (isVideo) Environment.DIRECTORY_MOVIES else Environment.DIRECTORY_PICTURES
         val dir = File(Environment.getExternalStoragePublicDirectory(rootName), SUBFOLDER)
         if (!dir.exists() && !dir.mkdirs()) {
-            return Result.Failure(
+            return MediaShareActions.Result.Failure(
                 reasonResId = Res.string.media_share_error_mkdir,
                 args = listOf(dir.toString()),
             )
@@ -339,7 +274,7 @@ object MediaShareActions {
             arrayOf(mime),
             null,
         )
-        return Result.Success
+        return MediaShareActions.Result.Success
     }
 
     /** "Hortay_20260511_142233.jpg" — sortable in any file manager. */
@@ -363,12 +298,9 @@ object MediaShareActions {
 
     /**
      * Best-effort MIME for the gallery / clipboard payload. TDLib does not
-     * propagate `mime_type` through to the [AlbumItem] graph (it lives on
-     * the TdApi document/video payload that MessageContentMapper consumes);
-     * for photos this is always JPEG (Telegram re-encodes uploads server-side)
-     * and for videos / animations overwhelmingly MP4. WebM animated stickers
-     * never reach the fullscreen viewer (they render in their own player
-     * surface), so the per-kind default is safe.
+     * propagate `mime_type` through to the [AlbumItem] graph; for photos this
+     * is always JPEG (Telegram re-encodes uploads server-side) and for videos
+     * / animations overwhelmingly MP4.
      */
     private fun AlbumItem.guessMimeType(): String = when (this) {
         is AlbumItem.Photo -> "image/jpeg"
@@ -376,19 +308,3 @@ object MediaShareActions {
         is AlbumItem.Animation -> "video/mp4"
     }
 }
-
-/**
- * Resolve the local path to copy/save for [item]. For [AlbumItem.Photo] this
- * is the fullscreen variant the viewer is painting; for [AlbumItem.Video] the
- * playback file the user is actually watching (picked quality, falls back to
- * default); for [AlbumItem.Animation] the playback file. Web-mode placeholders
- * (fileId == 0) and items without a Ready slot return null.
- */
-internal fun AlbumItem.viewerFileId(activeQuality: Int? = null): Int? = when (this) {
-    is AlbumItem.Photo -> fullscreen.fileId.takeIf { it != null && it != 0 }
-    is AlbumItem.Video -> activeQuality ?: qualities.defaultPick.fileId.takeIf { it != 0 }
-    is AlbumItem.Animation -> playbackFileId.takeIf { it != 0 }
-}
-
-/** True when the viewer should expose Save/Copy chrome for this item. */
-internal fun AlbumItem.canBePersisted(): Boolean = viewerFileId() != null

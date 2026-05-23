@@ -12,30 +12,44 @@ import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import android.widget.Toast
-import androidx.compose.runtime.State
-import androidx.compose.runtime.collectAsState
+import dev.lyo.hortay.LocalPlatformToaster
 import dev.lyo.hortay.data.AlbumItem
 import dev.lyo.hortay.data.DownloadPriority
 import dev.lyo.hortay.data.MediaCache
@@ -44,9 +58,7 @@ import dev.lyo.hortay.data.VideoQuality
 import dev.lyo.hortay.ui.icons.Symbol
 import dev.lyo.hortay.ui.theme.HortayExpressive
 import dev.lyo.hortay.ui.theme.asComposeShape
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import hortay.shared.generated.resources.Res
 import hortay.shared.generated.resources.action_close
@@ -60,6 +72,7 @@ import hortay.shared.generated.resources.media_saved_photo
 import hortay.shared.generated.resources.media_saved_video
 import hortay.shared.generated.resources.media_share_error_source_missing
 import hortay.shared.generated.resources.media_share_failed
+import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -78,7 +91,7 @@ fun FullScreenMediaViewer(
     if (items.isEmpty()) return
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
+        properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         val pagerState = rememberPagerState(initialPage = initialIndex.coerceIn(0, items.lastIndex)) { items.size }
 
@@ -153,12 +166,8 @@ fun FullScreenMediaViewer(
             // Expressive close affordance: Cookie9-shaped backdrop instead of a perfect
             // circle. Reads as "deliberate close" rather than a generic system 'X' —
             // signature shape vocabulary that ties the viewer chrome to the rest of the
-            // app's reaction / nav-tab idiom. Bigger touch target padding compensates
-            // for the polygon's narrower visual weight.
+            // app's reaction / nav-tab idiom.
             val closeShape = HortayExpressive.ReactionSelected.asComposeShape()
-            // Polygon backdrop only — clipping the IconButton to a Cookie polygon
-            // would cut the close glyph at the polygon ridges. The default circular
-            // ripple stays clean inside the visible disc area.
             IconButton(
                 onClick = onDismiss,
                 modifier = Modifier
@@ -170,29 +179,20 @@ fun FullScreenMediaViewer(
                 Symbol(name = "close", contentDescription = stringResource(Res.string.action_close), tint = Color.White)
             }
 
-            // Top-right tool column for the active page: QualityChip (videos
-            // with alternativeVideos) over Save / Copy buttons. One vertical
-            // stack avoids the playback chrome conflict the bottom-right
-            // placement had — [VideoPlayerControls] owns the entire bottom
-            // band (scrim, BottomBar slider+mute, navigationBarsPadding) and
-            // any chrome anchored to BottomEnd would land on the slider or
-            // mute toggle. Top-right is uncontested in both photo and video
-            // pages. We keep the chrome chrome-coloured (Black 45 %, 44 dp
-            // CircleShape) so the column reads as one "tools for this item"
-            // affordance with the same vocabulary as the close button.
+            // Top-right tool column for the active page: QualityChip (videos with
+            // alternativeVideos) over Save / Copy / Share buttons. One vertical stack
+            // avoids the bottom-band conflict the previous placement had — VideoPlayerControls
+            // owns the entire bottom band (scrim, slider+mute, navigationBarsPadding).
             val activeItem = items.getOrNull(pagerState.currentPage)
             val activeQualities = (activeItem as? AlbumItem.Video)?.qualities
 
-            val actionContext = LocalContext.current
+            val shareActions = LocalMediaShareActions.current
+            val toaster = LocalPlatformToaster.current
             val saveLabel = stringResource(Res.string.action_save_to_gallery)
             val copyLabel = stringResource(Res.string.action_copy_image)
             val shareLabel = stringResource(Res.string.action_share_media)
             val savedPhotoMsg = stringResource(Res.string.media_saved_photo)
             val savedVideoMsg = stringResource(Res.string.media_saved_video)
-            val saveFailedMsg = stringResource(Res.string.media_save_failed)
-            val copiedMsg = stringResource(Res.string.media_copied)
-            val copyFailedMsg = stringResource(Res.string.media_copy_failed)
-            val shareFailedMsg = stringResource(Res.string.media_share_failed)
 
             val activeFileId = activeItem?.viewerFileId(qualityChoices[pagerState.currentPage]?.fileId)
             val activeState by produceMediaState(cache, activeFileId)
@@ -202,13 +202,11 @@ fun FullScreenMediaViewer(
             // rendering the inline poster / fullscreen variant. Resolve that
             // path so Save / Copy / Share don't silently disappear for
             // photos that the user is actively looking at.
-            val webCachePath by produceWebCachePath(activeItem)
+            val webCachePath by produceWebCachePath(activeItem, shareActions)
             val readyPath = tdlibReadyPath ?: webCachePath
-            // Last-resort Share target for guest-mode videos: Coil is
-            // image-only so [webCachePath] is null for video / animation,
-            // but ExoPlayer streams them straight from a CDN URL. Hand that
-            // URL to ACTION_SEND text/plain — recipients open the link or
-            // resolve it via their own HTTP stack.
+            // Last-resort Share target for guest-mode videos: Coil is image-only so
+            // [webCachePath] is null for video / animation, but ExoPlayer streams them
+            // straight from a CDN URL. Hand that URL to ACTION_SEND text/plain.
             val webShareUrl: String? = activeItem?.webShareFallbackUrl()
             val showQuality = activeQualities?.hasOptions == true
             val persistableItem = activeItem.takeIf { readyPath != null }
@@ -233,23 +231,19 @@ fun FullScreenMediaViewer(
                     }
                     val chromeShape = CircleShape
                     if (persistableItem != null && readyPath != null) {
-                        val activeItem = persistableItem // smart-cast bridge for lambdas
+                        val itemForSave = persistableItem // smart-cast bridge for lambdas
                         // Save → every Ready media kind. Toast on success / failure.
                         IconButton(
                             onClick = {
                                 scope.launch {
-                                    val res = withContext(Dispatchers.IO) {
-                                        MediaShareActions.saveToGallery(actionContext, activeItem, readyPath)
-                                    }
-                                    val successMsg = if (activeItem is AlbumItem.Photo) savedPhotoMsg else savedVideoMsg
-                                    val toast = when (res) {
-                                        is MediaShareActions.Result.Success -> successMsg
+                                    val res = shareActions.saveToGallery(itemForSave, readyPath)
+                                    val text = when (res) {
+                                        is MediaShareActions.Result.Success ->
+                                            if (itemForSave is AlbumItem.Photo) savedPhotoMsg else savedVideoMsg
                                         is MediaShareActions.Result.Failure ->
-                                            saveFailedMsg.format(
-                                                org.jetbrains.compose.resources.getString(res.reasonResId, *res.args.toTypedArray()),
-                                            )
+                                            getString(Res.string.media_save_failed, getString(res.reasonResId, *res.args.toTypedArray()))
                                     }
-                                    Toast.makeText(actionContext, toast, Toast.LENGTH_SHORT).show()
+                                    toaster.show(text)
                                 }
                             },
                             modifier = Modifier
@@ -260,35 +254,24 @@ fun FullScreenMediaViewer(
                         }
                     }
                     if (shareCapable) {
-                        // Share → fires ACTION_SEND through the system chooser
-                        // so the user can route the file into any app (Telegram,
-                        // WhatsApp, Photos, Files, …) without a Save-then-pick
-                        // round-trip. When we have local bytes (TDLib file or
-                        // Coil-cached web photo) we mint a FileProvider URI;
-                        // otherwise (guest-mode video / animation streaming from
-                        // a CDN URL with no local copy) we fall back to sharing
-                        // the URL as text/plain so the recipient still gets
-                        // something meaningful.
+                        // Share → fires ACTION_SEND through the system chooser on Android;
+                        // iOS routes through the platform actions impl. Falls back to URL
+                        // share for guest-mode video / animation streaming from a CDN.
                         IconButton(
                             onClick = {
                                 scope.launch {
-                                    val res = withContext(Dispatchers.IO) {
-                                        if (readyPath != null && activeItem != null) {
-                                            MediaShareActions.shareMedia(actionContext, activeItem, readyPath)
-                                        } else if (!webShareUrl.isNullOrBlank()) {
-                                            MediaShareActions.shareUrl(actionContext, webShareUrl)
-                                        } else {
+                                    val res = when {
+                                        readyPath != null && activeItem != null ->
+                                            shareActions.shareMedia(activeItem, readyPath)
+                                        !webShareUrl.isNullOrBlank() ->
+                                            shareActions.shareUrl(webShareUrl)
+                                        else ->
                                             MediaShareActions.Result.Failure(Res.string.media_share_error_source_missing)
-                                        }
                                     }
                                     if (res is MediaShareActions.Result.Failure) {
-                                        Toast.makeText(
-                                            actionContext,
-                                            shareFailedMsg.format(
-                                                org.jetbrains.compose.resources.getString(res.reasonResId, *res.args.toTypedArray()),
-                                            ),
-                                            Toast.LENGTH_SHORT,
-                                        ).show()
+                                        toaster.show(
+                                            getString(Res.string.media_share_failed, getString(res.reasonResId, *res.args.toTypedArray())),
+                                        )
                                     }
                                 }
                             },
@@ -300,25 +283,21 @@ fun FullScreenMediaViewer(
                         }
                     }
                     if (persistableItem != null && readyPath != null && persistableItem is AlbumItem.Photo) {
-                        val activeItem = persistableItem
-                        // Copy → photo only. Nearly no Android app meaningfully
-                        // accepts a video clipboard item, and a multi-MB MP4 URI
-                        // on the clipboard is a UX trap (paste into WhatsApp =
-                        // silent re-upload). Hidden for video / animation pages.
+                        val itemForCopy = persistableItem
+                        // Copy → photo only. Nearly no app meaningfully accepts a video
+                        // clipboard item, and a multi-MB MP4 URI on the clipboard is a
+                        // UX trap.
                         IconButton(
                             onClick = {
                                 scope.launch {
-                                    val res = withContext(Dispatchers.IO) {
-                                        MediaShareActions.copyToClipboard(actionContext, activeItem, readyPath)
-                                    }
-                                    val toast = when (res) {
-                                        is MediaShareActions.Result.Success -> copiedMsg
+                                    val res = shareActions.copyToClipboard(itemForCopy, readyPath)
+                                    val text = when (res) {
+                                        is MediaShareActions.Result.Success ->
+                                            getString(Res.string.media_copied)
                                         is MediaShareActions.Result.Failure ->
-                                            copyFailedMsg.format(
-                                                org.jetbrains.compose.resources.getString(res.reasonResId, *res.args.toTypedArray()),
-                                            )
+                                            getString(Res.string.media_copy_failed, getString(res.reasonResId, *res.args.toTypedArray()))
                                     }
-                                    Toast.makeText(actionContext, toast, Toast.LENGTH_SHORT).show()
+                                    toaster.show(text)
                                 }
                             },
                             modifier = Modifier
@@ -333,17 +312,9 @@ fun FullScreenMediaViewer(
 
             if (items.size > 1) {
                 // Pill-shaped scrim under the counter — same pattern as the close
-                // button and QualityChip use elsewhere in this viewer. Without the
-                // scrim a white photo behind the counter ("3 / 5" against snow,
-                // sky, paper) made the digits illegible because they were also
-                // white. The black-translucent plate guarantees readable contrast
-                // on every possible photo.
-                // True Pill polygon (subtly flattened ellipse) under the counter —
-                // matches the NewPostsPill vocabulary so the viewer chrome reads as
-                // part of the same expressive system, not stock material.
+                // button and QualityChip use elsewhere in this viewer. Guarantees
+                // readable contrast on every possible photo.
                 val counterShape = HortayExpressive.Pill.asComposeShape()
-                // Pill is convex so a clip would be safe here, but the surrounding
-                // chrome is consistent: backdrop-only painting, no clip.
                 Text(
                     text = "${pagerState.currentPage + 1} / ${items.size}",
                     color = Color.White,
@@ -375,21 +346,16 @@ private fun MediaPage(
                 fileId = quality.fileId,
                 remoteUrl = item.remoteVideoUrl,
                 autoPlay = isActive,
-                // Short clips (< 1 minute) loop in fullscreen too — same threshold
-                // as the inline-feed autoplay, so a clip that loops silently in
-                // the feed keeps looping (with sound) when escalated to fullscreen
-                // instead of stopping at the end and forcing a "tap play to
-                // replay" round-trip. Long videos keep finite playback so the
-                // scrubber lands at the end and the user can leave the viewer
-                // without the clip restarting in the background.
+                // Short clips (< 1 minute) loop in fullscreen too — same threshold as
+                // inline-feed autoplay so a clip that loops silently in the feed keeps
+                // looping (with sound) when escalated to fullscreen.
                 autoLoop = item.durationSec in 1..LOOP_FULLSCREEN_MAX_SEC,
                 showControls = true,
                 priority = DownloadPriority.Foreground,
                 initialAspect = item.posterAspect(),
                 modifier = Modifier.fillMaxSize(),
             )
-            // Touch the picker callback so an unpicked default still registers — keeps
-            // the parent's qualityChoices map authoritative for "what's playing now".
+            // Touch the picker callback so an unpicked default still registers.
             if (pickedQuality == null) {
                 LaunchedEffect(item.playbackFileId, item.qualities) { onQualityPick(quality) }
             }
@@ -409,14 +375,10 @@ private fun MediaPage(
 }
 
 /**
- * Pre-seed for [TdVideoPlayer.initialAspect]. Telegram serves a poster sized
- * to the same aspect ratio as the actual video stream (the poster is just a
- * down-sampled first frame), so the inline poster geometry is a faithful
- * predictor of the eventual [VideoSize] ExoPlayer will report. Returning
- * this lets [AspectRatioFrameLayout] letterbox correctly on first layout
- * instead of filling the parent and snapping to the right aspect only after
- * the decoder emits its first frame — closes the *"відкриваєш відео — на
- * долю секунди розтягується, потім стає нормальне"* glitch.
+ * Pre-seed for [TdVideoPlayer.initialAspect]. Telegram serves a poster sized to the
+ * same aspect ratio as the actual video stream (the poster is a down-sampled first
+ * frame), so the inline poster geometry is a faithful predictor of the eventual
+ * VideoSize the decoder will report.
  */
 private fun AlbumItem.posterAspect(): Float {
     val w = media.width
@@ -426,19 +388,15 @@ private fun AlbumItem.posterAspect(): Float {
 
 @Composable
 private fun ZoomableImage(item: AlbumItem.Photo) {
-    // Animatable trio: pinch updates flow through `snapTo` for instant feel, and
-    // the double-tap handler uses `animateTo` so the transition reads as a
-    // deliberate Telegram-style zoom-in instead of a single-frame jump. Keying
-    // by [item.fullscreen.fileId] resets state when the user pages to a new
-    // photo — no carry-over zoom across pager pages.
+    // Animatable trio: pinch updates flow through `snapTo` for instant feel, and the
+    // double-tap handler uses `animateTo` so the transition reads as a deliberate
+    // Telegram-style zoom-in instead of a single-frame jump.
     val scale = remember(item.fullscreen.fileId) { Animatable(1f) }
     val offsetX = remember(item.fullscreen.fileId) { Animatable(0f) }
     val offsetY = remember(item.fullscreen.fileId) { Animatable(0f) }
     val scope = rememberCoroutineScope()
     // Viewport size for offset clamping. Without bounds, pinch-pan let the user
-    // fling the image completely off-screen (visible black rectangle with no
-    // way back); Telegram clamps so the image edges can never cross the
-    // opposite viewport edge. Captured via [onSizeChanged] on the root Box.
+    // fling the image completely off-screen.
     var containerSize by remember { mutableStateOf(IntSize.Zero) }
 
     fun maxOffsetX(targetScale: Float): Float =
@@ -454,14 +412,9 @@ private fun ZoomableImage(item: AlbumItem.Photo) {
         modifier = Modifier
             .fillMaxSize()
             .onSizeChanged { containerSize = it }
-            // Double-tap to toggle between 1× and [DOUBLE_TAP_SCALE]. Animates
-            // through the same MotionScheme spring family the rest of the app
-            // uses so the zoom reads as part of the Material Expressive motion
-            // vocabulary (not a hand-rolled bounce). Tap-around behaviour:
-            // zooming in pulls the tap point toward viewport centre, so the
-            // user sees more of the area they pointed at — canonical Telegram /
-            // Instagram pattern. Single-finger taps (no double) pass through
-            // unconsumed so the swipe-to-dismiss handler keeps working.
+            // Double-tap to toggle between 1× and DOUBLE_TAP_SCALE. Single-finger taps
+            // (no double) pass through unconsumed so the swipe-to-dismiss handler keeps
+            // working.
             .pointerInput(item.fullscreen.fileId) {
                 detectTapGestures(onDoubleTap = { tap ->
                     val zoomed = scale.value > 1f
@@ -491,17 +444,9 @@ private fun ZoomableImage(item: AlbumItem.Photo) {
                     }
                 })
             }
-            // Pinch / pan: consume only when there's a real pinch (≥2 fingers)
-            // or the user has dragged one finger past the touch slop while
-            // zoomed. The slop gate is what lets double-tap-to-zoom-back
-            // actually fire — without it, the inevitable sub-pixel finger
-            // wobble during a tap on a zoomed photo would land here, get
-            // consumed as a "pan", and trip `detectTapGestures`'
-            // `waitForUpOrCancellation` into the cancellation path (Compose
-            // treats any consumed motion during a tap as a drag), killing
-            // the second tap before it could complete the double-tap.
-            // One-finger drag at scale == 1 stays unconsumed so the outer
-            // `Modifier.draggable` (swipe-to-dismiss) keeps working.
+            // Pinch / pan: consume only when there's a real pinch (≥2 fingers) or the
+            // user has dragged one finger past the touch slop while zoomed. The slop
+            // gate lets double-tap-to-zoom-back actually fire.
             .pointerInput(item.fullscreen.fileId) {
                 val slop = viewConfiguration.touchSlop
                 awaitEachGesture {
@@ -513,9 +458,6 @@ private fun ZoomableImage(item: AlbumItem.Photo) {
                         val event = awaitPointerEvent()
                         val activePointers = event.changes.count { it.pressed }
                         if (activePointers >= 2) multiFinger = true
-                        // Slop gate: only count a single-finger gesture as
-                        // pan once the cursor leaves the slop circle. Pinch
-                        // engages immediately (two fingers = unambiguous).
                         if (!multiFinger && scale.value > 1f && !passedSlop) {
                             val cur = event.changes.firstOrNull { it.pressed }?.position
                             if (cur != null && (cur - downPos).getDistance() > slop) {
@@ -553,27 +495,14 @@ private fun ZoomableImage(item: AlbumItem.Photo) {
                 translationY = offsetY.value,
             )
 
-        // Progressive enhancement: paint the inline variant first (typically
-        // already Ready in MediaCache from feed rendering — no spinner), then
-        // overlay the higher-resolution fullscreen variant once it lands.
-        // Coil's CROSSFADE_MS on the Ready-path AsyncImage in TdMediaImage
-        // fades the fullscreen image in over the inline one; without this
-        // stack the user would see the soft minithumb-blur on every viewer
-        // open until `w` finishes downloading.
-        //
-        // When the inline and fullscreen tiers resolve to the same fileId
-        // (small uploads where TDLib's pyramid only ships one variant at or
-        // above the inline target) we skip the bottom layer — drawing the
-        // same fileId twice would just double the Coil request churn for
-        // identical pixels.
+        // Progressive enhancement: paint the inline variant first (typically already
+        // Ready in MediaCache from feed rendering — no spinner), then overlay the
+        // higher-resolution fullscreen variant once it lands.
         if (!sameTier) {
             TdMediaImage(
                 media = item.media,
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
-                // No progress chrome on the bottom layer — the fullscreen
-                // layer above owns the spinner / failed / cancel affordance
-                // and rendering them twice would clash visually.
                 showProgress = false,
                 placeholderColor = null,
                 priority = DownloadPriority.Foreground,
@@ -584,8 +513,8 @@ private fun ZoomableImage(item: AlbumItem.Photo) {
             media = item.fullscreen,
             contentDescription = null,
             contentScale = ContentScale.Fit,
-            // Transparent placeholder so the inline layer underneath bleeds
-            // through during the fullscreen variant's download window.
+            // Transparent placeholder so the inline layer underneath bleeds through
+            // during the fullscreen variant's download window.
             placeholderColor = if (sameTier) MaterialTheme.colorScheme.surfaceContainerHigh else null,
             priority = DownloadPriority.Foreground,
             modifier = zoom,
@@ -593,13 +522,10 @@ private fun ZoomableImage(item: AlbumItem.Photo) {
     }
 }
 
-// What to prefetch via MediaCache for an item. For photos we pre-warm the
-// *fullscreen* variant — that's what ZoomableImage actually paints, and the
-// inline variant (if different) is overwhelmingly likely to already be Ready
-// from feed rendering. For videos / animations the prefetch target is the
-// poster image; the playback file itself is only fetched once the user lands
-// on that page (TdVideoPlayer triggers ensure on mount), so neighbour videos
-// don't compete with the one currently being watched.
+// What to prefetch via MediaCache for an item. For photos we pre-warm the *fullscreen*
+// variant — that's what ZoomableImage paints. For videos / animations the prefetch
+// target is the poster image; the playback file itself is only fetched once the user
+// lands on that page (TdVideoPlayer triggers ensure on mount).
 private fun AlbumItem.posterFileId(): Int? = when (this) {
     is AlbumItem.Photo -> fullscreen.fileId
     is AlbumItem.Video -> media.fileId
@@ -607,11 +533,8 @@ private fun AlbumItem.posterFileId(): Int? = when (this) {
 }
 
 /**
- * Observes [MediaCache] for the active page's file id and re-keys when the
- * page (or the picked video quality) changes. Returns [MediaState.Idle] when
- * [fileId] is null — web-mode posts and unplayable videos take that branch
- * so the Save / Copy chrome stays hidden. The flow is collected eagerly so
- * the buttons appear the instant the download lands without an extra recomposition.
+ * Observes [MediaCache] for the active page's file id and re-keys when the page (or
+ * the picked video quality) changes. Returns [MediaState.Idle] when [fileId] is null.
  */
 @Composable
 private fun produceMediaState(cache: MediaCache, fileId: Int?): State<MediaState> {
@@ -620,27 +543,17 @@ private fun produceMediaState(cache: MediaCache, fileId: Int?): State<MediaState
 }
 
 /**
- * Guest (web) mode bridge: resolve the active item's remote URL against
- * Coil's disk cache → local file path. Coil already loaded the bytes for
- * rendering the inline poster + fullscreen variant, so we can hand the
- * cached file straight to the Save / Copy / Share pipeline without
- * re-downloading. Returns null for video / animation kinds (Coil is
- * image-only) and for cold cache (Coil never loaded the URL, or evicted
- * it under disk pressure).
- *
- * Runs the cache lookup on IO so the open-snapshot read doesn't stall
- * the frame; viewer chrome appears one frame after the active page
- * resolves but well before the user can interact with it.
+ * Guest (web) mode bridge: resolve the active item's remote URL against Coil's disk
+ * cache → local file path. Coil already loaded the bytes for rendering the inline
+ * poster + fullscreen variant, so we can hand the cached file straight to the
+ * Save / Copy / Share pipeline without re-downloading.
  */
 @Composable
-private fun produceWebCachePath(item: AlbumItem?): State<String?> {
-    val context = LocalContext.current
+private fun produceWebCachePath(item: AlbumItem?, shareActions: MediaShareActions): State<String?> {
     val lookupUrl = item?.webCacheLookupUrl()
     return produceState<String?>(initialValue = null, lookupUrl) {
         value = if (lookupUrl.isNullOrBlank()) null
-        else withContext(Dispatchers.IO) {
-            MediaShareActions.coilCachePath(context, lookupUrl)
-        }
+        else shareActions.coilCachePath(lookupUrl)
     }
 }
 
@@ -652,11 +565,10 @@ private fun AlbumItem.webCacheLookupUrl(): String? = when (this) {
 }
 
 /**
- * URL handed to a text/plain Share when no local file backs the item. For
- * web-mode video / animation that's the CDN playback URL; for guest-mode
- * photos that's the same image URL Coil would resolve (but the Coil cache
- * pipeline is preferred — this fallback is only used when [readyPath] is
- * null in the chrome block above).
+ * URL handed to a text/plain Share when no local file backs the item. For web-mode
+ * video / animation that's the CDN playback URL; for guest-mode photos that's the
+ * same image URL Coil would resolve (but the Coil cache pipeline is preferred —
+ * this fallback is only used when [readyPath] is null).
  */
 private fun AlbumItem.webShareFallbackUrl(): String? = when (this) {
     is AlbumItem.Photo -> fullscreen.remoteUrl ?: media.remoteUrl
@@ -666,13 +578,7 @@ private fun AlbumItem.webShareFallbackUrl(): String? = when (this) {
 
 private const val MIN_SCALE = 1f
 private const val MAX_SCALE = 5f
-// Telegram / Instagram double-tap-to-zoom target. Strong enough that the
-// user reads the gesture as a deliberate zoom-in, conservative enough that
-// faces / typical photo subjects don't immediately bleed past the viewport
-// edges (re-engaging pan would still work, but the initial snap should
-// feel natural).
+// Telegram / Instagram double-tap-to-zoom target.
 private const val DOUBLE_TAP_SCALE = 2.5f
-// Same cutoff as INLINE_AUTOPLAY_MAX_SEC in PostBody — clips ≤ 60 s loop
-// silently inline, and now keep looping when the user escalates to fullscreen.
-// Longer videos run finite-playback so the scrubber lands at the end.
+// Same cutoff as INLINE_AUTOPLAY_MAX_SEC in PostBody.
 private const val LOOP_FULLSCREEN_MAX_SEC = 60
