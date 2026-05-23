@@ -88,7 +88,7 @@ internal fun MainScaffoldDialogs(
                     )
                 }
             },
-            reportRepository = graph.reportRepository,
+            reportController = graph.reportRepository,
             explainerStore = graph.reportExplainerStore,
         )
     }

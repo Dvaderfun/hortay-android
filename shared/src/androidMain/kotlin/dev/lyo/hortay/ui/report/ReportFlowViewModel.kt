@@ -7,14 +7,14 @@ package dev.lyo.hortay.ui.report
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import dev.lyo.hortay.data.report.ReportRepository
+import dev.lyo.hortay.data.report.ReportFlowController
+import dev.lyo.hortay.data.report.ReportOption
 import dev.lyo.hortay.data.report.ReportState
 import dev.lyo.hortay.data.report.ReportStep
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import org.drinkless.tdlib.TdApi
 
 /**
  * Composable-scoped ViewModel driving the multi-step TDLib ReportChat flow.
@@ -35,7 +35,7 @@ import org.drinkless.tdlib.TdApi
  * is needed.
  */
 class ReportFlowViewModel(
-    private val repo: ReportRepository,
+    private val repo: ReportFlowController,
     private val chatId: Long,
     private val messageId: Long?,
 ) : ViewModel() {
@@ -64,7 +64,7 @@ class ReportFlowViewModel(
         }
     }
 
-    fun selectOption(option: TdApi.ReportOption) {
+    fun selectOption(option: ReportOption) {
         viewModelScope.launch {
             _state.value = ReportState.Loading
             apply(repo.selectOption(chatId, messageId, option))
