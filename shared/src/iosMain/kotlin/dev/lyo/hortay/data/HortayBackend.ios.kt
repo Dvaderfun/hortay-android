@@ -1,5 +1,6 @@
 package dev.lyo.hortay.data
 
+import dev.lyo.hortay.data.posts.PublicHandleResult
 import dev.lyo.hortay.data.report.ReportDialogState
 import dev.lyo.hortay.data.report.ReportExplainerStore
 import dev.lyo.hortay.data.report.ReportFlowController
@@ -10,8 +11,11 @@ import dev.lyo.hortay.data.report.ReportStep
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flowOf
 
@@ -54,6 +58,49 @@ actual class HortayBackend(
 
     actual val feedPosts: StateFlow<PersistentList<TimelinePost>> =
         MutableStateFlow(persistentListOf<TimelinePost>()).asStateFlow()
+    actual val newArrivals: SharedFlow<TimelinePost> =
+        MutableSharedFlow<TimelinePost>().asSharedFlow()
+
+    actual suspend fun refreshFeed() {}
+    actual suspend fun loadOlder(chatId: Long): Int = 0
+    actual suspend fun loadHistoryAround(chatId: Long, anchorMessageId: Long): Boolean = false
+    actual suspend fun openChat(chatId: Long) {}
+    actual suspend fun closeChat(chatId: Long) {}
+    actual suspend fun loadChannelHistory(chatId: Long): Result<Unit> = Result.success(Unit)
+    actual fun hasWarmChannelHistory(chatId: Long): Boolean = false
+
+    actual suspend fun chatTitle(chatId: Long): String? = null
+    actual suspend fun channelSubscribers(chatId: Long): Int? = null
+    actual fun channelSubscribersCached(chatId: Long): Int? = null
+    actual suspend fun chatAvatar(chatId: Long): Pair<Int?, ByteArray?>? = null
+
+    actual suspend fun searchInChannel(chatId: Long, query: String): List<TimelinePost> = emptyList()
+
+    actual fun applyOptimisticReaction(
+        chatId: Long,
+        messageId: Long,
+        kind: ReactionKind,
+        nowChosen: Boolean,
+    ) {
+    }
+
+    actual fun applyOptimisticPollAnswer(chatId: Long, messageId: Long, chosenIndices: IntArray) {}
+    actual fun clearPollPending(chatId: Long, messageId: Long, revert: Boolean) {}
+
+    actual suspend fun toggleReaction(
+        chatId: Long,
+        messageId: Long,
+        kind: ReactionKind,
+        isChosen: Boolean,
+    ): Boolean = false
+
+    actual suspend fun setPollAnswer(chatId: Long, messageId: Long, optionIds: IntArray): Boolean = false
+
+    actual suspend fun resolvePublicHandle(handle: String): PublicHandleResult =
+        PublicHandleResult.NotFound
+
+    actual suspend fun resolveChatKind(chatId: Long): PublicHandleResult =
+        PublicHandleResult.NotFound
 
     actual fun observeThread(chatId: Long, candidateMessageIds: List<Long>): Flow<ThreadState> =
         flowOf(ThreadState.Loading)

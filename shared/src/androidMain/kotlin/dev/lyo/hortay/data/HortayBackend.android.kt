@@ -1,6 +1,7 @@
 package dev.lyo.hortay.data
 
 import dev.lyo.hortay.data.posts.PostsRepository
+import dev.lyo.hortay.data.posts.PublicHandleResult
 import dev.lyo.hortay.data.report.ReportDialogState
 import dev.lyo.hortay.data.report.ReportExplainerStore
 import dev.lyo.hortay.data.report.ReportFlowController
@@ -9,6 +10,7 @@ import dev.lyo.hortay.data.report.ReportRepository
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
@@ -65,6 +67,58 @@ actual class HortayBackend(
     }
 
     actual val feedPosts: StateFlow<PersistentList<TimelinePost>> get() = postsRepo.posts
+    actual val newArrivals: SharedFlow<TimelinePost> get() = postsRepo.newArrivals
+
+    actual suspend fun refreshFeed() = postsRepo.refresh()
+    actual suspend fun loadOlder(chatId: Long): Int = postsRepo.loadOlder(chatId)
+    actual suspend fun loadHistoryAround(chatId: Long, anchorMessageId: Long): Boolean =
+        postsRepo.loadHistoryAround(chatId, anchorMessageId)
+    actual suspend fun openChat(chatId: Long) = postsRepo.openChat(chatId)
+    actual suspend fun closeChat(chatId: Long) = postsRepo.closeChat(chatId)
+    actual suspend fun loadChannelHistory(chatId: Long): Result<Unit> =
+        postsRepo.loadChannelHistory(chatId)
+    actual fun hasWarmChannelHistory(chatId: Long): Boolean =
+        postsRepo.hasWarmChannelHistory(chatId)
+
+    actual suspend fun chatTitle(chatId: Long): String? = postsRepo.chatTitle(chatId)
+    actual suspend fun channelSubscribers(chatId: Long): Int? =
+        postsRepo.channelSubscribers(chatId)
+    actual fun channelSubscribersCached(chatId: Long): Int? =
+        postsRepo.channelSubscribersCached(chatId)
+    actual suspend fun chatAvatar(chatId: Long): Pair<Int?, ByteArray?>? =
+        postsRepo.chatAvatar(chatId)
+
+    actual suspend fun searchInChannel(chatId: Long, query: String): List<TimelinePost> =
+        postsRepo.searchInChannel(chatId, query)
+
+    actual fun applyOptimisticReaction(
+        chatId: Long,
+        messageId: Long,
+        kind: ReactionKind,
+        nowChosen: Boolean,
+    ) = postsRepo.applyOptimisticReaction(chatId, messageId, kind, nowChosen)
+
+    actual fun applyOptimisticPollAnswer(chatId: Long, messageId: Long, chosenIndices: IntArray) =
+        postsRepo.applyOptimisticPollAnswer(chatId, messageId, chosenIndices)
+
+    actual fun clearPollPending(chatId: Long, messageId: Long, revert: Boolean) =
+        postsRepo.clearPollPending(chatId, messageId, revert)
+
+    actual suspend fun toggleReaction(
+        chatId: Long,
+        messageId: Long,
+        kind: ReactionKind,
+        isChosen: Boolean,
+    ): Boolean = channelActions.toggleReaction(chatId, messageId, kind, isChosen)
+
+    actual suspend fun setPollAnswer(chatId: Long, messageId: Long, optionIds: IntArray): Boolean =
+        channelActions.setPollAnswer(chatId, messageId, optionIds)
+
+    actual suspend fun resolvePublicHandle(handle: String): PublicHandleResult =
+        postsRepo.resolvePublicHandle(handle)
+
+    actual suspend fun resolveChatKind(chatId: Long): PublicHandleResult =
+        postsRepo.resolveChatKind(chatId)
 
     actual fun observeThread(chatId: Long, candidateMessageIds: List<Long>): Flow<ThreadState> =
         commentsRepo.observeThread(chatId, candidateMessageIds)

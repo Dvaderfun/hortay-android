@@ -1,11 +1,13 @@
 package dev.lyo.hortay.data
 
+import dev.lyo.hortay.data.posts.PublicHandleResult
 import dev.lyo.hortay.data.report.ReportDialogState
 import dev.lyo.hortay.data.report.ReportExplainerStore
 import dev.lyo.hortay.data.report.ReportFlowController
 import dev.lyo.hortay.data.report.ReportLogStore
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -144,6 +146,133 @@ expect class HortayBackend {
      * surface a unified TDLib feed and the iOS Comments path never mounts.
      */
     val feedPosts: StateFlow<PersistentList<TimelinePost>>
+
+    /**
+     * Live single-post stream of fresh arrivals (TDLib `UpdateNewMessage` →
+     * `MessageMapper` pipeline on Android). Used by `NewPostsPill` to count
+     * arrivals while the user reads, and by `MediaAutoDownloader` to fan
+     * downloads off the same event. Emits nothing on iOS guest mode.
+     */
+    val newArrivals: SharedFlow<TimelinePost>
+
+    /** Replace `_posts` with a fresh snapshot from TDLib. PTR + cold-start path. */
+    suspend fun refreshFeed()
+
+    /**
+     * Load older history for [chatId] (channel-screen pagination). Returns the
+     * number of new posts that landed; zero means "no more history available".
+     */
+    suspend fun loadOlder(chatId: Long): Int
+
+    /**
+     * Pull a window of history around [anchorMessageId] in [chatId] so a deep
+     * link can render the anchor with context on either side. Returns `true`
+     * when the anchor (or an album sibling) is now in the merged feed.
+     */
+    suspend fun loadHistoryAround(chatId: Long, anchorMessageId: Long): Boolean
+
+    /** Bump TDLib's `OpenChat` refcount via [ChatPresence]. */
+    suspend fun openChat(chatId: Long)
+
+    /** Symmetric [openChat] partner. Wrap critical pairs in `NonCancellable`. */
+    suspend fun closeChat(chatId: Long)
+
+    /**
+     * Warm the per-channel history slice — drains `GetChatHistory` once and
+     * merges into `_posts`. Called from `pushChannel` before mounting the
+     * channel screen so OldestUnreadFirst lands with the full slice in one
+     * frame. Returns `Result.success` even when TDLib serves an empty page;
+     * `Result.failure` carries the underlying exception for retry chrome.
+     */
+    suspend fun loadChannelHistory(chatId: Long): Result<Unit>
+
+    /**
+     * True when [loadChannelHistory] has already drained successfully for
+     * [chatId] this session — push paths use this to short-circuit the
+     * await on cooldown (warm/cache opens stay instant).
+     */
+    fun hasWarmChannelHistory(chatId: Long): Boolean
+
+    /**
+     * Chat display title from TDLib's local cache (or one-shot `GetChat` on
+     * miss). Used by channel chrome and link-preview fallbacks.
+     */
+    suspend fun chatTitle(chatId: Long): String?
+
+    /**
+     * Subscriber count for [chatId] — supergroup-only. Suspending variant;
+     * hits TDLib once on cache miss, then served from the local mirror.
+     */
+    suspend fun channelSubscribers(chatId: Long): Int?
+
+    /**
+     * Synchronous mirror read of [channelSubscribers]. Returns null when the
+     * value hasn't been fetched yet — callers fall through to the suspending
+     * variant in that case. Composed-into `ChannelViewModel` seed paths.
+     */
+    fun channelSubscribersCached(chatId: Long): Int?
+
+    /**
+     * Chat avatar bundle: TDLib file id of the small (160 dp) variant plus
+     * the inline minithumbnail bytes (~200 B, embedded in every chat photo
+     * so we can paint something while the file downloads).
+     */
+    suspend fun chatAvatar(chatId: Long): Pair<Int?, ByteArray?>?
+
+    /**
+     * Search the channel's history for [query]. Returns matches as ready-to-
+     * render [TimelinePost]s. Throttled by TDLib's per-chat search limits.
+     */
+    suspend fun searchInChannel(chatId: Long, query: String): List<TimelinePost>
+
+    /**
+     * Optimistic reaction flip — paints the chip immediately on the local
+     * snapshot so the tap feels instant. The eventual `UpdateMessageInteractionInfo`
+     * from TDLib overwrites with server truth via the same `_posts.update`
+     * path. On RPC failure callers re-invoke with the inverted [nowChosen]
+     * to roll back the visual change.
+     */
+    fun applyOptimisticReaction(
+        chatId: Long,
+        messageId: Long,
+        kind: ReactionKind,
+        nowChosen: Boolean,
+    )
+
+    /**
+     * Optimistic poll-vote flip — marks selected rows with `isBeingChosen`
+     * so the tap shows a shimmer immediately. Eventual `UpdateMessageContent`
+     * settles the authoritative percentages.
+     */
+    fun applyOptimisticPollAnswer(chatId: Long, messageId: Long, chosenIndices: IntArray)
+
+    /** Drop `isBeingChosen` shimmer; if [revert] also reset `isChosen`. */
+    fun clearPollPending(chatId: Long, messageId: Long, revert: Boolean)
+
+    /** Send the reaction toggle to TDLib. Returns success for rollback gating. */
+    suspend fun toggleReaction(
+        chatId: Long,
+        messageId: Long,
+        kind: ReactionKind,
+        isChosen: Boolean,
+    ): Boolean
+
+    /** Send the poll-vote commit to TDLib. Returns success for rollback gating. */
+    suspend fun setPollAnswer(chatId: Long, messageId: Long, optionIds: IntArray): Boolean
+
+    /**
+     * Resolve a Telegram public `@handle` (without the leading `@`) to a
+     * typed [PublicHandleResult] — channel chat id / user id / bot reject /
+     * not-found. Drives the deep-link dispatcher and `@mention` taps.
+     */
+    suspend fun resolvePublicHandle(handle: String): PublicHandleResult
+
+    /**
+     * Twin of [resolvePublicHandle] keyed on a TDLib chat id. Used when we
+     * already have an id from a forward header / reply target and need to
+     * decide whether to push a channel screen or open the user sheet.
+     */
+    suspend fun resolveChatKind(chatId: Long): PublicHandleResult
 
     /**
      * Subscribe to live updates of a discussion thread. The flow emits
