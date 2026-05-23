@@ -31,7 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.lyo.hortay.data.posts.PostsRepository
+import dev.lyo.hortay.data.HortayBackend
 import dev.lyo.hortay.data.TimelinePost
 import dev.lyo.hortay.ui.components.HortayTopBar
 import dev.lyo.hortay.ui.components.HortayTopBarSize
@@ -55,11 +55,11 @@ import org.jetbrains.compose.resources.stringResource
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun ChannelsScreen(
-    repo: PostsRepository,
+    backend: HortayBackend,
     contentPadding: PaddingValues,
     onChannelClick: (chatId: Long) -> Unit,
 ) {
-    val posts by repo.posts.collectAsStateWithLifecycle()
+    val posts by backend.feedPosts.collectAsStateWithLifecycle()
     val channels = remember(posts) { aggregate(posts) }
     val listState = rememberLazyListState()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())

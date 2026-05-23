@@ -132,7 +132,7 @@ internal fun TabContentSwitcher(
                     }
                 }
                 NavTab.Channels -> ChannelsScreen(
-                    repo = graph.postsRepository,
+                    backend = graph.backend,
                     contentPadding = padding,
                     onChannelClick = { chatId ->
                         onPushChannel(chatId, null)
