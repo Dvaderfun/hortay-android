@@ -4,9 +4,10 @@ Continuation of Phase H. Target: every UI screen + repository compiles on iOS, t
 
 ---
 
-## Progress (session of 2026-05-23)
+## Progress (session of 2026-05-23 → 2026-05-24)
 
-**Counts:** 61 androidMain / 150 commonMain / 17 iosMain (started session at 62 / 142 / 15).
+**Counts:** 57 androidMain / 158 commonMain / 17 iosMain
+(started session at 61 / 150 / 17, started Phase H at 111 / 87 / 9).
 
 **Wave order revised bottom-up** because dependencies run leaf → root:
 `MainScaffoldHelpers → TimelineScreen → ReportFlowSheet`. Promote types
@@ -14,26 +15,51 @@ first, move leaves, then containers.
 
 ### Committed
 - **I-A** (`e30a894`) — platform surfaces + Settings/ReportLog/Theme to commonMain.
-  Added `applicationFilesPath` expect/actual, `LocalStatusBarController` lambda
-  slot, `dynamicColorSchemeOrNull` expect/actual. Moved `SettingsStore`,
-  `ReportLogStore`, `Theme.kt` to commonMain.
 - **Wave A partial** (`2ec888e`) — AutoDownload types + Stats types to commonMain.
-  Added `AutoDownloadFacade` interface; `AutoDownloadStore` (Android) implements it.
+- **Wave A finish** (`7591d76`) — `ReportOption` / `ReportState` / `ReportStep` /
+  `ReportFlowController` to commonMain; `ReportRepository` (Android) maps
+  `TdApi.ReportOption` → DTO. `TranslationsStore.Key` promoted to `TranslationKey`
+  + `TranslationsFacade` interface. `FolderTab` DTO + `FoldersFacade` interface
+  added in commonMain (no wiring yet — `ChatFoldersRepository` still vends
+  TdApi types; conversion lands when TimelineScreen moves).
+- **Wave B partial** (`6e2af6f`) — `MediaShareActions` interface +
+  `LocalMediaShareActions` in commonMain; `AndroidMediaShareActions` impl on
+  Android side. `FullScreenMediaViewer` + `MediaViewerHost` move to commonMain.
+- **Wave B finish** (`63cc015`) — `ReportFlowSheet` to commonMain;
+  `ReportFlowViewModel` collapsed into `rememberCoroutineScope` +
+  `remember(openToken)` (no `lifecycle-viewmodel-compose` dep needed in
+  commonMain). `LocalGuestReportDelegate` typealias slot added; the legacy
+  `GuestReportDelegator` class stays in androidMain until WebModeScaffold
+  moves.
+- **Wave C partial** (`ed16414`) — exposes the easier half of the backend
+  surface: `isAuthenticated`, `logOut`, `reportController`, `reportDialogs`,
+  `reportLogStore`, `reportExplainerStore`, `settingsStore`, `translations`.
+  `IosAppGraph` now owns its own `SettingsStore` / `ReportLogStore` /
+  `ReportExplainerStore` so the iOS stub backend has real instances to vend.
 
 ### Next session resume points
-1. **Finish Wave A**: split `ReportRepository.kt` — move `ReportOption`,
-   `ReportState`, `ReportStep` to `commonMain/data/report/`. Keep the
-   `TdApi.ReportOption` in commonMain as a plain `ReportOption(id: ByteArray,
-   label: String)` DTO. Android-side `ReportRepository` maps TdApi→DTO. Define
-   `ReportFlowController` interface in commonMain. Promote `TranslationsStore.Key`
-   to commonMain `TranslationKey`. Add `FolderTab` DTO + `TranslationsFacade`
-   interface.
-2. **Wave B**: move `ReportFlowSheet`, `ReportFlowViewModel`, `MediaShareActions`
-   (lambda slot via `LocalPlatformImageSaver`), `FullScreenMediaViewer`,
-   `MediaViewerHost`. `GuestReportDelegator` → `LocalGuestReportDelegate` slot.
-3. **Wave C**: expand `HortayBackend` with feed/channel/translations/folders/
-   stats/reports/migration methods.
-4. **Waves D-H, then I-D + I-E** per the plan below.
+1. **Finish Wave C**: add the feed-orchestration half of `HortayBackend` —
+   `feedPosts` already exists; add `newArrivals`, `refreshFeed`, `loadOlder`,
+   `loadHistoryAround`, `openChat`, `closeChat`, `loadChannelHistory`,
+   `hasWarmChannelHistory`, `chatTitle`, `channelSubscribersFlow`, `chatAvatar`,
+   `searchInChannel`, the optimistic-reaction quartet
+   (`applyOptimisticReaction` / `applyOptimisticPollAnswer` / `clearPollPending`
+   / `toggleReaction` / `setPollAnswer`), and `resolvePublicHandle` /
+   `resolveChatKind`. Stats + AutoDownloadStore exposures too (the facades
+   landed already in `2ec888e`).
+2. **Wave D wave 1**: move `MainScaffoldDialogs`, `NavOverlayRenderer`,
+   `TabContentSwitcher` (already mostly KMP — refactor each to take
+   `backend: HortayBackend` + the stores they read, drop direct AppGraph
+   reference).
+3. **Wave D wave 2 (the big one)**: `MainScaffold` (~557 lines).
+4. **Wave D wave 3**: `TimelineScreen`, `ChannelScreen`, `ChannelViewModel` —
+   biggest UI bite; split across two commits if needed.
+5. **Wave D wave 4-6**: WebModeScaffold + AddChannelSheet +
+   MigrationProposalSheet; SettingsScreen + AutoDownloadScreen;
+   ReportFlowSheet remnants (`MainScaffoldDialogs` still wires it from
+   `graph` — needs to switch to `backend.reportController`).
+6. **Wave D wave 7**: `Theme.kt` — last UI file.
+7. **I-D + I-E** per the plan below.
 
 ---
 
@@ -43,9 +69,9 @@ first, move leaves, then containers.
 
 | Source set | Files |
 |---|---|
-| `androidMain/kotlin` | **62** |
-| `commonMain/kotlin`  | **142** |
-| `iosMain/kotlin`     | **15** |
+| `androidMain/kotlin` | **57** |
+| `commonMain/kotlin`  | **158** |
+| `iosMain/kotlin`     | **17** |
 
 Down from 111 / 87 / 9 at the start of Phase H. Both `:androidApp:assembleDebug` and `:shared:compileKotlinIosSimulatorArm64` are green at every commit on the branch.
 
