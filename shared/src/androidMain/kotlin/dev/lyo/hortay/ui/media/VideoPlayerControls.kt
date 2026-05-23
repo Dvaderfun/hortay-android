@@ -28,7 +28,6 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -44,8 +43,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
-import androidx.media3.common.Player
-import androidx.media3.exoplayer.ExoPlayer
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.lyo.hortay.ui.icons.Symbol
 import dev.lyo.hortay.ui.theme.HortayExpressive
 import dev.lyo.hortay.ui.theme.MorphShape
@@ -54,8 +52,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 
 /**
- * Custom Compose chrome painted over an [ExoPlayer]'s video surface. Replaces the
- * stock `media3` `PlayerView` controller — that one's grey scrubber + blocky
+ * Custom Compose chrome painted over a [VideoPlayer]'s output surface. Replaces
+ * the stock `media3` `PlayerView` controller — that one's grey scrubber + blocky
  * pause button speaks 2010s system-default and visually clashed with everything
  * else in the app, which is end-to-end Material 3 Expressive (polygon shapes,
  * wavy progress, motion-token transitions).
@@ -94,65 +92,38 @@ import kotlinx.coroutines.isActive
  */
 @Composable
 fun VideoPlayerControls(
-    player: ExoPlayer,
+    player: VideoPlayer,
     modifier: Modifier = Modifier,
 ) {
-    val isPlaying by produceState(player.isPlaying, player) {
-        val listener = object : Player.Listener {
-            override fun onIsPlayingChanged(playing: Boolean) { value = playing }
-        }
-        player.addListener(listener)
-        awaitDispose { player.removeListener(listener) }
-    }
-    // STATE_ENDED requires special-cased Play: ExoPlayer's `play()` is a no-op
+    val isPlaying by player.isPlaying.collectAsStateWithLifecycle()
+    // STATE_ENDED requires special-cased Play: a player's `play()` is a no-op
     // when position is already past `duration`, so the centre button must
     // `seekTo(0)` before resuming or the user sees a dead tap. Looping
-    // (`REPEAT_MODE_ONE`) handles this automatically — this branch only
-    // matters for finite-playback videos in fullscreen.
-    val isEnded by produceState(player.playbackState == Player.STATE_ENDED, player) {
-        val listener = object : Player.Listener {
-            override fun onPlaybackStateChanged(state: Int) {
-                value = state == Player.STATE_ENDED
-            }
-        }
-        player.addListener(listener)
-        awaitDispose { player.removeListener(listener) }
-    }
-    val durationMs by produceState(player.duration.coerceAtLeast(0L), player) {
-        val listener = object : Player.Listener {
-            override fun onPlaybackStateChanged(state: Int) {
-                if (state == Player.STATE_READY) {
-                    value = player.duration.coerceAtLeast(0L)
-                }
-            }
-        }
-        player.addListener(listener)
-        awaitDispose { player.removeListener(listener) }
-    }
-    // Position is polled rather than push-based: ExoPlayer doesn't emit per-ms
-    // updates and a 100 ms tick is plenty for the slider thumb to track playback
-    // smoothly at human-readable resolution. Falls back to a slower beat while
-    // paused — no sense waking the dispatcher 10× per second to read the same
-    // number.
-    val positionMs by produceState(player.currentPosition.coerceAtLeast(0L), player) {
+    // handles this automatically — this branch only matters for finite-playback
+    // videos in fullscreen.
+    val playbackState by player.playbackState.collectAsStateWithLifecycle()
+    val isEnded = playbackState == PlaybackState.Ended
+    val durationMs by player.durationMs.collectAsStateWithLifecycle()
+
+    // Position is polled rather than push-based: video players don't emit
+    // per-ms updates and a 100 ms tick is plenty for the slider thumb to track
+    // playback smoothly at human-readable resolution. Falls back to a slower
+    // beat while paused — no sense waking the dispatcher 10× per second to
+    // read the same number.
+    val positionMs by produceState(0L, player, isPlaying) {
         while (isActive) {
-            value = player.currentPosition.coerceAtLeast(0L)
-            delay(if (player.isPlaying) 100L else 500L)
+            value = player.currentPositionMs()
+            delay(if (isPlaying) 100L else 500L)
         }
     }
 
-    // Mirror of player.volume kept in compose state for the mute toggle's
-    // immediate visual feedback. ExoPlayer.Listener.onVolumeChanged also fires
-    // (e.g. system volume slider, route changes) — wired so the icon stays
-    // truthful regardless of who flipped the switch.
-    var muted by remember(player) { mutableStateOf(player.volume == 0f) }
-    DisposableEffect(player) {
-        val listener = object : Player.Listener {
-            override fun onVolumeChanged(volume: Float) { muted = volume == 0f }
-        }
-        player.addListener(listener)
-        onDispose { player.removeListener(listener) }
-    }
+    // Mirror of player.muted kept in compose state for the mute toggle's
+    // immediate visual feedback. Also collected from the player's isMuted
+    // flow so external volume changes (system volume slider, route changes)
+    // keep the icon truthful regardless of who flipped the switch.
+    val mutedFlow by player.isMuted.collectAsStateWithLifecycle()
+    var muted by remember(player) { mutableStateOf(mutedFlow) }
+    LaunchedEffect(mutedFlow) { muted = mutedFlow }
 
     // Auto-hide: any user-meaningful event bumps the tick; the LaunchedEffect
     // below schedules a 3 s hide off the latest tick. Pausing keeps controls
@@ -172,9 +143,9 @@ fun VideoPlayerControls(
         }
     }
 
-    // Seek-bar drag state. While the Slider thumb is being dragged we display the
-    // user's in-flight value instead of [positionMs] — the player's reported
-    // position lags ExoPlayer's seek RPC by hundreds of ms, so without this
+    // Seek-bar drag state. While the Slider thumb is being dragged we display
+    // the user's in-flight value instead of [positionMs] — the player's
+    // reported position lags the seek RPC by hundreds of ms, so without this
     // shadow the thumb visibly snaps back to "yesterday" between drag updates
     // and the seek RPC committing.
     var isDragging by remember { mutableStateOf(false) }
@@ -203,8 +174,8 @@ fun VideoPlayerControls(
                         // so a window resize / rotation between mount and the
                         // first double-tap still picks the correct half-line.
                         val width = size.width.toFloat()
-                        val pos = player.currentPosition.coerceAtLeast(0L)
-                        val total = player.duration.coerceAtLeast(0L)
+                        val pos = player.currentPositionMs()
+                        val total = durationMs
                         val target = if (offset.x < width / 2f) {
                             (pos - SEEK_STEP_MS).coerceAtLeast(0L)
                         } else if (total > 0L) {
@@ -283,7 +254,7 @@ fun VideoPlayerControls(
                     muted = muted,
                     onToggleMute = {
                         val next = !muted
-                        player.volume = if (next) 0f else 1f
+                        player.muted = next
                         muted = next
                         showControls()
                     },

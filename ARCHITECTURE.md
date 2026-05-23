@@ -72,7 +72,7 @@ DI built in `HortayApp.onCreate` as `graph: AppGraph`, accessed via `(applicatio
 | `org.drinkless.tdlib` | TDLib upstream FQCN. Renaming breaks JNI symbol lookup in libtdjni.so. |
 | Release keystore (`storeFile` + `keyAlias` from `keystore.properties`) | Release signing identity. Losing it = losing the upgrade path for installed users. |
 | `HortayApp.graph` | Process-singleton DI root. |
-| `LocalMediaCache` / `LocalCustomEmoji` / `LocalExoPlayerPool` / `LocalReadCursors` | CompositionLocal heavy-singleton injection. |
+| `LocalMediaCache` / `LocalCustomEmoji` / `LocalVideoPlayerPool` / `LocalReadCursors` | CompositionLocal heavy-singleton injection. |
 
 ## Hard rules
 

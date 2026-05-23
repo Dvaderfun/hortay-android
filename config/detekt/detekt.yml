@@ -104,14 +104,14 @@ Compose:
     active: true
   CompositionLocalAllowlist:
     # The project ships a small set of hand-rolled CompositionLocals
-    # (LocalMediaCache, LocalCustomEmoji, LocalExoPlayerPool, LocalReadCursors,
+    # (LocalMediaCache, LocalCustomEmoji, LocalVideoPlayerPool, LocalReadCursors,
     # LocalUserProfileOpener, LocalScrollGate). Enforce the allowlist so a new
     # one requires deliberate update to this file + ARCHITECTURE.md.
     active: true
     allowedCompositionLocals:
       - LocalMediaCache
       - LocalCustomEmoji
-      - LocalExoPlayerPool
+      - LocalVideoPlayerPool
       - LocalReadCursors
       - LocalUserProfileOpener
       - LocalScrollGate

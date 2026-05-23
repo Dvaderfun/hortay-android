@@ -19,9 +19,9 @@ import dev.lyo.hortay.ui.auth.AuthScreen
 import dev.lyo.hortay.ui.main.MainScaffold
 import dev.lyo.hortay.ui.media.LocalCustomEmoji
 import dev.lyo.hortay.ui.media.LocalCustomEmojiAnimator
-import dev.lyo.hortay.ui.media.LocalExoPlayerPool
 import dev.lyo.hortay.ui.media.LocalMediaCache
 import dev.lyo.hortay.ui.media.LocalStickerOutline
+import dev.lyo.hortay.ui.media.LocalVideoPlayerPool
 import dev.lyo.hortay.ui.media.LocalWebHttpClient
 import dev.lyo.hortay.ui.media.MediaViewerHost
 import dev.lyo.hortay.ui.theme.HortayTheme
@@ -64,7 +64,7 @@ class MainActivity : ComponentActivity() {
                     LocalCustomEmoji provides graph.customEmoji,
                     LocalCustomEmojiAnimator provides graph.customEmojiAnimator,
                     LocalStickerOutline provides graph.stickerOutline,
-                    LocalExoPlayerPool provides graph.exoPlayerPool,
+                    LocalVideoPlayerPool provides graph.videoPlayerPool,
                     LocalWebHttpClient provides graph.webHttpClient,
                 ) {
                     Surface(modifier = Modifier.fillMaxSize()) {

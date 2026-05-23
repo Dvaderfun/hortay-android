@@ -1,6 +1,5 @@
 package dev.lyo.hortay.ui.timeline
 
-import android.view.TextureView
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -38,18 +37,17 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.media3.common.MediaItem
-import androidx.media3.common.Player
-import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.lyo.hortay.data.DownloadPriority
 import dev.lyo.hortay.data.PostContent
 import dev.lyo.hortay.ui.icons.Symbol
-import dev.lyo.hortay.ui.media.LocalExoPlayerPool
+import dev.lyo.hortay.ui.media.LocalVideoPlayerPool
 import dev.lyo.hortay.ui.media.TdMediaImage
+import dev.lyo.hortay.ui.media.VideoPlayerView
+import dev.lyo.hortay.ui.media.VideoResizeMode
 import dev.lyo.hortay.ui.media.rememberMediaBinding
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -149,9 +147,9 @@ internal fun VideoNotePlayerBubble(
 }
 
 /**
- * Inner renderer — mounts the [androidx.media3.exoplayer.ExoPlayer], the
- * [TextureView], and reports position / duration up to [VideoNoteChrome]
- * via [sharedState].
+ * Inner renderer — mounts the pooled [dev.lyo.hortay.ui.media.VideoPlayer],
+ * the [VideoPlayerView], and reports position / duration up to
+ * [VideoNoteChrome] via [sharedState].
  *
  * Lives inside `key(muted)` because the muted regime determines which pool
  * slot we acquire (muted ones are built without an AudioTrack — see class
@@ -159,7 +157,6 @@ internal fun VideoNotePlayerBubble(
  * is disposed (the old player rides back into the pool via
  * [DisposableEffect]'s onDispose) and a fresh one mounts with the new regime.
  */
-@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
 private fun VideoNoteRenderer(
     fileId: Int,
@@ -167,7 +164,7 @@ private fun VideoNoteRenderer(
     playing: Boolean,
     sharedState: VideoNoteSharedState,
 ) {
-    val pool = LocalExoPlayerPool.current
+    val pool = LocalVideoPlayerPool.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
     val binding = rememberMediaBinding(
@@ -176,87 +173,72 @@ private fun VideoNoteRenderer(
     )
     val readyPath = binding.readyPath
 
-    val exoPlayer = remember {
+    val player = remember {
         pool.acquire(muted = muted).apply {
             playWhenReady = playing
-            repeatMode = Player.REPEAT_MODE_ONE
-            volume = if (muted) 0f else 1f
+            repeatModeOne = true
+            this.muted = muted
         }
     }
 
-    LaunchedEffect(playing) { exoPlayer.playWhenReady = playing }
+    LaunchedEffect(playing) { player.playWhenReady = playing }
 
     LaunchedEffect(readyPath) {
         if (readyPath.isNullOrEmpty()) return@LaunchedEffect
-        exoPlayer.setMediaItem(MediaItem.fromUri("file://$readyPath"))
-        exoPlayer.prepare()
+        player.setSource("file://$readyPath")
         // Seek to where the previous (muted / unmuted) regime left off so
         // the user doesn't see a restart when they toggle audio mid-clip.
-        if (sharedState.savedPositionMs > 0L) exoPlayer.seekTo(sharedState.savedPositionMs)
-        exoPlayer.playWhenReady = playing
+        if (sharedState.savedPositionMs > 0L) player.seekTo(sharedState.savedPositionMs)
+        player.playWhenReady = playing
     }
 
-    DisposableEffect(exoPlayer) {
-        val listener = object : Player.Listener {
-            override fun onPlaybackStateChanged(state: Int) {
-                if (state == Player.STATE_READY) {
-                    sharedState.durationMs = exoPlayer.duration.coerceAtLeast(0L)
-                }
-            }
-        }
+    val durationMsState by player.durationMs.collectAsStateWithLifecycle()
+    LaunchedEffect(durationMsState) {
+        if (durationMsState > 0L) sharedState.durationMs = durationMsState
+    }
+
+    DisposableEffect(player) {
         val lifecycleObserver = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_PAUSE -> exoPlayer.pause()
-                Lifecycle.Event.ON_RESUME -> if (playing) exoPlayer.play()
+                Lifecycle.Event.ON_PAUSE -> player.pause()
+                Lifecycle.Event.ON_RESUME -> if (playing) player.play()
                 else -> Unit
             }
         }
-        exoPlayer.addListener(listener)
         lifecycleOwner.lifecycle.addObserver(lifecycleObserver)
         onDispose {
             // Preserve playhead for the next regime so the audio toggle is
             // perceptually seamless. The reader (next mount of this
-            // composable) seeks to this value after [prepare].
-            sharedState.savedPositionMs = exoPlayer.currentPosition.coerceAtLeast(0L)
-            exoPlayer.removeListener(listener)
+            // composable) seeks to this value after [setSource].
+            sharedState.savedPositionMs = player.currentPositionMs()
             lifecycleOwner.lifecycle.removeObserver(lifecycleObserver)
-            pool.release(exoPlayer, muted = muted)
+            pool.release(player, muted = muted)
         }
     }
 
     // Position polling — 100 ms while playing keeps the ring smooth at
     // human-perceivable rates; 500 ms while paused (the dispatcher doesn't
     // need to wake 10× per second to read the same number).
-    val positionMs by produceState(0L, exoPlayer) {
+    val isPlayingState by player.isPlaying.collectAsStateWithLifecycle()
+    val positionMs by produceState(0L, player, isPlayingState) {
         while (isActive) {
-            value = exoPlayer.currentPosition.coerceAtLeast(0L)
-            delay(if (exoPlayer.isPlaying) 100L else 500L)
+            value = player.currentPositionMs()
+            delay(if (isPlayingState) 100L else 500L)
         }
     }
     LaunchedEffect(positionMs) {
         sharedState.positionMs = positionMs
     }
 
-    AndroidView(
+    // ZOOM mode crops to fill the circle. FIT would letterbox inside a square
+    // but the bubble would show empty corners if the source were ever
+    // non-square (TDLib permits it even though the official client doesn't
+    // capture that way).
+    VideoPlayerView(
+        player = player,
         modifier = Modifier.fillMaxSize(),
-        factory = { ctx ->
-            val texture = TextureView(ctx).apply { isOpaque = false }
-            exoPlayer.setVideoTextureView(texture)
-            AspectRatioFrameLayout(ctx).apply {
-                // ZOOM mode crops to fill the circle. FIT would letterbox
-                // inside a square but the bubble would show empty corners
-                // if the source were ever non-square (TDLib permits it
-                // even though the official client doesn't capture that
-                // way).
-                resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                setAspectRatio(1f)
-                setBackgroundColor(android.graphics.Color.TRANSPARENT)
-                addView(texture)
-            }
-        },
-        onRelease = { frame ->
-            exoPlayer.clearVideoTextureView(frame.getChildAt(0) as TextureView)
-        },
+        aspectRatio = 1f,
+        resizeMode = VideoResizeMode.Zoom,
     )
 }
 
