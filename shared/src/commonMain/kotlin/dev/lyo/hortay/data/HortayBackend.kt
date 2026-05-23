@@ -117,6 +117,12 @@ expect class HortayBackend {
     suspend fun leaveChat(chatId: Long)
 
     /**
+     * Join a chat by invite link. Returns the resolved chat id on success
+     * (callers push into it), null on failure (surfaced via `UserMessageBus`).
+     */
+    suspend fun joinByInvite(inviteLink: String): Long?
+
+    /**
      * Fetch the public-profile bundle for [userId] (name, handle, bio, avatar,
      * presence, bot/support flags, personal channel link, birthday, common
      * groups count). Returns null if the user isn't visible or TDLib rejects

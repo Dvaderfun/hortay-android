@@ -546,7 +546,9 @@ fun MainScaffold(graph: AppGraph) {
             }
 
             MainScaffoldDialogs(
-                graph = graph,
+                backend = graph.backend,
+                linkDialogs = graph.linkDialogs,
+                userMessages = graph.userMessages,
                 scope = scope,
                 pendingUserId = pendingUserId,
                 onUserSheetDismiss = { pendingUserId = null },
