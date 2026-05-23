@@ -1196,9 +1196,9 @@ fun TimelineScreen(
             val t = translations ?: return null
             val map = translationsState.value
             val lang = t.currentTargetLanguage()
-            map[dev.lyo.hortay.data.TranslationsStore.Key(post.chatId, post.id, lang)]?.let { return it }
+            map[dev.lyo.hortay.data.TranslationKey(post.chatId, post.id, lang)]?.let { return it }
             post.albumMessageIds.forEach { id ->
-                map[dev.lyo.hortay.data.TranslationsStore.Key(post.chatId, id, lang)]?.let { return it }
+                map[dev.lyo.hortay.data.TranslationKey(post.chatId, id, lang)]?.let { return it }
             }
             return null
         }

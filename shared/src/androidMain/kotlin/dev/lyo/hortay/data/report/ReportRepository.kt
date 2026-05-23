@@ -8,55 +8,10 @@ package dev.lyo.hortay.data.report
 import dev.lyo.hortay.data.StringResolver
 import dev.lyo.hortay.data.TdClient
 import dev.lyo.hortay.data.TdSender
-import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
 import org.drinkless.tdlib.TdApi
 import hortay.shared.generated.resources.Res
 import hortay.shared.generated.resources.error_generic
-
-/**
- * States surfaced to [ReportFlowSheet] during the multi-step TDLib ReportChat flow.
- *
- * Flow: [Idle] → [Loading] → one of:
- *   • [OptionSelection]  — server returned options; user picks one
- *   • [TextRequired]     — server wants a text explanation; user types and submits
- *   • [Success]          — server accepted the report; UI should dismiss
- *   • [Error]            — unexpected failure; user can retry
- *   • [FloodWait]        — rate-limited; show retry-after countdown
- *
- * Why sealed interface rather than enum: the data-bearing variants (OptionSelection,
- * TextRequired, Error, FloodWait) would bloat an enum with nullable fields; sealed
- * interface keeps each variant's contract explicit and Kotlin-exhaustive.
- */
-sealed interface ReportState {
-    data object Idle : ReportState
-    data object Loading : ReportState
-    data class OptionSelection(
-        val title: String,
-        val options: ImmutableList<TdApi.ReportOption>,
-    ) : ReportState
-    data class TextRequired(
-        val isOptional: Boolean,
-    ) : ReportState
-    data object Success : ReportState
-    /** Generic failure — includes non-flood-wait TDLib errors. */
-    data class Error(val message: String) : ReportState
-    /** TDLib 420 / 429 FLOOD_WAIT. [retryAfterSeconds] == 0 means "unknown delay". */
-    data class FloodWait(val retryAfterSeconds: Int) : ReportState
-}
-
-/**
- * Repository-internal step type. Carries the server [optionId] alongside the
- * public-facing [ReportState] so the ViewModel can stash it for the eventual
- * [ReportRepository.submitText] call without leaking [ByteArray] into the
- * public [ReportState] graph (where [ByteArray] equality breaks [@Stable]
- * analysis and StateFlow dedup).
- */
-data class ReportStep(
-    val state: ReportState,
-    /** Non-null only when [state] is [ReportState.TextRequired]. */
-    val pendingOptionId: ByteArray? = null,
-)
 
 /**
  * Drives the TDLib dynamic ReportChat flow for the authenticated mode.
@@ -79,23 +34,23 @@ class ReportRepository(
     private val td: TdSender,
     private val resolver: StringResolver,
     private val log: ReportLogStore,
-) {
+) : ReportFlowController {
     /**
      * Begin a report against [chatId] / [messageId].
-     * Pass an empty [optionId] and empty [text] per TDLib spec for the initial request.
+     * Pass an empty option id and empty [text] per TDLib spec for the initial request.
      */
-    suspend fun start(chatId: Long, messageId: Long?): ReportStep =
+    override suspend fun start(chatId: Long, messageId: Long?): ReportStep =
         sendReport(chatId, messageId, byteArrayOf(), "")
 
-    /** User selected one of the server-provided [TdApi.ReportOption]s. */
-    suspend fun selectOption(
+    /** User selected one of the server-provided options. */
+    override suspend fun selectOption(
         chatId: Long,
         messageId: Long?,
-        option: TdApi.ReportOption,
+        option: ReportOption,
     ): ReportStep = sendReport(chatId, messageId, option.id, "")
 
     /** User typed text (or tapped Skip when text is optional). */
-    suspend fun submitText(
+    override suspend fun submitText(
         chatId: Long,
         messageId: Long?,
         optionId: ByteArray,
@@ -134,7 +89,9 @@ class ReportRepository(
             ReportStep(
                 ReportState.OptionSelection(
                     title = result.title,
-                    options = result.options.toList().toImmutableList(),
+                    options = result.options
+                        .map { ReportOption(id = it.id, label = it.text) }
+                        .toImmutableList(),
                 ),
             )
         is TdApi.ReportChatResultTextRequired ->

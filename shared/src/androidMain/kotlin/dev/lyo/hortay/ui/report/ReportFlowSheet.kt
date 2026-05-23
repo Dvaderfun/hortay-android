@@ -50,7 +50,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.lyo.hortay.data.report.ReportExplainerStore
-import dev.lyo.hortay.data.report.ReportRepository
+import dev.lyo.hortay.data.report.ReportFlowController
+import dev.lyo.hortay.data.report.ReportOption
 import dev.lyo.hortay.data.report.ReportState
 import dev.lyo.hortay.ui.icons.Symbol
 import kotlinx.coroutines.flow.first
@@ -104,7 +105,7 @@ fun ReportFlowSheet(
      * so no snackbar fires.
      */
     onDismiss: (success: Boolean) -> Unit,
-    reportRepository: ReportRepository,
+    reportController: ReportFlowController,
     explainerStore: ReportExplainerStore,
 ) {
     val scope = rememberCoroutineScope()
@@ -144,7 +145,7 @@ fun ReportFlowSheet(
         factory = object : androidx.lifecycle.ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T =
-                ReportFlowViewModel(reportRepository, chatId, messageId) as T
+                ReportFlowViewModel(reportController, chatId, messageId) as T
         },
     )
 
@@ -233,8 +234,8 @@ private fun LoadingContent() {
 @Composable
 private fun OptionSelectionContent(
     title: String,
-    options: List<org.drinkless.tdlib.TdApi.ReportOption>,
-    onSelect: (org.drinkless.tdlib.TdApi.ReportOption) -> Unit,
+    options: List<ReportOption>,
+    onSelect: (ReportOption) -> Unit,
 ) {
     Text(
         text = title,
@@ -251,7 +252,7 @@ private fun OptionSelectionContent(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = option.text,
+                text = option.label,
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.weight(1f),
             )

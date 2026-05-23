@@ -50,13 +50,13 @@ class TranslationsStore(
     private val userMessages: UserMessageBus,
     private val connection: StateFlow<ConnectionStatus>,
     private val res: StringResolver,
-) {
+) : TranslationsFacade {
 
-    private val _translations = MutableStateFlow<Map<Key, FormattedText>>(emptyMap())
-    val translations: StateFlow<Map<Key, FormattedText>> = _translations.asStateFlow()
+    private val _translations = MutableStateFlow<Map<TranslationKey, FormattedText>>(emptyMap())
+    override val translations: StateFlow<Map<TranslationKey, FormattedText>> = _translations.asStateFlow()
 
     /** Coalesce concurrent translate calls per key so we only hit TDLib once. */
-    private val inflight = mutableMapOf<Key, Mutex>()
+    private val inflight = mutableMapOf<TranslationKey, Mutex>()
     private val inflightLock = Mutex()
 
     init {
@@ -77,9 +77,9 @@ class TranslationsStore(
         ).launchIn(scope)
     }
 
-    suspend fun translate(chatId: Long, messageId: Long): Boolean {
+    override suspend fun translate(chatId: Long, messageId: Long): Boolean {
         val target = preferredTargetLanguage()
-        val key = Key(chatId, messageId, target)
+        val key = TranslationKey(chatId, messageId, target)
         if (_translations.value.containsKey(key)) return true
 
         val mutex = inflightLock.withLock { inflight.getOrPut(key) { Mutex() } }
@@ -102,9 +102,9 @@ class TranslationsStore(
     }
 
     /** Drop cached translations for this message in the **current** target language. */
-    fun clear(chatId: Long, messageId: Long) {
+    override fun clear(chatId: Long, messageId: Long) {
         val target = preferredTargetLanguage()
-        val key = Key(chatId, messageId, target)
+        val key = TranslationKey(chatId, messageId, target)
         _translations.update { it - key }
     }
 
@@ -120,16 +120,16 @@ class TranslationsStore(
         }
     }
 
-    fun isTranslated(chatId: Long, messageId: Long): Boolean =
+    override fun isTranslated(chatId: Long, messageId: Long): Boolean =
         translation(chatId, messageId) != null
 
-    fun translation(chatId: Long, messageId: Long): FormattedText? {
+    override fun translation(chatId: Long, messageId: Long): FormattedText? {
         val target = preferredTargetLanguage()
-        return _translations.value[Key(chatId, messageId, target)]
+        return _translations.value[TranslationKey(chatId, messageId, target)]
     }
 
     /** Read the current target language; exposed so composables can build keys for direct lookup. */
-    fun currentTargetLanguage(): String = preferredTargetLanguage()
+    override fun currentTargetLanguage(): String = preferredTargetLanguage()
 
     /**
      * Two-letter ISO code TDLib accepts. Fallback to "en" so a phone in an unsupported
@@ -138,8 +138,6 @@ class TranslationsStore(
      */
     private fun preferredTargetLanguage(): String =
         Locale.getDefault().language.takeIf { it.isNotBlank() } ?: "en"
-
-    data class Key(val chatId: Long, val messageId: Long, val language: String)
 
     /**
      * Wipe cached translations + in-flight request mutexes. Called from
