@@ -32,12 +32,10 @@ import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.lyo.hortay.R
 import dev.lyo.hortay.data.ChannelActionsRepository
 import dev.lyo.hortay.data.IgnoredChannelsStore
 import dev.lyo.hortay.data.web.WebPostAdapter
@@ -46,6 +44,15 @@ import dev.lyo.hortay.ui.components.HortayTopBarSize
 import dev.lyo.hortay.ui.icons.Symbol
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.coroutines.launch
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.action_back
+import hortay.shared.generated.resources.hidden_channels_empty_body
+import hortay.shared.generated.resources.hidden_channels_empty_title
+import hortay.shared.generated.resources.hidden_channels_id_placeholder
+import hortay.shared.generated.resources.hidden_channels_title
+import hortay.shared.generated.resources.hidden_channels_unhide_for
+import hortay.shared.generated.resources.hidden_channels_unknown
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Manage-list for channels the user has hidden from the merged feed. Reached
@@ -116,14 +123,14 @@ fun HiddenChannelsScreen(
             .nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             HortayTopBar(
-                title = stringResource(R.string.hidden_channels_title),
+                title = stringResource(Res.string.hidden_channels_title),
                 size = HortayTopBarSize.Large,
                 scrollBehavior = scrollBehavior,
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Symbol(
                             name = "arrow_back",
-                            contentDescription = stringResource(R.string.action_back),
+                            contentDescription = stringResource(Res.string.action_back),
                             tint = MaterialTheme.colorScheme.onSurface,
                             size = 24.dp,
                         )
@@ -175,9 +182,9 @@ private fun HiddenChannelRow(
         count = count,
         defaultShapes = ListItemDefaults.shapes(),
     )
-    val title = display?.title ?: stringResource(R.string.hidden_channels_unknown)
+    val title = display?.title ?: stringResource(Res.string.hidden_channels_unknown)
     val subtitle = display?.handle?.let { "@$it" }
-        ?: stringResource(R.string.hidden_channels_id_placeholder, chatId)
+        ?: stringResource(Res.string.hidden_channels_id_placeholder, chatId)
     SegmentedListItem(
         onClick = onUnhide,
         shapes = shapes,
@@ -196,7 +203,7 @@ private fun HiddenChannelRow(
                 Symbol(
                     name = "visibility",
                     contentDescription = stringResource(
-                        R.string.hidden_channels_unhide_for,
+                        Res.string.hidden_channels_unhide_for,
                         title,
                     ),
                     tint = MaterialTheme.colorScheme.primary,
@@ -226,13 +233,13 @@ private fun EmptyState(modifier: Modifier = Modifier) {
                 size = 48.dp,
             )
             Text(
-                text = stringResource(R.string.hidden_channels_empty_title),
+                text = stringResource(Res.string.hidden_channels_empty_title),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(top = 16.dp),
             )
             Text(
-                text = stringResource(R.string.hidden_channels_empty_body),
+                text = stringResource(Res.string.hidden_channels_empty_body),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp),

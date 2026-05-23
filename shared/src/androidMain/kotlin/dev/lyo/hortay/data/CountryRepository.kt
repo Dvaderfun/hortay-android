@@ -1,7 +1,6 @@
 package dev.lyo.hortay.data
 
 import androidx.compose.runtime.Immutable
-import dev.lyo.hortay.R
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
@@ -14,6 +13,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.drinkless.tdlib.TdApi
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.country_anonymous_numbers
+import hortay.shared.generated.resources.country_other
 
 /**
  * One country row as the picker sees it. The TDLib payload (`TdApi.CountryInfo`) carries
@@ -48,7 +50,7 @@ data class Country(
  */
 internal fun fragmentAnonymousNumbers(res: StringResolver): Country = Country(
     iso = "FT",
-    name = res.getString(R.string.country_anonymous_numbers),
+    name = res.getString(Res.string.country_anonymous_numbers),
     dialCode = "+888",
     flag = "🏴‍☠️",
     allDialCodes = persistentListOf("888"),
@@ -56,7 +58,7 @@ internal fun fragmentAnonymousNumbers(res: StringResolver): Country = Country(
 
 internal fun customCountryEntry(res: StringResolver): Country = Country(
     iso = "??",
-    name = res.getString(R.string.country_other),
+    name = res.getString(Res.string.country_other),
     dialCode = "+",
     flag = "🌐",
     allDialCodes = persistentListOf(),

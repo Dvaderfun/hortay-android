@@ -8,7 +8,7 @@ import dev.lyo.hortay.data.report.ReportDialogState
 import dev.lyo.hortay.data.report.ReportExplainerStore
 import dev.lyo.hortay.data.report.ReportLogStore
 import dev.lyo.hortay.data.report.ReportRepository
-import dev.lyo.hortay.data.toStringResolver
+import dev.lyo.hortay.data.ComposeResourcesStringResolver
 import dev.lyo.hortay.ui.report.GuestReportDelegator
 import dev.lyo.hortay.data.ChannelActionsRepository
 import dev.lyo.hortay.data.ChatFoldersRepository
@@ -64,7 +64,7 @@ import kotlinx.coroutines.launch
  */
 class AppGraph(context: Context) {
 
-    private val res = context.resources.toStringResolver()
+    private val res = ComposeResourcesStringResolver()
 
     val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 

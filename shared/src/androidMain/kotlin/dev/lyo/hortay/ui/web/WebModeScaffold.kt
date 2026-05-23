@@ -30,11 +30,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.lyo.hortay.AppGraph
-import dev.lyo.hortay.R
 import dev.lyo.hortay.data.DeepLink
 import dev.lyo.hortay.data.NavEntry
 import dev.lyo.hortay.data.web.WebPostAdapter
@@ -51,6 +49,14 @@ import androidx.compose.runtime.CompositionLocalProvider
 import dev.lyo.hortay.data.TimelinePost
 import kotlinx.coroutines.launch
 import java.util.Locale
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.link_hashtag_search
+import hortay.shared.generated.resources.link_hashtag_search_in_channel
+import hortay.shared.generated.resources.web_add_channel
+import hortay.shared.generated.resources.web_comments_unavailable
+import hortay.shared.generated.resources.web_comments_unavailable_title
+import hortay.shared.generated.resources.web_deeplink_signin_required
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Top-level container for guest (anonymous) reading mode. Uses the SAME
@@ -124,7 +130,7 @@ fun WebModeScaffold(graph: AppGraph) {
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
     val locale = remember { Locale.getDefault().language.lowercase() }
-    val signInRequiredMsg = stringResource(R.string.web_deeplink_signin_required)
+    val signInRequiredMsg = stringResource(Res.string.web_deeplink_signin_required)
     // Snackbar host lifted into the scaffold so deep-link rejection messages
     // ("sign in to open private channels") land regardless of which tab the
     // user is currently looking at. Same pattern as MainScaffold's userMessages
@@ -166,13 +172,17 @@ fun WebModeScaffold(graph: AppGraph) {
                         // was inferred (from `#tag@channel` text-entity suffix or
                         // PostBody's scoped LocalHashtagTap), generic otherwise.
                         val msg = if (link.channelHandle != null) {
-                            context.resources.getString(
-                                R.string.link_hashtag_search_in_channel,
-                                link.tag,
-                                "@${link.channelHandle}",
-                            )
+                            kotlinx.coroutines.runBlocking {
+                                org.jetbrains.compose.resources.getString(
+                                    Res.string.link_hashtag_search_in_channel,
+                                    link.tag,
+                                    "@${link.channelHandle}",
+                                )
+                            }
                         } else {
-                            context.resources.getString(R.string.link_hashtag_search, link.tag)
+                            kotlinx.coroutines.runBlocking {
+                                org.jetbrains.compose.resources.getString(Res.string.link_hashtag_search, link.tag)
+                            }
                         }
                         snackbarHostState.showSnackbar(msg)
                     }
@@ -265,8 +275,8 @@ fun WebModeScaffold(graph: AppGraph) {
     // screen short-circuits its repository wiring. Previous behaviour was a
     // bare snackbar with the same copy — kept the user from getting to the
     // post detail at all.
-    val commentsDisabledTitle = stringResource(R.string.web_comments_unavailable_title)
-    val commentsDisabledBody = stringResource(R.string.web_comments_unavailable)
+    val commentsDisabledTitle = stringResource(Res.string.web_comments_unavailable_title)
+    val commentsDisabledBody = stringResource(Res.string.web_comments_unavailable)
     val webCommentsOverride = remember(commentsDisabledTitle, commentsDisabledBody) {
         dev.lyo.hortay.ui.comments.CommentsDisabledOverride(
             symbol = "chat_bubble",
@@ -371,11 +381,11 @@ fun WebModeScaffold(graph: AppGraph) {
                     icon = {
                         Symbol(
                             name = "add",
-                            contentDescription = stringResource(R.string.web_add_channel),
+                            contentDescription = stringResource(Res.string.web_add_channel),
                             size = 24.dp,
                         )
                     },
-                    text = { Text(stringResource(R.string.web_add_channel)) },
+                    text = { Text(stringResource(Res.string.web_add_channel)) },
                 )
             }
             }

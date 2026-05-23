@@ -1,6 +1,5 @@
 package dev.lyo.hortay.data.web
 
-import dev.lyo.hortay.R
 import dev.lyo.hortay.data.AlbumItem
 import dev.lyo.hortay.data.FormattedText
 import dev.lyo.hortay.data.ForwardOrigin
@@ -20,6 +19,14 @@ import com.fleeksoft.ksoup.nodes.Element
 import com.fleeksoft.ksoup.nodes.Node
 import com.fleeksoft.ksoup.nodes.TextNode
 import java.time.OffsetDateTime
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.web_media_placeholder_document
+import hortay.shared.generated.resources.web_media_placeholder_gif
+import hortay.shared.generated.resources.web_media_placeholder_photo
+import hortay.shared.generated.resources.web_media_placeholder_round_video
+import hortay.shared.generated.resources.web_media_placeholder_sticker
+import hortay.shared.generated.resources.web_media_placeholder_video
+import hortay.shared.generated.resources.web_media_placeholder_voice
 
 /**
  * Adapter from the parser-shaped [WebPost] to the UI-shaped [TimelinePost].
@@ -564,12 +571,12 @@ object WebPostAdapter {
     }
 
     private fun mediaPlaceholder(kind: WebMedia.Kind, strings: StringResolver): String = when (kind) {
-        WebMedia.Kind.Photo -> strings.getString(R.string.web_media_placeholder_photo)
-        WebMedia.Kind.Video -> strings.getString(R.string.web_media_placeholder_video)
-        WebMedia.Kind.RoundVideo -> strings.getString(R.string.web_media_placeholder_round_video)
-        WebMedia.Kind.Voice -> strings.getString(R.string.web_media_placeholder_voice)
-        WebMedia.Kind.Document -> strings.getString(R.string.web_media_placeholder_document)
-        WebMedia.Kind.Sticker -> strings.getString(R.string.web_media_placeholder_sticker)
-        WebMedia.Kind.Gif -> strings.getString(R.string.web_media_placeholder_gif)
+        WebMedia.Kind.Photo -> strings.getString(Res.string.web_media_placeholder_photo)
+        WebMedia.Kind.Video -> strings.getString(Res.string.web_media_placeholder_video)
+        WebMedia.Kind.RoundVideo -> strings.getString(Res.string.web_media_placeholder_round_video)
+        WebMedia.Kind.Voice -> strings.getString(Res.string.web_media_placeholder_voice)
+        WebMedia.Kind.Document -> strings.getString(Res.string.web_media_placeholder_document)
+        WebMedia.Kind.Sticker -> strings.getString(Res.string.web_media_placeholder_sticker)
+        WebMedia.Kind.Gif -> strings.getString(Res.string.web_media_placeholder_gif)
     }
 }

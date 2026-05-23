@@ -1,7 +1,11 @@
 package dev.lyo.hortay.ui.main
 
-import androidx.annotation.StringRes
-import dev.lyo.hortay.R
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.nav_channels
+import hortay.shared.generated.resources.nav_feed
+import hortay.shared.generated.resources.nav_profile
+import hortay.shared.generated.resources.nav_saved
+import org.jetbrains.compose.resources.StringResource
 
 /**
  * Bottom-nav tabs. [symbol] is the Material Symbols ligature name (rendered via the
@@ -9,9 +13,9 @@ import dev.lyo.hortay.R
  * resolved at draw time with `stringResource` so the tab name follows the active
  * locale.
  */
-enum class NavTab(@StringRes val labelRes: Int, val symbol: String) {
-    Feed(R.string.nav_feed, "home"),
-    Channels(R.string.nav_channels, "dynamic_feed"),
-    Saved(R.string.nav_saved, "bookmark"),
-    Profile(R.string.nav_profile, "person"),
+enum class NavTab(val labelRes: StringResource, val symbol: String) {
+    Feed(Res.string.nav_feed, "home"),
+    Channels(Res.string.nav_channels, "dynamic_feed"),
+    Saved(Res.string.nav_saved, "bookmark"),
+    Profile(Res.string.nav_profile, "person"),
 }

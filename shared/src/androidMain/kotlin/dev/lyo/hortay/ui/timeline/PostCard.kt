@@ -25,14 +25,12 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import dev.lyo.hortay.R
 import dev.lyo.hortay.data.ChannelContext
 import dev.lyo.hortay.data.ForwardOrigin
 import dev.lyo.hortay.data.ReactionItem
@@ -56,6 +54,22 @@ import dev.lyo.hortay.ui.theme.MorphShape
 import dev.lyo.hortay.ui.theme.asComposeShape
 import dev.lyo.hortay.ui.theme.rememberPressedSelectedCornerRadius
 import kotlinx.coroutines.launch
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.cd_verified_badge
+import hortay.shared.generated.resources.post_badge_edited
+import hortay.shared.generated.resources.post_badge_pinned
+import hortay.shared.generated.resources.post_copy_text
+import hortay.shared.generated.resources.post_forwarded_from
+import hortay.shared.generated.resources.post_in_channel
+import hortay.shared.generated.resources.post_open_telegram
+import hortay.shared.generated.resources.post_save
+import hortay.shared.generated.resources.post_share
+import hortay.shared.generated.resources.post_show_original
+import hortay.shared.generated.resources.post_translate
+import hortay.shared.generated.resources.post_translated_chip
+import hortay.shared.generated.resources.post_unsave
+import hortay.shared.generated.resources.report_action
+import org.jetbrains.compose.resources.stringResource
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -406,7 +420,7 @@ private fun HeaderRow(
         if (pinned) {
             Symbol(
                 name = "push_pin",
-                contentDescription = stringResource(R.string.post_badge_pinned),
+                contentDescription = stringResource(Res.string.post_badge_pinned),
                 tint = MaterialTheme.colorScheme.primary,
                 size = 14.dp,
             )
@@ -415,7 +429,7 @@ private fun HeaderRow(
         if (editDate > 0L) {
             Symbol(
                 name = "edit",
-                contentDescription = stringResource(R.string.post_badge_edited),
+                contentDescription = stringResource(Res.string.post_badge_edited),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 size = 14.dp,
             )
@@ -450,7 +464,7 @@ private fun TranslationChip(onDismiss: () -> Unit) {
         )
         Spacer(Modifier.width(6.dp))
         Text(
-            text = stringResource(R.string.post_translated_chip),
+            text = stringResource(Res.string.post_translated_chip),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.tertiary,
         )
@@ -467,7 +481,7 @@ private fun VerificationBadge(verification: SenderVerification) {
     when (verification) {
         SenderVerification.Verified -> Symbol(
             name = "verified",
-            contentDescription = stringResource(R.string.cd_verified_badge),
+            contentDescription = stringResource(Res.string.cd_verified_badge),
             tint = MaterialTheme.colorScheme.primary,
             size = 16.dp,
         )
@@ -521,7 +535,7 @@ private fun InChannelChip(ctx: ChannelContext, onClick: () -> Unit) {
         )
         Spacer(Modifier.width(6.dp))
         Text(
-            text = stringResource(R.string.post_in_channel, ctx.name),
+            text = stringResource(Res.string.post_in_channel, ctx.name),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
@@ -545,7 +559,7 @@ private fun ForwardChip(origin: ForwardOrigin, onClick: (() -> Unit)?) {
         )
         Spacer(Modifier.width(6.dp))
         Text(
-            text = stringResource(R.string.post_forwarded_from, forwardLabel(origin)),
+            text = stringResource(Res.string.post_forwarded_from, forwardLabel(origin)),
             style = MaterialTheme.typography.labelMedium,
             color = if (onClick != null) MaterialTheme.colorScheme.tertiary
             else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -880,20 +894,20 @@ private fun PostActionSheet(
         Column(modifier = Modifier.padding(bottom = 24.dp)) {
             SheetItem(
                 symbol = "bookmark",
-                label = stringResource(if (isBookmarked) R.string.post_unsave else R.string.post_save),
+                label = stringResource(if (isBookmarked) Res.string.post_unsave else Res.string.post_save),
                 onClick = { runAndDismiss { interactions.onBookmarkClick(post) } },
             )
             if (post.content.captionPlain.isNotBlank()) {
                 SheetItem(
                     symbol = "content_copy",
-                    label = stringResource(R.string.post_copy_text),
+                    label = stringResource(Res.string.post_copy_text),
                     onClick = { runAndDismiss { interactions.onCopyClick(post) } },
                 )
                 if (interactions.translateEnabled) {
                     val translated = interactions.isTranslated(post)
                     SheetItem(
                         symbol = "translate",
-                        label = stringResource(if (translated) R.string.post_show_original else R.string.post_translate),
+                        label = stringResource(if (translated) Res.string.post_show_original else Res.string.post_translate),
                         onClick = {
                             runAndDismiss {
                                 if (translated) interactions.onClearTranslationClick(post)
@@ -905,18 +919,18 @@ private fun PostActionSheet(
             }
             SheetItem(
                 symbol = "ios_share",
-                label = stringResource(R.string.post_share),
+                label = stringResource(Res.string.post_share),
                 onClick = { runAndDismiss { interactions.onShareClick(post) } },
             )
             SheetItem(
                 symbol = "open_in_new",
-                label = stringResource(R.string.post_open_telegram),
+                label = stringResource(Res.string.post_open_telegram),
                 onClick = { runAndDismiss { interactions.onOpenClick(post) } },
             )
             if (interactions.canReport(post)) {
                 SheetItem(
                     symbol = "flag",
-                    label = stringResource(R.string.report_action),
+                    label = stringResource(Res.string.report_action),
                     onClick = { runAndDismiss { interactions.onReportClick(post) } },
                 )
             }

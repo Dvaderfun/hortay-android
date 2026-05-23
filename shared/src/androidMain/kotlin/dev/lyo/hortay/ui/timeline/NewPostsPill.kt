@@ -21,11 +21,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import dev.lyo.hortay.R
 import dev.lyo.hortay.ui.icons.Symbol
 import dev.lyo.hortay.ui.media.TdAvatar
 import dev.lyo.hortay.ui.theme.HortayExpressive
 import dev.lyo.hortay.ui.theme.asComposeShape
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.new_posts
+import hortay.shared.generated.resources.new_posts_overflow
 
 /**
  * Floating "new posts" pill — Twitter-style alert chip that surfaces unrevealed feed
@@ -101,9 +103,9 @@ fun NewPostsPill(
             }
             Symbol(name = arrowGlyph, size = 18.dp)
             Spacer(Modifier.width(6.dp))
-            val ctx = LocalContext.current
+            val ctx = androidx.compose.runtime.remember { dev.lyo.hortay.data.ComposeResourcesStringResolver() }
             Text(
-                text = newPostsLabel(ctx.resources, pendingCount),
+                text = newPostsLabel(ctx, pendingCount),
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -149,9 +151,9 @@ private fun AvatarStack(channels: List<ChannelBadge>) {
  * resource. Counts above 99 are clamped to a static overflow label so transient state
  * flickers can't surface alarming numbers.
  */
-private fun newPostsLabel(res: android.content.res.Resources, n: Int): String {
-    if (n > 99) return res.getString(R.string.new_posts_overflow)
-    return res.getQuantityString(R.plurals.new_posts, n, n)
+private fun newPostsLabel(res: dev.lyo.hortay.data.StringResolver, n: Int): String {
+    if (n > 99) return res.getString(Res.string.new_posts_overflow)
+    return res.getQuantityString(Res.plurals.new_posts, n, n)
 }
 
 private val AVATAR_SIZE = 28.dp

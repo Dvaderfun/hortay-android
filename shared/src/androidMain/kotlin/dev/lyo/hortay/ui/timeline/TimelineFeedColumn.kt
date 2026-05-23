@@ -22,17 +22,19 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import dev.lyo.hortay.R
 import dev.lyo.hortay.ui.components.HortayTopBar
 import dev.lyo.hortay.ui.components.HortayTopBarSize
 import dev.lyo.hortay.ui.icons.Symbol
 import dev.lyo.hortay.ui.main.BrandRow
 import dev.lyo.hortay.ui.media.LocalIsCenteredItem
 import dev.lyo.hortay.ui.media.LocalIsHighlightedItem
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.timeline_saved_tab
+import hortay.shared.generated.resources.web_search_action
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Mechanical extraction of the main feed LazyColumn from [TimelineScreen]. Behaviour
@@ -124,7 +126,7 @@ internal fun TimelineTopBar(
     // channel filter) now live in the dedicated [ChannelScreen].
     if (showOnlyBookmarked) {
         HortayTopBar(
-            title = stringResource(R.string.timeline_saved_tab),
+            title = stringResource(Res.string.timeline_saved_tab),
             size = HortayTopBarSize.Medium,
             scrollBehavior = scrollBehavior,
             windowInsets = barInsets,
@@ -142,7 +144,7 @@ internal fun TimelineTopBar(
                     IconButton(onClick = handler) {
                         Symbol(
                             name = "search",
-                            contentDescription = stringResource(R.string.web_search_action),
+                            contentDescription = stringResource(Res.string.web_search_action),
                         )
                     }
                 }

@@ -14,8 +14,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.pluralStringResource
-import androidx.compose.ui.res.stringResource
 import coil3.SingletonImageLoader
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -31,7 +29,6 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.runtime.saveable.rememberSaveable
 import dev.lyo.hortay.AppConfig
-import dev.lyo.hortay.R
 import dev.lyo.hortay.data.AutoDownloadStore
 import dev.lyo.hortay.data.ChannelActionsRepository
 import dev.lyo.hortay.data.FeedOrder
@@ -45,6 +42,83 @@ import dev.lyo.hortay.ui.components.HortayTopBar
 import dev.lyo.hortay.ui.components.HortayTopBarSize
 import dev.lyo.hortay.ui.icons.Symbol
 import kotlinx.coroutines.launch
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.autodownload_entry_subtitle
+import hortay.shared.generated.resources.autodownload_entry_title
+import hortay.shared.generated.resources.autodownload_section
+import hortay.shared.generated.resources.settings_author_channel_title
+import hortay.shared.generated.resources.settings_author_developer_title
+import hortay.shared.generated.resources.settings_enter_guest_confirm_action
+import hortay.shared.generated.resources.settings_enter_guest_confirm_body
+import hortay.shared.generated.resources.settings_enter_guest_confirm_title
+import hortay.shared.generated.resources.settings_enter_guest_subtitle
+import hortay.shared.generated.resources.settings_enter_guest_title
+import hortay.shared.generated.resources.settings_feed_order_newest_subtitle
+import hortay.shared.generated.resources.settings_feed_order_newest_title
+import hortay.shared.generated.resources.settings_feed_order_oldest_subtitle
+import hortay.shared.generated.resources.settings_feed_order_oldest_title
+import hortay.shared.generated.resources.settings_hidden_channels_count
+import hortay.shared.generated.resources.settings_hidden_channels_subtitle_empty
+import hortay.shared.generated.resources.settings_hidden_channels_title
+import hortay.shared.generated.resources.settings_hide_online_subtitle
+import hortay.shared.generated.resources.settings_hide_online_title
+import hortay.shared.generated.resources.settings_inline_autoplay_subtitle
+import hortay.shared.generated.resources.settings_inline_autoplay_title
+import hortay.shared.generated.resources.settings_language
+import hortay.shared.generated.resources.settings_language_dialog_title
+import hortay.shared.generated.resources.settings_language_summary_en
+import hortay.shared.generated.resources.settings_language_summary_system
+import hortay.shared.generated.resources.settings_language_summary_uk
+import hortay.shared.generated.resources.settings_logout_cancel
+import hortay.shared.generated.resources.settings_logout_confirm
+import hortay.shared.generated.resources.settings_logout_dialog_text
+import hortay.shared.generated.resources.settings_logout_dialog_title
+import hortay.shared.generated.resources.settings_logout_subtitle
+import hortay.shared.generated.resources.settings_logout_title
+import hortay.shared.generated.resources.settings_profile_title
+import hortay.shared.generated.resources.settings_safety_child_policy_subtitle
+import hortay.shared.generated.resources.settings_safety_child_policy_title
+import hortay.shared.generated.resources.settings_safety_privacy_subtitle
+import hortay.shared.generated.resources.settings_safety_privacy_title
+import hortay.shared.generated.resources.settings_section_about
+import hortay.shared.generated.resources.settings_section_account
+import hortay.shared.generated.resources.settings_section_author
+import hortay.shared.generated.resources.settings_section_feed
+import hortay.shared.generated.resources.settings_section_privacy
+import hortay.shared.generated.resources.settings_section_safety
+import hortay.shared.generated.resources.settings_section_storage
+import hortay.shared.generated.resources.settings_section_traffic
+import hortay.shared.generated.resources.settings_snap_scroll_subtitle
+import hortay.shared.generated.resources.settings_snap_scroll_title
+import hortay.shared.generated.resources.settings_storage_clear
+import hortay.shared.generated.resources.settings_storage_clear_helper
+import hortay.shared.generated.resources.settings_storage_clearing
+import hortay.shared.generated.resources.settings_storage_db
+import hortay.shared.generated.resources.settings_storage_media
+import hortay.shared.generated.resources.settings_storage_used_by
+import hortay.shared.generated.resources.settings_subtitle_profile
+import hortay.shared.generated.resources.settings_traffic_downloaded
+import hortay.shared.generated.resources.settings_traffic_helper
+import hortay.shared.generated.resources.settings_traffic_reset
+import hortay.shared.generated.resources.settings_traffic_uploaded
+import hortay.shared.generated.resources.settings_version
+import hortay.shared.generated.resources.size_bytes
+import hortay.shared.generated.resources.size_gb
+import hortay.shared.generated.resources.size_kb
+import hortay.shared.generated.resources.size_mb
+import hortay.shared.generated.resources.web_settings_clear_cache
+import hortay.shared.generated.resources.web_settings_clear_cache_cancel
+import hortay.shared.generated.resources.web_settings_clear_cache_confirm_action
+import hortay.shared.generated.resources.web_settings_clear_cache_confirm_body
+import hortay.shared.generated.resources.web_settings_clear_cache_confirm_title
+import hortay.shared.generated.resources.web_settings_clear_cache_helper
+import hortay.shared.generated.resources.web_settings_clearing
+import hortay.shared.generated.resources.web_settings_privacy_body
+import hortay.shared.generated.resources.web_settings_privacy_title
+import hortay.shared.generated.resources.web_settings_signin
+import hortay.shared.generated.resources.web_settings_signin_helper
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Single Settings screen used by both TDLib and guest (anonymous) modes.
@@ -226,8 +300,8 @@ private fun SettingsMain(
             .nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             HortayTopBar(
-                title = stringResource(R.string.settings_profile_title),
-                subtitle = stringResource(R.string.settings_subtitle_profile),
+                title = stringResource(Res.string.settings_profile_title),
+                subtitle = stringResource(Res.string.settings_subtitle_profile),
                 size = HortayTopBarSize.Large,
                 scrollBehavior = scrollBehavior,
             )
@@ -257,7 +331,7 @@ private fun SettingsMain(
             val currentSnapScroll by settings.snapScroll.collectAsStateWithLifecycle(false)
             val currentInlineAutoplay by settings.inlineVideoAutoplay.collectAsStateWithLifecycle(true)
             val currentHideOnline by settings.hideOnlineStatus.collectAsStateWithLifecycle(false)
-            SectionLabel(stringResource(R.string.settings_section_feed))
+            SectionLabel(stringResource(Res.string.settings_section_feed))
             FeedOrderRows(
                 current = currentFeedOrder,
                 onSelect = { order ->
@@ -295,12 +369,12 @@ private fun SettingsMain(
                 )
                 SettingsRow(
                     symbol = "visibility_off",
-                    title = stringResource(R.string.settings_hidden_channels_title),
+                    title = stringResource(Res.string.settings_hidden_channels_title),
                     subtitle = if (hidden.isEmpty()) {
-                        stringResource(R.string.settings_hidden_channels_subtitle_empty)
+                        stringResource(Res.string.settings_hidden_channels_subtitle_empty)
                     } else {
                         pluralStringResource(
-                            R.plurals.settings_hidden_channels_count,
+                            Res.plurals.settings_hidden_channels_count,
                             hidden.size,
                             hidden.size,
                         )
@@ -312,7 +386,7 @@ private fun SettingsMain(
 
             // ---- TDLib-mode-only: traffic & storage cards backed by StatsRepository ----
             if (stats != null) {
-                SectionLabel(stringResource(R.string.settings_section_traffic))
+                SectionLabel(stringResource(Res.string.settings_section_traffic))
                 TrafficCard(
                     network = network,
                     onReset = {
@@ -324,7 +398,7 @@ private fun SettingsMain(
                 )
 
                 Spacer(Modifier.height(8.dp))
-                SectionLabel(stringResource(R.string.settings_section_storage))
+                SectionLabel(stringResource(Res.string.settings_section_storage))
                 StorageCard(
                     storage = storage,
                     clearing = clearing,
@@ -345,11 +419,11 @@ private fun SettingsMain(
                 // streams and doesn't go through MediaCache, so no policy applies there.
                 if (autoDownloadAvailable) {
                     Spacer(Modifier.height(8.dp))
-                    SectionLabel(stringResource(R.string.autodownload_section))
+                    SectionLabel(stringResource(Res.string.autodownload_section))
                     SettingsRow(
                         symbol = "download_for_offline",
-                        title = stringResource(R.string.autodownload_entry_title),
-                        subtitle = stringResource(R.string.autodownload_entry_subtitle),
+                        title = stringResource(Res.string.autodownload_entry_title),
+                        subtitle = stringResource(Res.string.autodownload_entry_subtitle),
                         chevron = true,
                         onClick = onOpenAutoDownload,
                     )
@@ -359,14 +433,14 @@ private fun SettingsMain(
             // ---- Guest-mode-only: web.db cache clear + privacy footer -----------------
             if (onClearWebCache != null) {
                 Spacer(Modifier.height(8.dp))
-                SectionLabel(stringResource(R.string.web_settings_clear_cache))
+                SectionLabel(stringResource(Res.string.web_settings_clear_cache))
                 SettingsRow(
                     symbol = "delete",
                     title = stringResource(
-                        if (clearing) R.string.web_settings_clearing
-                        else R.string.web_settings_clear_cache,
+                        if (clearing) Res.string.web_settings_clearing
+                        else Res.string.web_settings_clear_cache,
                     ),
-                    subtitle = stringResource(R.string.web_settings_clear_cache_helper),
+                    subtitle = stringResource(Res.string.web_settings_clear_cache_helper),
                     // Confirmation dialog before the destructive action — the
                     // previous one-tap path felt like "clear cache" was a
                     // reversible toggle, but it dropped every locally cached
@@ -376,22 +450,22 @@ private fun SettingsMain(
                 )
 
                 Spacer(Modifier.height(8.dp))
-                SectionLabel(stringResource(R.string.web_settings_privacy_title))
+                SectionLabel(stringResource(Res.string.web_settings_privacy_title))
                 SettingsRow(
                     symbol = "shield",
-                    title = stringResource(R.string.web_settings_privacy_title),
-                    subtitle = stringResource(R.string.web_settings_privacy_body),
+                    title = stringResource(Res.string.web_settings_privacy_title),
+                    subtitle = stringResource(Res.string.web_settings_privacy_body),
                 )
             }
 
             // ---- Account section: logout (TDLib) OR sign-in CTA (guest) ---------------
             Spacer(Modifier.height(8.dp))
-            SectionLabel(stringResource(R.string.settings_section_account))
+            SectionLabel(stringResource(Res.string.settings_section_account))
             if (onLogout != null) {
                 SettingsRow(
                     symbol = "logout",
-                    title = stringResource(R.string.settings_logout_title),
-                    subtitle = stringResource(R.string.settings_logout_subtitle),
+                    title = stringResource(Res.string.settings_logout_title),
+                    subtitle = stringResource(Res.string.settings_logout_subtitle),
                     tint = MaterialTheme.colorScheme.error,
                     onClick = { confirmLogout = true },
                 )
@@ -399,8 +473,8 @@ private fun SettingsMain(
             if (onSignIn != null) {
                 SettingsRow(
                     symbol = "login",
-                    title = stringResource(R.string.web_settings_signin),
-                    subtitle = stringResource(R.string.web_settings_signin_helper),
+                    title = stringResource(Res.string.web_settings_signin),
+                    subtitle = stringResource(Res.string.web_settings_signin_helper),
                     onClick = onSignIn,
                 )
             }
@@ -412,8 +486,8 @@ private fun SettingsMain(
             if (onEnterGuest != null) {
                 SettingsRow(
                     symbol = "visibility",
-                    title = stringResource(R.string.settings_enter_guest_title),
-                    subtitle = stringResource(R.string.settings_enter_guest_subtitle),
+                    title = stringResource(Res.string.settings_enter_guest_title),
+                    subtitle = stringResource(Res.string.settings_enter_guest_subtitle),
                     onClick = { confirmEnterGuest = true },
                 )
             }
@@ -430,7 +504,7 @@ private fun SettingsMain(
             // way.
             if (stats != null) {
                 Spacer(Modifier.height(8.dp))
-                SectionLabel(stringResource(R.string.settings_section_privacy))
+                SectionLabel(stringResource(Res.string.settings_section_privacy))
                 HideOnlineStatusRow(
                     enabled = currentHideOnline,
                     onToggle = { next ->
@@ -449,12 +523,12 @@ private fun SettingsMain(
             // Privacy), opened via CustomTabsIntent so the user never leaves the app
             // chrome. Play Store review checks for discoverable policy links here.
             Spacer(Modifier.height(8.dp))
-            SectionLabel(stringResource(R.string.settings_section_safety))
+            SectionLabel(stringResource(Res.string.settings_section_safety))
             Column(verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
                 SettingsRow(
                     symbol = "child_care",
-                    title = stringResource(R.string.settings_safety_child_policy_title),
-                    subtitle = stringResource(R.string.settings_safety_child_policy_subtitle),
+                    title = stringResource(Res.string.settings_safety_child_policy_title),
+                    subtitle = stringResource(Res.string.settings_safety_child_policy_subtitle),
                     chevron = true,
                     index = 0,
                     count = 2,
@@ -473,8 +547,8 @@ private fun SettingsMain(
                 )
                 SettingsRow(
                     symbol = "shield",
-                    title = stringResource(R.string.settings_safety_privacy_title),
-                    subtitle = stringResource(R.string.settings_safety_privacy_subtitle),
+                    title = stringResource(Res.string.settings_safety_privacy_title),
+                    subtitle = stringResource(Res.string.settings_safety_privacy_subtitle),
                     chevron = true,
                     index = 1,
                     count = 2,
@@ -498,7 +572,7 @@ private fun SettingsMain(
             // screen so they read as credits rather than competing with traffic / storage
             // for the user's first glance.
             Spacer(Modifier.height(8.dp))
-            SectionLabel(stringResource(R.string.settings_section_author))
+            SectionLabel(stringResource(Res.string.settings_section_author))
             // SegmentedListItem group — Author section pairs two rows that read as
             // one card. `ListItemDefaults.SegmentedGap` is the M3E-canonical
             // inter-row gap (~4 dp); each row's corner radii are computed by
@@ -508,7 +582,7 @@ private fun SettingsMain(
             Column(verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
                 SettingsRow(
                     symbol = "campaign",
-                    title = stringResource(R.string.settings_author_channel_title),
+                    title = stringResource(Res.string.settings_author_channel_title),
                     subtitle = "@$AUTHOR_CHANNEL_HANDLE",
                     chevron = true,
                     index = 0,
@@ -517,7 +591,7 @@ private fun SettingsMain(
                 )
                 SettingsRow(
                     symbol = "person",
-                    title = stringResource(R.string.settings_author_developer_title),
+                    title = stringResource(Res.string.settings_author_developer_title),
                     subtitle = "@$AUTHOR_DEVELOPER_HANDLE",
                     chevron = true,
                     index = 1,
@@ -527,12 +601,12 @@ private fun SettingsMain(
             }
 
             Spacer(Modifier.height(8.dp))
-            SectionLabel(stringResource(R.string.settings_section_about))
+            SectionLabel(stringResource(Res.string.settings_section_about))
             Column(verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
                 LanguageRow(index = 0, count = 2)
                 SettingsRow(
                     symbol = "info",
-                    title = stringResource(R.string.settings_version),
+                    title = stringResource(Res.string.settings_version),
                     subtitle = "${AppConfig.versionName} · build ${AppConfig.versionCode}",
                     index = 1,
                     count = 2,
@@ -548,13 +622,13 @@ private fun SettingsMain(
                 TextButton(onClick = {
                     confirmLogout = false
                     onLogout()
-                }) { Text(stringResource(R.string.settings_logout_confirm), color = MaterialTheme.colorScheme.error) }
+                }) { Text(stringResource(Res.string.settings_logout_confirm), color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
-                TextButton(onClick = { confirmLogout = false }) { Text(stringResource(R.string.settings_logout_cancel)) }
+                TextButton(onClick = { confirmLogout = false }) { Text(stringResource(Res.string.settings_logout_cancel)) }
             },
-            title = { Text(stringResource(R.string.settings_logout_dialog_title)) },
-            text = { Text(stringResource(R.string.settings_logout_dialog_text)) },
+            title = { Text(stringResource(Res.string.settings_logout_dialog_title)) },
+            text = { Text(stringResource(Res.string.settings_logout_dialog_text)) },
         )
     }
 
@@ -571,18 +645,18 @@ private fun SettingsMain(
                     }
                 }) {
                     Text(
-                        stringResource(R.string.web_settings_clear_cache_confirm_action),
+                        stringResource(Res.string.web_settings_clear_cache_confirm_action),
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
             },
             dismissButton = {
                 TextButton(onClick = { confirmClearWebCache = false }) {
-                    Text(stringResource(R.string.web_settings_clear_cache_cancel))
+                    Text(stringResource(Res.string.web_settings_clear_cache_cancel))
                 }
             },
-            title = { Text(stringResource(R.string.web_settings_clear_cache_confirm_title)) },
-            text = { Text(stringResource(R.string.web_settings_clear_cache_confirm_body)) },
+            title = { Text(stringResource(Res.string.web_settings_clear_cache_confirm_title)) },
+            text = { Text(stringResource(Res.string.web_settings_clear_cache_confirm_body)) },
         )
     }
 
@@ -593,15 +667,15 @@ private fun SettingsMain(
                 TextButton(onClick = {
                     confirmEnterGuest = false
                     onEnterGuest()
-                }) { Text(stringResource(R.string.settings_enter_guest_confirm_action)) }
+                }) { Text(stringResource(Res.string.settings_enter_guest_confirm_action)) }
             },
             dismissButton = {
                 TextButton(onClick = { confirmEnterGuest = false }) {
-                    Text(stringResource(R.string.settings_logout_cancel))
+                    Text(stringResource(Res.string.settings_logout_cancel))
                 }
             },
-            title = { Text(stringResource(R.string.settings_enter_guest_confirm_title)) },
-            text = { Text(stringResource(R.string.settings_enter_guest_confirm_body)) },
+            title = { Text(stringResource(Res.string.settings_enter_guest_confirm_title)) },
+            text = { Text(stringResource(Res.string.settings_enter_guest_confirm_body)) },
         )
     }
 }
@@ -623,24 +697,24 @@ private fun SectionLabel(text: String) {
 
 @Composable
 private fun TrafficCard(network: NetworkUsage?, onReset: () -> Unit) {
-    val res = LocalContext.current.resources
+    val res = remember { dev.lyo.hortay.data.ComposeResourcesStringResolver() }
     StatsCard {
         StatHero(
             primary = TwoColumn(
                 left = StatHeroValue(
                     symbol = "arrow_downward",
-                    label = stringResource(R.string.settings_traffic_downloaded),
+                    label = stringResource(Res.string.settings_traffic_downloaded),
                     value = network?.rxBytes?.let { formatBytes(it, res) } ?: "—",
                 ),
                 right = StatHeroValue(
                     symbol = "arrow_upward",
-                    label = stringResource(R.string.settings_traffic_uploaded),
+                    label = stringResource(Res.string.settings_traffic_uploaded),
                     value = network?.txBytes?.let { formatBytes(it, res) } ?: "—",
                 ),
             ),
         )
         Text(
-            text = stringResource(R.string.settings_traffic_helper),
+            text = stringResource(Res.string.settings_traffic_helper),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 4.dp),
@@ -653,7 +727,7 @@ private fun TrafficCard(network: NetworkUsage?, onReset: () -> Unit) {
         ) {
             Symbol(name = "refresh", size = 20.dp)
             Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.settings_traffic_reset), fontWeight = FontWeight.SemiBold)
+            Text(stringResource(Res.string.settings_traffic_reset), fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -668,7 +742,7 @@ private fun StorageCard(
     val filesBytes = storage?.totalFilesBytes ?: 0L
     val dbBytes = storage?.databaseSizeBytes ?: 0L
     val fillFraction = if (totalBytes <= 0L) 0f else (filesBytes.toFloat() / totalBytes.toFloat()).coerceIn(0f, 1f)
-    val res = LocalContext.current.resources
+    val res = remember { dev.lyo.hortay.data.ComposeResourcesStringResolver() }
 
     StatsCard {
         Row(verticalAlignment = Alignment.Top) {
@@ -679,7 +753,7 @@ private fun StorageCard(
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    text = stringResource(R.string.settings_storage_used_by),
+                    text = stringResource(Res.string.settings_storage_used_by),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -722,15 +796,15 @@ private fun StorageCard(
                     color = MaterialTheme.colorScheme.onPrimary,
                 )
                 Spacer(Modifier.width(10.dp))
-                Text(stringResource(R.string.settings_storage_clearing), fontWeight = FontWeight.SemiBold)
+                Text(stringResource(Res.string.settings_storage_clearing), fontWeight = FontWeight.SemiBold)
             } else {
                 Symbol(name = "delete_sweep", size = 20.dp, tint = MaterialTheme.colorScheme.onPrimary)
                 Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.settings_storage_clear), fontWeight = FontWeight.SemiBold)
+                Text(stringResource(Res.string.settings_storage_clear), fontWeight = FontWeight.SemiBold)
             }
         }
         Text(
-            text = stringResource(R.string.settings_storage_clear_helper),
+            text = stringResource(Res.string.settings_storage_clear_helper),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 6.dp),
@@ -821,19 +895,19 @@ private fun StorageBar(filesFraction: Float) {
 
 @Composable
 private fun StorageLegend(filesBytes: Long, dbBytes: Long) {
-    val res = LocalContext.current.resources
+    val res = remember { dev.lyo.hortay.data.ComposeResourcesStringResolver() }
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         LegendDot(
             color = MaterialTheme.colorScheme.primary,
-            label = stringResource(R.string.settings_storage_media),
+            label = stringResource(Res.string.settings_storage_media),
             value = formatBytes(filesBytes, res),
         )
         LegendDot(
             color = MaterialTheme.colorScheme.tertiary,
-            label = stringResource(R.string.settings_storage_db),
+            label = stringResource(Res.string.settings_storage_db),
             value = formatBytes(dbBytes, res),
         )
     }
@@ -864,14 +938,14 @@ private fun LegendDot(color: androidx.compose.ui.graphics.Color, label: String, 
     }
 }
 
-private fun formatBytes(b: Long, res: android.content.res.Resources): String {
-    if (b < 1024) return res.getString(R.string.size_bytes, b.toInt())
+private fun formatBytes(b: Long, res: dev.lyo.hortay.data.StringResolver): String {
+    if (b < 1024) return res.getString(Res.string.size_bytes, b.toInt())
     val kb = b / 1024.0
-    if (kb < 1024) return res.getString(R.string.size_kb, kb.toFloat())
+    if (kb < 1024) return res.getString(Res.string.size_kb, kb.toFloat())
     val mb = kb / 1024.0
-    if (mb < 1024) return res.getString(R.string.size_mb, mb.toFloat())
+    if (mb < 1024) return res.getString(Res.string.size_mb, mb.toFloat())
     val gb = mb / 1024.0
-    return res.getString(R.string.size_gb, gb.toFloat())
+    return res.getString(Res.string.size_gb, gb.toFloat())
 }
 
 /**
@@ -956,8 +1030,8 @@ private fun FeedOrderRows(
     Column(verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
         FeedOrderRow(
             symbol = "arrow_upward",
-            title = stringResource(R.string.settings_feed_order_oldest_title),
-            subtitle = stringResource(R.string.settings_feed_order_oldest_subtitle),
+            title = stringResource(Res.string.settings_feed_order_oldest_title),
+            subtitle = stringResource(Res.string.settings_feed_order_oldest_subtitle),
             isSelected = current == FeedOrder.OldestUnreadFirst,
             index = 0,
             count = 2,
@@ -965,8 +1039,8 @@ private fun FeedOrderRows(
         )
         FeedOrderRow(
             symbol = "arrow_downward",
-            title = stringResource(R.string.settings_feed_order_newest_title),
-            subtitle = stringResource(R.string.settings_feed_order_newest_subtitle),
+            title = stringResource(Res.string.settings_feed_order_newest_title),
+            subtitle = stringResource(Res.string.settings_feed_order_newest_subtitle),
             isSelected = current == FeedOrder.Newest,
             index = 1,
             count = 2,
@@ -1073,7 +1147,7 @@ private fun SnapScrollRow(
         },
         supportingContent = {
             Text(
-                text = stringResource(R.string.settings_snap_scroll_subtitle),
+                text = stringResource(Res.string.settings_snap_scroll_subtitle),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -1083,7 +1157,7 @@ private fun SnapScrollRow(
         },
         content = {
             Text(
-                text = stringResource(R.string.settings_snap_scroll_title),
+                text = stringResource(Res.string.settings_snap_scroll_title),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -1138,7 +1212,7 @@ private fun InlineAutoplayRow(
         },
         supportingContent = {
             Text(
-                text = stringResource(R.string.settings_inline_autoplay_subtitle),
+                text = stringResource(Res.string.settings_inline_autoplay_subtitle),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -1148,7 +1222,7 @@ private fun InlineAutoplayRow(
         },
         content = {
             Text(
-                text = stringResource(R.string.settings_inline_autoplay_title),
+                text = stringResource(Res.string.settings_inline_autoplay_title),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -1205,7 +1279,7 @@ private fun HideOnlineStatusRow(
         },
         supportingContent = {
             Text(
-                text = stringResource(R.string.settings_hide_online_subtitle),
+                text = stringResource(Res.string.settings_hide_online_subtitle),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -1215,7 +1289,7 @@ private fun HideOnlineStatusRow(
         },
         content = {
             Text(
-                text = stringResource(R.string.settings_hide_online_title),
+                text = stringResource(Res.string.settings_hide_online_title),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -1251,13 +1325,13 @@ private fun LanguageRow(index: Int, count: Int) {
     // user flipped the language via the system per-app picker on API 33+ and came back).
     val activeTag = remember(showDialog) { LocaleStore.read(context) }
     val summary = when (activeTag) {
-        "uk" -> stringResource(R.string.settings_language_summary_uk)
-        "en" -> stringResource(R.string.settings_language_summary_en)
-        else -> stringResource(R.string.settings_language_summary_system)
+        "uk" -> stringResource(Res.string.settings_language_summary_uk)
+        "en" -> stringResource(Res.string.settings_language_summary_en)
+        else -> stringResource(Res.string.settings_language_summary_system)
     }
     SettingsRow(
         symbol = "translate",
-        title = stringResource(R.string.settings_language),
+        title = stringResource(Res.string.settings_language),
         subtitle = summary,
         chevron = true,
         index = index,
@@ -1294,24 +1368,24 @@ private fun LanguageDialog(
         confirmButton = {},
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.settings_logout_cancel))
+                Text(stringResource(Res.string.settings_logout_cancel))
             }
         },
-        title = { Text(stringResource(R.string.settings_language_dialog_title)) },
+        title = { Text(stringResource(Res.string.settings_language_dialog_title)) },
         text = {
             Column {
                 LanguageOption(
-                    label = stringResource(R.string.settings_language_summary_system),
+                    label = stringResource(Res.string.settings_language_summary_system),
                     selected = activeTag == null,
                     onClick = { onSelect(null) },
                 )
                 LanguageOption(
-                    label = stringResource(R.string.settings_language_summary_uk),
+                    label = stringResource(Res.string.settings_language_summary_uk),
                     selected = activeTag == "uk",
                     onClick = { onSelect("uk") },
                 )
                 LanguageOption(
-                    label = stringResource(R.string.settings_language_summary_en),
+                    label = stringResource(Res.string.settings_language_summary_en),
                     selected = activeTag == "en",
                     onClick = { onSelect("en") },
                 )

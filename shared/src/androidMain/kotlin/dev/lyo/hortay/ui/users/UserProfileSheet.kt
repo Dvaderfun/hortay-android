@@ -41,13 +41,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.pluralStringResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
-import dev.lyo.hortay.R
 import dev.lyo.hortay.data.ChannelActionsRepository
 import dev.lyo.hortay.data.PersonalChannelLink
 import dev.lyo.hortay.data.PresenceStatus
@@ -58,6 +55,32 @@ import dev.lyo.hortay.ui.media.TdAvatar
 import java.text.NumberFormat
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.cd_premium_badge
+import hortay.shared.generated.resources.cd_verified_badge
+import hortay.shared.generated.resources.channels_subscribers
+import hortay.shared.generated.resources.user_profile_about
+import hortay.shared.generated.resources.user_profile_action_message
+import hortay.shared.generated.resources.user_profile_bio
+import hortay.shared.generated.resources.user_profile_birthday
+import hortay.shared.generated.resources.user_profile_bot_about
+import hortay.shared.generated.resources.user_profile_chip_bot
+import hortay.shared.generated.resources.user_profile_chip_support
+import hortay.shared.generated.resources.user_profile_groups_in_common
+import hortay.shared.generated.resources.user_profile_handle_copied
+import hortay.shared.generated.resources.user_profile_loading_name
+import hortay.shared.generated.resources.user_profile_personal_channel
+import hortay.shared.generated.resources.user_profile_status_just_now
+import hortay.shared.generated.resources.user_profile_status_last_month
+import hortay.shared.generated.resources.user_profile_status_last_week
+import hortay.shared.generated.resources.user_profile_status_online
+import hortay.shared.generated.resources.user_profile_status_recently
+import hortay.shared.generated.resources.user_profile_status_was_days_ago
+import hortay.shared.generated.resources.user_profile_status_was_hours_ago
+import hortay.shared.generated.resources.user_profile_status_was_long_ago
+import hortay.shared.generated.resources.user_profile_status_was_minutes_ago
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * User-profile bottom sheet. Renders the same surface for every author entry point
@@ -138,18 +161,18 @@ fun UserProfileSheet(
 
             profile?.bio?.let { bio ->
                 Spacer(Modifier.height(20.dp))
-                SectionLabel(text = stringResource(R.string.user_profile_bio))
+                SectionLabel(text = stringResource(Res.string.user_profile_bio))
                 BioCard(text = bio)
             }
             profile?.botDescription?.takeIf { profile?.bio == null }?.let { desc ->
                 Spacer(Modifier.height(20.dp))
-                SectionLabel(text = stringResource(R.string.user_profile_bot_about))
+                SectionLabel(text = stringResource(Res.string.user_profile_bot_about))
                 BioCard(text = desc)
             }
 
             profile?.personalChannel?.let { ch ->
                 Spacer(Modifier.height(20.dp))
-                SectionLabel(text = stringResource(R.string.user_profile_personal_channel))
+                SectionLabel(text = stringResource(Res.string.user_profile_personal_channel))
                 PersonalChannelRow(
                     channel = ch,
                     onClick = {
@@ -162,7 +185,7 @@ fun UserProfileSheet(
             val meta = profile?.let { profileMetaRows(it) }.orEmpty()
             if (meta.isNotEmpty()) {
                 Spacer(Modifier.height(20.dp))
-                SectionLabel(text = stringResource(R.string.user_profile_about))
+                SectionLabel(text = stringResource(Res.string.user_profile_about))
                 meta.forEach { row ->
                     MetaRow(symbol = row.symbol, label = row.label, value = row.value)
                 }
@@ -180,7 +203,7 @@ private fun ProfileHero(
 ) {
     val resolvedName = profile?.displayName?.takeUnless { it.isBlank() }
         ?: seedName?.takeUnless { it.isBlank() }
-        ?: stringResource(R.string.user_profile_loading_name)
+        ?: stringResource(Res.string.user_profile_loading_name)
     val avatarThumb = profile?.avatarThumb ?: seedAvatarThumb
     val avatarFileId = profile?.avatarFileId ?: seedAvatarFileId
 
@@ -233,7 +256,7 @@ private fun ProfileHero(
                     // star glyph is bundled — Premium itself is closer to "boost" than
                     // a literal star in Telegram-Android marketing anyway.
                     name = "rocket_launch",
-                    contentDescription = stringResource(R.string.cd_premium_badge),
+                    contentDescription = stringResource(Res.string.cd_premium_badge),
                     tint = MaterialTheme.colorScheme.tertiary,
                     size = 16.dp,
                 )
@@ -271,11 +294,11 @@ private fun ProfileHero(
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             if (profile?.isBot == true) {
-                Chip(label = stringResource(R.string.user_profile_chip_bot))
+                Chip(label = stringResource(Res.string.user_profile_chip_bot))
             }
             if (profile?.isSupport == true) {
                 Chip(
-                    label = stringResource(R.string.user_profile_chip_support),
+                    label = stringResource(Res.string.user_profile_chip_support),
                     tint = MaterialTheme.colorScheme.secondaryContainer,
                 )
             }
@@ -306,7 +329,7 @@ private fun MessageAction(onMessage: (Context) -> Unit) {
             size = 18.dp,
         )
         Spacer(Modifier.width(8.dp))
-        Text(stringResource(R.string.user_profile_action_message))
+        Text(stringResource(Res.string.user_profile_action_message))
     }
 }
 
@@ -364,7 +387,7 @@ private fun PersonalChannelRow(
             val subs = channel.subscribers
             val parts = listOfNotNull(
                 handle,
-                subs?.let { stringResource(R.string.channels_subscribers, formatThousands(it)) },
+                subs?.let { stringResource(Res.string.channels_subscribers, formatThousands(it)) },
             )
             if (parts.isNotEmpty()) {
                 Text(
@@ -438,7 +461,7 @@ private fun VerificationGlyph(v: SenderVerification) {
     when (v) {
         SenderVerification.Verified -> Symbol(
             name = "verified",
-            contentDescription = stringResource(R.string.cd_verified_badge),
+            contentDescription = stringResource(Res.string.cd_verified_badge),
             tint = MaterialTheme.colorScheme.primary,
             size = 18.dp,
         )
@@ -486,7 +509,7 @@ private fun profileMetaRows(profile: UserProfile): List<MetaRowSpec> = buildList
                 // `redeem` (gift box) is the closest semantic glyph in the bundled pack —
                 // birthdays are a "gift" affordance in Telegram-Android.
                 symbol = "redeem",
-                label = stringResource(R.string.user_profile_birthday),
+                label = stringResource(Res.string.user_profile_birthday),
                 value = birthLabel,
             ),
         )
@@ -495,7 +518,7 @@ private fun profileMetaRows(profile: UserProfile): List<MetaRowSpec> = buildList
         add(
             MetaRowSpec(
                 symbol = "person",
-                label = stringResource(R.string.user_profile_groups_in_common),
+                label = stringResource(Res.string.user_profile_groups_in_common),
                 value = formatThousands(profile.groupsInCommon),
             ),
         )
@@ -519,10 +542,10 @@ private fun formatBirthdate(profile: UserProfile): String? {
 
 @Composable
 private fun presenceLabel(status: PresenceStatus): String? = when (status) {
-    PresenceStatus.Online -> stringResource(R.string.user_profile_status_online)
-    PresenceStatus.Recently -> stringResource(R.string.user_profile_status_recently)
-    PresenceStatus.LastWeek -> stringResource(R.string.user_profile_status_last_week)
-    PresenceStatus.LastMonth -> stringResource(R.string.user_profile_status_last_month)
+    PresenceStatus.Online -> stringResource(Res.string.user_profile_status_online)
+    PresenceStatus.Recently -> stringResource(Res.string.user_profile_status_recently)
+    PresenceStatus.LastWeek -> stringResource(Res.string.user_profile_status_last_week)
+    PresenceStatus.LastMonth -> stringResource(Res.string.user_profile_status_last_month)
     is PresenceStatus.Offline -> formatOfflineLabel(status.wasOnlineSeconds)
     PresenceStatus.Empty -> null
 }
@@ -533,20 +556,20 @@ private fun formatOfflineLabel(wasOnlineSec: Long): String {
     val delta = (now - wasOnlineSec).coerceAtLeast(0)
     return when {
         delta < TimeUnit.MINUTES.toSeconds(1) ->
-            stringResource(R.string.user_profile_status_just_now)
+            stringResource(Res.string.user_profile_status_just_now)
         delta < TimeUnit.HOURS.toSeconds(1) -> {
             val mins = TimeUnit.SECONDS.toMinutes(delta).toInt().coerceAtLeast(1)
-            pluralStringResource(R.plurals.user_profile_status_was_minutes_ago, mins, mins)
+            pluralStringResource(Res.plurals.user_profile_status_was_minutes_ago, mins, mins)
         }
         delta < TimeUnit.DAYS.toSeconds(1) -> {
             val hours = TimeUnit.SECONDS.toHours(delta).toInt().coerceAtLeast(1)
-            pluralStringResource(R.plurals.user_profile_status_was_hours_ago, hours, hours)
+            pluralStringResource(Res.plurals.user_profile_status_was_hours_ago, hours, hours)
         }
         delta < TimeUnit.DAYS.toSeconds(7) -> {
             val days = TimeUnit.SECONDS.toDays(delta).toInt().coerceAtLeast(1)
-            pluralStringResource(R.plurals.user_profile_status_was_days_ago, days, days)
+            pluralStringResource(Res.plurals.user_profile_status_was_days_ago, days, days)
         }
-        else -> stringResource(R.string.user_profile_status_was_long_ago)
+        else -> stringResource(Res.string.user_profile_status_was_long_ago)
     }
 }
 
@@ -580,7 +603,9 @@ private fun copyHandle(context: Context, handle: String) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
         Toast.makeText(
             context,
-            context.getString(R.string.user_profile_handle_copied),
+            kotlinx.coroutines.runBlocking {
+                org.jetbrains.compose.resources.getString(Res.string.user_profile_handle_copied)
+            },
             Toast.LENGTH_SHORT,
         ).show()
     }

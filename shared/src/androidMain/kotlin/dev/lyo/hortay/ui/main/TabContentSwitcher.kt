@@ -13,7 +13,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.saveable.SaveableStateHolder
 import androidx.compose.ui.Modifier
 import dev.lyo.hortay.AppGraph
-import dev.lyo.hortay.R
 import dev.lyo.hortay.data.FeedOrder
 import dev.lyo.hortay.data.TimelinePost
 import dev.lyo.hortay.data.UserMessageBus
@@ -22,6 +21,8 @@ import dev.lyo.hortay.ui.settings.SettingsScreen
 import dev.lyo.hortay.ui.timeline.TimelineScreen
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.link_not_found
 
 /**
  * Tab content switcher. Tab swap = pure crossfade. fastEffectsSpec is M3E's correct
@@ -61,7 +62,7 @@ internal fun TabContentSwitcher(
     tdlibMarkAsRead: suspend (List<TimelinePost>) -> Unit,
 ) {
     val tabEffectsSpec = MaterialTheme.motionScheme.fastEffectsSpec<Float>()
-    val res = androidx.compose.ui.platform.LocalContext.current.resources
+    val res = androidx.compose.runtime.remember { dev.lyo.hortay.data.ComposeResourcesStringResolver() }
 
     AnimatedContent(
         targetState = selectedTab,
@@ -113,7 +114,7 @@ internal fun TabContentSwitcher(
                             onScrollHandled = {},
                             onScrollMissed = {
                                 graph.userMessages.post(
-                                    res.getString(R.string.link_not_found),
+                                    res.getString(Res.string.link_not_found),
                                     UserMessageBus.Severity.Info,
                                 )
                             },

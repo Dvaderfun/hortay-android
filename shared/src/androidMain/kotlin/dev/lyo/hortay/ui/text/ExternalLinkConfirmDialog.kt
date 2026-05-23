@@ -12,9 +12,13 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import dev.lyo.hortay.R
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.action_cancel
+import hortay.shared.generated.resources.link_action_open
+import hortay.shared.generated.resources.link_confirm_body
+import hortay.shared.generated.resources.link_confirm_title
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Anti-phishing confirmation dialog for external URLs reached via a masked link span
@@ -37,11 +41,11 @@ fun ExternalLinkConfirmDialog(
     val pretty = remember(url) { prettyLinkPreview(url) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.link_confirm_title)) },
+        title = { Text(stringResource(Res.string.link_confirm_title)) },
         text = {
             Column {
                 Text(
-                    text = stringResource(R.string.link_confirm_body),
+                    text = stringResource(Res.string.link_confirm_body),
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Spacer(androidx.compose.ui.Modifier.height(8.dp))
@@ -56,11 +60,11 @@ fun ExternalLinkConfirmDialog(
             TextButton(onClick = {
                 runCatching { uriHandler.openUri(url) }
                 onDismiss()
-            }) { Text(stringResource(R.string.link_action_open)) }
+            }) { Text(stringResource(Res.string.link_action_open)) }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.action_cancel))
+                Text(stringResource(Res.string.action_cancel))
             }
         },
     )

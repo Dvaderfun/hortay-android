@@ -36,14 +36,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.res.stringArrayResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import dev.lyo.hortay.R
 import dev.lyo.hortay.ui.icons.Symbol
 import dev.lyo.hortay.ui.theme.HortayExpressive
 import dev.lyo.hortay.ui.theme.asComposeShape
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.media_retry
+import hortay.shared.generated.resources.size_units
+import org.jetbrains.compose.resources.stringArrayResource
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Telegram-style determinate media progress indicator. A semi-transparent black disk
@@ -214,7 +216,7 @@ fun MediaLoadingOverlay(
     ) {
         MediaIndeterminateIndicator(onClick = onCancel)
         if (totalBytes > 0) {
-            val units = stringArrayResource(R.array.size_units)
+            val units = stringArrayResource(Res.array.size_units)
             Spacer(Modifier.height(BYTE_LABEL_GAP))
             BytePill(text = formatProgressBytes(downloadedBytes, totalBytes, units))
         }
@@ -244,7 +246,7 @@ fun MediaFailedOverlay(
     ) {
         Symbol(
             name = "refresh",
-            contentDescription = stringResource(R.string.media_retry),
+            contentDescription = stringResource(Res.string.media_retry),
             tint = Color.White,
             size = size * ICON_FRACTION,
         )
@@ -267,7 +269,7 @@ private fun BytePill(text: String) {
     }
 }
 
-private fun formatProgressBytes(downloaded: Long, total: Long, units: Array<String>): String {
+private fun formatProgressBytes(downloaded: Long, total: Long, units: List<String>): String {
     // For the same-unit case ("5.2 / 12.4 MB") only the right side carries the unit —
     // matches Telegram's compact label. When the units differ ("780 KB / 1.2 MB") we
     // print both sides with their own unit.
@@ -280,7 +282,7 @@ private fun formatProgressBytes(downloaded: Long, total: Long, units: Array<Stri
     }
 }
 
-private fun humanizeBytes(bytes: Long, units: Array<String>): Pair<String, String> {
+private fun humanizeBytes(bytes: Long, units: List<String>): Pair<String, String> {
     if (bytes <= 0L) return "0" to units[0]
     var size = bytes.toDouble()
     var idx = 0

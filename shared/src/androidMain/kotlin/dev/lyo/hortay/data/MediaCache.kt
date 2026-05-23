@@ -21,6 +21,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.drinkless.tdlib.TdApi
 import java.util.concurrent.ConcurrentHashMap
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.media_load_stalled
 
 /**
  * Semantic priority class for [MediaCache.ensure]. Maps to TDLib's 1..32 download priority.
@@ -499,7 +501,7 @@ class MediaCache(
             if (live.bytes != track.bytes || live.changedAt != track.changedAt) continue
             if (track.retries >= MAX_STALL_RETRIES) {
                 Log.w(TAG, "stall watchdog: giving up on $fileId after ${track.retries} retries (priority=$priority, bytes=${track.bytes}, age=${ageMs}ms)")
-                slot.value = MediaState.Failed(res.getString(dev.lyo.hortay.R.string.media_load_stalled))
+                slot.value = MediaState.Failed(res.getString(Res.string.media_load_stalled))
                 tracks.remove(fileId)
                 activePriority.remove(fileId)
                 continue

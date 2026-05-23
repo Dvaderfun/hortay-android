@@ -9,8 +9,11 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.res.stringResource
-import dev.lyo.hortay.R
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.report_about_dialog_ok
+import hortay.shared.generated.resources.report_guest_instruction_body
+import hortay.shared.generated.resources.report_guest_instruction_title
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Shown after guest-mode delegation opens Telegram or a Web tab.
@@ -22,10 +25,10 @@ fun ReportInstructionDialog(onDismiss: () -> Unit) {
         onDismissRequest = onDismiss,
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.report_about_dialog_ok))
+                Text(stringResource(Res.string.report_about_dialog_ok))
             }
         },
-        title = { Text(stringResource(R.string.report_guest_instruction_title)) },
-        text = { Text(stringResource(R.string.report_guest_instruction_body)) },
+        title = { Text(stringResource(Res.string.report_guest_instruction_title)) },
+        text = { Text(stringResource(Res.string.report_guest_instruction_body)) },
     )
 }

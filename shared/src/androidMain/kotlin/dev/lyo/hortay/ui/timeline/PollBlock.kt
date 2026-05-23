@@ -48,13 +48,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.pluralStringResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import dev.lyo.hortay.R
 import dev.lyo.hortay.data.PollKind
 import dev.lyo.hortay.data.PollOption
 import dev.lyo.hortay.data.PostContent
@@ -65,6 +62,20 @@ import dev.lyo.hortay.ui.text.rememberAnnotatedString
 import kotlinx.coroutines.delay
 import java.util.concurrent.TimeUnit
 import kotlin.math.max
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.poll_action_add_option
+import hortay.shared.generated.resources.poll_action_retract
+import hortay.shared.generated.resources.poll_action_view_explanation
+import hortay.shared.generated.resources.poll_action_vote
+import hortay.shared.generated.resources.poll_anonymous_short
+import hortay.shared.generated.resources.poll_countdown_finished
+import hortay.shared.generated.resources.poll_state_closed
+import hortay.shared.generated.resources.poll_total_votes_empty
+import hortay.shared.generated.resources.poll_total_votes_plural
+import hortay.shared.generated.resources.poll_type_quiz
+import hortay.shared.generated.resources.poll_type_regular
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Voting contract handed to [PollBlock]. [PostCard] / [TimelineScreen] capture the host
@@ -173,9 +184,9 @@ private fun PollHeaderChips(content: PostContent.Poll) {
         val isQuiz = content.kind is PollKind.Quiz
         val typeLabel = stringResource(
             when {
-                content.isClosed -> R.string.poll_state_closed
-                isQuiz -> R.string.poll_type_quiz
-                else -> R.string.poll_type_regular
+                content.isClosed -> Res.string.poll_state_closed
+                isQuiz -> Res.string.poll_type_quiz
+                else -> Res.string.poll_type_regular
             },
         )
         PollChip(
@@ -187,7 +198,7 @@ private fun PollHeaderChips(content: PostContent.Poll) {
         if (content.isAnonymous) {
             PollChip(
                 icon = "visibility_off",
-                label = stringResource(R.string.poll_anonymous_short),
+                label = stringResource(Res.string.poll_anonymous_short),
                 container = cs.surfaceContainerHighest,
                 content = cs.onSurfaceVariant,
             )
@@ -215,7 +226,7 @@ private fun PollCountdownChip(content: PostContent.Poll) {
     }
     val remaining = content.closeDate - nowSec
     val label = if (remaining <= 0L) {
-        stringResource(R.string.poll_countdown_finished)
+        stringResource(Res.string.poll_countdown_finished)
     } else {
         formatCountdown(remaining)
     }
@@ -348,7 +359,7 @@ private fun PollOptionsList(content: PostContent.Poll, voting: PollVoting?) {
                         size = 18.dp,
                     )
                     Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.poll_action_vote))
+                    Text(stringResource(Res.string.poll_action_vote))
                 }
             }
         }
@@ -634,9 +645,9 @@ private fun PollFooter(
         modifier = Modifier.fillMaxWidth(),
     ) {
         val totalLabel = if (content.totalVotes == 0) {
-            stringResource(R.string.poll_total_votes_empty)
+            stringResource(Res.string.poll_total_votes_empty)
         } else {
-            pluralStringResource(R.plurals.poll_total_votes_plural, content.totalVotes, content.totalVotes)
+            pluralStringResource(Res.plurals.poll_total_votes_plural, content.totalVotes, content.totalVotes)
         }
         Text(
             text = totalLabel,
@@ -656,7 +667,7 @@ private fun PollFooter(
             TextButton(
                 onClick = { voting.onCommit(IntArray(0)) },
             ) {
-                Text(stringResource(R.string.poll_action_retract))
+                Text(stringResource(Res.string.poll_action_retract))
             }
         }
 
@@ -674,7 +685,7 @@ private fun PollFooter(
             ) {
                 Symbol(name = "lightbulb", tint = cs.onTertiaryContainer, size = 16.dp)
                 Spacer(Modifier.width(6.dp))
-                Text(stringResource(R.string.poll_action_view_explanation))
+                Text(stringResource(Res.string.poll_action_view_explanation))
             }
         }
 
@@ -682,7 +693,7 @@ private fun PollFooter(
         // is a reader app, so this taps through to Telegram.
         if (content.canAddOption && !content.isClosed) {
             TextButton(onClick = onOpenInSource) {
-                Text(stringResource(R.string.poll_action_add_option))
+                Text(stringResource(Res.string.poll_action_add_option))
             }
         }
     }

@@ -28,14 +28,12 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.lyo.hortay.AppGraph
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import dev.lyo.hortay.R
 import dev.lyo.hortay.data.FeedOrder
 import dev.lyo.hortay.data.isUnreadIn
 import dev.lyo.hortay.data.orderedFor
@@ -46,6 +44,9 @@ import dev.lyo.hortay.ui.timeline.ChannelHeaderBar
 import dev.lyo.hortay.ui.timeline.LocalReadCursors
 import dev.lyo.hortay.ui.timeline.PostCard
 import dev.lyo.hortay.ui.timeline.PostInteractions
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.web_subscribers
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Guest-mode single-channel view. Mirrors the TDLib-mode
@@ -179,7 +180,7 @@ fun WebChannelScreen(
 
     val title = channelInfo?.title?.takeIf { it.isNotBlank() } ?: "@$username"
     val subtitle = channelInfo?.subscribers
-        ?.let { stringResource(R.string.web_subscribers, it) }
+        ?.let { stringResource(Res.string.web_subscribers, it) }
         ?: "@$username"
 
     Scaffold(

@@ -26,11 +26,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import dev.lyo.hortay.R
 import dev.lyo.hortay.ui.icons.Symbol
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.spoiler_sensitive_tap
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Telegram-style spoiler / sensitive-content cover for media. Sits on top of an already-
@@ -130,7 +131,7 @@ fun SpoilerOverlay(
                     size = 18.dp,
                 )
                 Text(
-                    text = stringResource(R.string.spoiler_sensitive_tap),
+                    text = stringResource(Res.string.spoiler_sensitive_tap),
                     color = Color.White,
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Medium,

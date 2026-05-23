@@ -34,12 +34,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboard
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
-import dev.lyo.hortay.R
 import dev.lyo.hortay.data.web.LookupResult
 import dev.lyo.hortay.data.web.WebChannelInfo
 import dev.lyo.hortay.data.web.WebFeedSource
@@ -47,6 +45,29 @@ import dev.lyo.hortay.data.web.WebRepository
 import dev.lyo.hortay.data.web.WebTelegramClient
 import dev.lyo.hortay.data.web.parseUsernameFromInput
 import kotlinx.coroutines.launch
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.avatar_for_channel
+import hortay.shared.generated.resources.web_add_body
+import hortay.shared.generated.resources.web_add_channel
+import hortay.shared.generated.resources.web_add_check
+import hortay.shared.generated.resources.web_add_confirm
+import hortay.shared.generated.resources.web_add_curated_title
+import hortay.shared.generated.resources.web_add_input_label
+import hortay.shared.generated.resources.web_add_invalid
+import hortay.shared.generated.resources.web_add_lookup
+import hortay.shared.generated.resources.web_add_mentioned_count
+import hortay.shared.generated.resources.web_add_mentioned_title
+import hortay.shared.generated.resources.web_add_network_error
+import hortay.shared.generated.resources.web_add_not_found
+import hortay.shared.generated.resources.web_add_parse_failure
+import hortay.shared.generated.resources.web_add_private
+import hortay.shared.generated.resources.web_add_rate_limited
+import hortay.shared.generated.resources.web_add_signin_for_private
+import hortay.shared.generated.resources.web_add_validating
+import hortay.shared.generated.resources.web_cancel
+import hortay.shared.generated.resources.web_lookup_timed_out
+import hortay.shared.generated.resources.web_subscribers
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Modal bottom sheet for subscribing to a new public channel. UX flow:
@@ -108,7 +129,7 @@ fun AddChannelSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
     val clipboard = LocalClipboard.current
-    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val ctx = androidx.compose.runtime.remember { dev.lyo.hortay.data.ComposeResourcesStringResolver() }
 
     var input by remember { mutableStateOf("") }
     var lookupState by remember { mutableStateOf<LookupState>(LookupState.Idle) }
@@ -120,14 +141,14 @@ fun AddChannelSheet(
                 is LookupResult.Found -> LookupState.Found(r.channel)
                 is LookupResult.Empty -> LookupState.Found(r.channel)
                 LookupResult.NotFound -> LookupState.Error(
-                    ctx.getString(R.string.web_add_not_found, username),
+                    ctx.getString(Res.string.web_add_not_found, username),
                 )
                 LookupResult.Private -> LookupState.Error(
-                    message = ctx.getString(R.string.web_add_private),
+                    message = ctx.getString(Res.string.web_add_private),
                     isPrivate = true,
                 )
                 LookupResult.ParseFailure -> LookupState.Error(
-                    ctx.getString(R.string.web_add_parse_failure),
+                    ctx.getString(Res.string.web_add_parse_failure),
                 )
                 // Ceiling division + min-1 guard: a sub-second retryAfterMs
                 // (e.g. 400ms) used to format as "0 s" via integer truncation,
@@ -135,15 +156,15 @@ fun AddChannelSheet(
                 // rapid-fire retry.
                 is LookupResult.RateLimited -> LookupState.Error(
                     ctx.getString(
-                        R.string.web_add_rate_limited,
+                        Res.string.web_add_rate_limited,
                         ((r.retryAfterMs + 999) / 1000).toInt().coerceAtLeast(1),
                     ),
                 )
                 is LookupResult.NetworkError -> LookupState.Error(
                     if (r.cause is dev.lyo.hortay.data.web.LookupTimeoutException) {
-                        ctx.getString(R.string.web_lookup_timed_out)
+                        ctx.getString(Res.string.web_lookup_timed_out)
                     } else {
-                        ctx.getString(R.string.web_add_network_error, r.cause.message ?: "")
+                        ctx.getString(Res.string.web_add_network_error, r.cause.message ?: "")
                     },
                 )
             }
@@ -153,7 +174,7 @@ fun AddChannelSheet(
     fun trySubmit() {
         val username = parseUsernameFromInput(input)
         if (username == null) {
-            lookupState = LookupState.Error(ctx.getString(R.string.web_add_invalid))
+            lookupState = LookupState.Error(ctx.getString(Res.string.web_add_invalid))
             return
         }
         lookup(username)
@@ -215,11 +236,11 @@ fun AddChannelSheet(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
-                text = stringResource(R.string.web_add_channel),
+                text = stringResource(Res.string.web_add_channel),
                 style = MaterialTheme.typography.titleLarge,
             )
             Text(
-                text = stringResource(R.string.web_add_body),
+                text = stringResource(Res.string.web_add_body),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -233,7 +254,7 @@ fun AddChannelSheet(
                     }
                 },
                 singleLine = true,
-                label = { Text(stringResource(R.string.web_add_input_label)) },
+                label = { Text(stringResource(Res.string.web_add_input_label)) },
                 modifier = Modifier.fillMaxWidth(),
             )
 
@@ -245,7 +266,7 @@ fun AddChannelSheet(
                 ) {
                     LoadingIndicator(modifier = Modifier.size(20.dp))
                     Text(
-                        text = stringResource(R.string.web_add_validating),
+                        text = stringResource(Res.string.web_add_validating),
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
@@ -276,7 +297,7 @@ fun AddChannelSheet(
                                 onSignIn()
                             }
                         }) {
-                            Text(stringResource(R.string.web_add_signin_for_private))
+                            Text(stringResource(Res.string.web_add_signin_for_private))
                         }
                     }
                 }
@@ -287,10 +308,10 @@ fun AddChannelSheet(
                     onClick = ::trySubmit,
                     enabled = input.isNotBlank() && lookupState !is LookupState.Loading,
                 ) {
-                    Text(stringResource(R.string.web_add_lookup))
+                    Text(stringResource(Res.string.web_add_lookup))
                 }
                 TextButton(onClick = onDismiss) {
-                    Text(stringResource(R.string.web_cancel))
+                    Text(stringResource(Res.string.web_cancel))
                 }
             }
 
@@ -339,7 +360,7 @@ fun AddChannelSheet(
             if (mentionedSuggestions.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    text = stringResource(R.string.web_add_mentioned_title),
+                    text = stringResource(Res.string.web_add_mentioned_title),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -357,7 +378,7 @@ fun AddChannelSheet(
             if (curatedFiltered.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    text = stringResource(R.string.web_add_curated_title),
+                    text = stringResource(Res.string.web_add_curated_title),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -387,7 +408,7 @@ private fun ChannelPreviewCard(channel: WebChannelInfo, onConfirm: () -> Unit) {
                 AsyncImage(
                     model = channel.avatarUrl,
                     contentDescription = stringResource(
-                        R.string.avatar_for_channel,
+                        Res.string.avatar_for_channel,
                         channel.title,
                     ),
                     modifier = Modifier
@@ -400,13 +421,13 @@ private fun ChannelPreviewCard(channel: WebChannelInfo, onConfirm: () -> Unit) {
                 Text("@${channel.username}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (channel.subscribers != null) {
                     Text(
-                        text = stringResource(R.string.web_subscribers, channel.subscribers),
+                        text = stringResource(Res.string.web_subscribers, channel.subscribers),
                         style = MaterialTheme.typography.labelSmall,
                     )
                 }
             }
             Button(onClick = onConfirm) {
-                Text(stringResource(R.string.web_add_confirm))
+                Text(stringResource(Res.string.web_add_confirm))
             }
         }
     }
@@ -436,13 +457,13 @@ private fun MentionedRow(suggestion: MentionedChannel, onTap: () -> Unit) {
         Column(modifier = Modifier.weight(1f)) {
             Text("@${suggestion.username}", style = MaterialTheme.typography.bodyMedium)
             Text(
-                text = stringResource(R.string.web_add_mentioned_count, suggestion.mentionCount),
+                text = stringResource(Res.string.web_add_mentioned_count, suggestion.mentionCount),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         TextButton(onClick = onTap) {
-            Text(stringResource(R.string.web_add_check))
+            Text(stringResource(Res.string.web_add_check))
         }
     }
 }
@@ -461,7 +482,7 @@ private fun CuratedRow(suggestion: CuratedChannel, onTap: () -> Unit) {
             Text(suggestion.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         TextButton(onClick = onTap) {
-            Text(stringResource(R.string.web_add_check))
+            Text(stringResource(Res.string.web_add_check))
         }
     }
 }

@@ -11,12 +11,17 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.pluralStringResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import dev.lyo.hortay.R
 import dev.lyo.hortay.data.ChatInvitePreview
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.action_cancel
+import hortay.shared.generated.resources.invite_dialog_join
+import hortay.shared.generated.resources.invite_dialog_subscribers
+import hortay.shared.generated.resources.invite_dialog_title
+import hortay.shared.generated.resources.invite_dialog_unknown_chat
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Confirmation dialog for a Telegram channel invite link. Surfaces the resolved title
@@ -35,11 +40,11 @@ fun ChatInvitePreviewDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.invite_dialog_title)) },
+        title = { Text(stringResource(Res.string.invite_dialog_title)) },
         text = {
             Column(modifier = Modifier) {
                 Text(
-                    text = preview.title.ifBlank { stringResource(R.string.invite_dialog_unknown_chat) },
+                    text = preview.title.ifBlank { stringResource(Res.string.invite_dialog_unknown_chat) },
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -47,7 +52,7 @@ fun ChatInvitePreviewDialog(
                     Spacer(Modifier.height(4.dp))
                     Text(
                         text = pluralStringResource(
-                            R.plurals.invite_dialog_subscribers,
+                            Res.plurals.invite_dialog_subscribers,
                             preview.memberCount,
                             preview.memberCount,
                         ),
@@ -59,12 +64,12 @@ fun ChatInvitePreviewDialog(
         },
         confirmButton = {
             TextButton(onClick = onConfirm) {
-                Text(stringResource(R.string.invite_dialog_join))
+                Text(stringResource(Res.string.invite_dialog_join))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.action_cancel))
+                Text(stringResource(Res.string.action_cancel))
             }
         },
     )
