@@ -98,6 +98,8 @@ class MainActivity : ComponentActivity() {
                         dev.lyo.hortay.AndroidToaster(applicationContext),
                     dev.lyo.hortay.ui.media.LocalMediaShareActions provides
                         dev.lyo.hortay.ui.media.AndroidMediaShareActions,
+                    dev.lyo.hortay.ui.settings.LocalLanguagePicker provides
+                        dev.lyo.hortay.ui.settings.AndroidLanguagePicker(this@MainActivity),
                 ) {
                     Surface(modifier = Modifier.fillMaxSize()) {
                         val auth by graph.tdClient.authStage.collectAsStateWithLifecycle()

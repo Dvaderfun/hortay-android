@@ -485,6 +485,8 @@ class AppGraph(context: Context) {
         reportLogStore = reportLogStore,
         reportExplainerStore = reportExplainerStore,
         settingsStore = settingsStore,
+        stats = statsRepository,
+        autoDownload = autoDownloadStore,
         translationsStore = translations,
         backendScope = appScope,
     )
