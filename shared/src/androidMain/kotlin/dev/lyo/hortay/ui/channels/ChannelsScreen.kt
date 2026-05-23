@@ -1,3 +1,5 @@
+@file:Suppress("INVISIBLE_REFERENCE", "INVISIBLE_MEMBER")
+
 package dev.lyo.hortay.ui.channels
 
 import androidx.compose.foundation.layout.Arrangement

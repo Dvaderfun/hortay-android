@@ -9,6 +9,7 @@ pluginManagement {
         }
         mavenCentral()
         gradlePluginPortal()
+        maven("https://packages.jetbrains.team/maven/p/cmp/dev")
     }
 }
 plugins {
@@ -20,6 +21,11 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // CMP dev builds — needed to probe pre-release Material3 Expressive
+        // exposure. The 1.12.0-alpha02+dev412x builds may publish the
+        // ExperimentalMaterial3ExpressiveApi opt-in to non-Android targets,
+        // which alpha01 does not (it's `internal` in CMP's iOS publication).
+        maven("https://packages.jetbrains.team/maven/p/cmp/dev")
     }
 }
 

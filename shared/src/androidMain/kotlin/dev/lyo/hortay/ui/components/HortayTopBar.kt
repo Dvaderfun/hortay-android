@@ -1,3 +1,5 @@
+@file:Suppress("INVISIBLE_REFERENCE", "INVISIBLE_MEMBER")
+
 package dev.lyo.hortay.ui.components
 
 import androidx.compose.foundation.layout.RowScope

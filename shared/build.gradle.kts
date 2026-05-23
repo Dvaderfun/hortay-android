@@ -9,6 +9,19 @@ plugins {
 }
 
 kotlin {
+    // Kotlin compiler args. `-Xexpect-actual-classes` silences the Beta
+    // warning that fires on every expect/actual class (PlatformLog,
+    // DriverFactory, WebDatabaseProvider). The feature is stable in K2;
+    // the warning is purely a "this is still labelled Beta" notice.
+    //
+    // `-Xskip-prerelease-check` lets us depend on CMP material3 1.5.0-alpha19
+    // (pre-release annotations on top of stable APIs we already opted-in to).
+    @Suppress("OPT_IN_USAGE")
+    compilerOptions.freeCompilerArgs.addAll(
+        "-Xexpect-actual-classes",
+        "-Xskip-prerelease-check",
+    )
+
     android {
         namespace = "dev.lyo.hortay"
         compileSdk = 37
@@ -92,6 +105,12 @@ kotlin {
             // the iOS guest-mode feed UI for channel avatars + photo posts.
             implementation(libs.coil.compose)
             implementation(libs.coil.network.ktor3)
+
+            // androidx.graphics.shapes 1.1.0 is KMP-published with iOS support —
+            // Morph / RoundedPolygon / toPath are accessible on every target,
+            // so the shared theme's PressedSelectedShape interpolation works
+            // identically on Android and iOS.
+            implementation(libs.androidx.graphics.shapes)
         }
 
         androidMain.dependencies {
@@ -107,7 +126,6 @@ kotlin {
             implementation(libs.compose.ui)
             implementation(libs.compose.ui.graphics)
             implementation(libs.compose.material3)
-            implementation(libs.androidx.graphics.shapes)
             implementation(libs.compose.ui.text.google.fonts)
 
             implementation(libs.kotlinx.coroutines.android)
