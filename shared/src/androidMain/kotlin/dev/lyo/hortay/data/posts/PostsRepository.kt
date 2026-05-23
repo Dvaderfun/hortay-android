@@ -2129,17 +2129,6 @@ internal fun TdApi.Chat.isChannel(): Boolean {
     return type is TdApi.ChatTypeSupergroup && type.isChannel
 }
 
-/** Result of [PostsRepository.resolvePublicHandle]. See its KDoc for semantics. */
-sealed interface PublicHandleResult {
-    data class Channel(val chatId: Long) : PublicHandleResult
-    /** Handle resolves to a 1:1 user (or bot). Carries TDLib `userId` so callers can
-     *  open the in-app [dev.lyo.hortay.ui.users.UserProfileSheet] without re-resolving. */
-    data class User(val userId: Long) : PublicHandleResult
-    data class Unsupported(val kind: PublicHandleKind) : PublicHandleResult
-    data object NotFound : PublicHandleResult
-}
-
-/** Kind discriminator carried by [PublicHandleResult.Unsupported]. Users are routed via
- *  [PublicHandleResult.User] directly, so this enum only covers things Hortay surfaces
- *  to the OS / a snackbar (groups, supergroups, unrecognised entities). */
-enum class PublicHandleKind { Group, Unknown }
+// PublicHandleResult / PublicHandleKind moved to commonMain/data/posts/PublicHandleResult.kt
+// so DeepLinkDispatcher (commonMain) can dispatch the resolved variants without dragging
+// in the TDLib-bound PostsRepository class.

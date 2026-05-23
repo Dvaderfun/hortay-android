@@ -106,6 +106,7 @@ fun WebSearchScreen(
     contentPadding: PaddingValues = PaddingValues(),
 ) {
     val context = LocalContext.current
+    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
     val keyboard = LocalSoftwareKeyboardController.current
     val scope = rememberCoroutineScope()
 
@@ -154,10 +155,10 @@ fun WebSearchScreen(
         // (`GetMessageLink` wouldn't have a real chat to query against in guest mode)
         // and uses the hand-rolled `t.me/<handle>/<msg>` fallback.
         PostInteractions(
-            onPostClick = { post -> scope.launch { PostActions.openInTelegram(context, null, post) } },
-            onShareClick = { post -> scope.launch { PostActions.share(context, null, post) } },
-            onCopyClick = { post -> PostActions.copyText(context, post) },
-            onOpenClick = { post -> scope.launch { PostActions.openInTelegram(context, null, post) } },
+            onPostClick = { post -> scope.launch { PostActions.openInTelegram(uriHandler, null, post) } },
+            onShareClick = { post -> scope.launch { PostActions.share(null, post) } },
+            onCopyClick = { post -> PostActions.copyText(post) },
+            onOpenClick = { post -> scope.launch { PostActions.openInTelegram(uriHandler, null, post) } },
             onBookmarkClick = { post ->
                 scope.launch { bookmarks.toggle(post) }
             },

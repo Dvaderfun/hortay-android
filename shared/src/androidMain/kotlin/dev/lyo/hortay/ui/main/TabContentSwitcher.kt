@@ -97,6 +97,7 @@ internal fun TabContentSwitcher(
                         TimelineScreen(
                             feed = graph.postsRepository,
                             tdlibRepo = graph.postsRepository,
+                            backend = graph.backend,
                             commentsRepo = graph.commentsRepository,
                             folders = graph.chatFoldersRepository,
                             translations = graph.translations,
@@ -140,6 +141,7 @@ internal fun TabContentSwitcher(
                 NavTab.Saved -> TimelineScreen(
                     feed = graph.postsRepository,
                     tdlibRepo = graph.postsRepository,
+                    backend = graph.backend,
                     commentsRepo = graph.commentsRepository,
                     folders = graph.chatFoldersRepository,
                     translations = graph.translations,

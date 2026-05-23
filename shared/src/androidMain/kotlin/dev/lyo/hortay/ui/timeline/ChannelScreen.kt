@@ -465,7 +465,7 @@ fun ChannelScreen(
                 markPostReadState.value(post)
                 val items = (post.content as? dev.lyo.hortay.data.PostContent.PhotoAlbum)?.items.orEmpty()
                 if (items.getOrNull(idx)?.isUnplayableVideo == true) {
-                    scope.launch { PostActions.openInTelegram(context, repo, post) }
+                    scope.launch { PostActions.openInTelegram(uriHandler, backend, post) }
                 } else {
                     viewer.openFor(post.content, idx)
                 }
@@ -530,11 +530,11 @@ fun ChannelScreen(
                 }
             },
             onBookmarkClick = { post -> vm.toggleBookmark(post) },
-            onShareClick = { post -> scope.launch { PostActions.share(context, repo, post) } },
-            onCopyClick = { post -> PostActions.copyText(context, post) },
+            onShareClick = { post -> scope.launch { PostActions.share(backend, post) } },
+            onCopyClick = { post -> PostActions.copyText(post) },
             onOpenClick = { post ->
                 markPostReadState.value(post)
-                scope.launch { PostActions.openInTelegram(context, repo, post) }
+                scope.launch { PostActions.openInTelegram(uriHandler, backend, post) }
             },
             onTranslateClick = { post ->
                 scope.launch {
