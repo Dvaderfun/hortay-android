@@ -6,7 +6,7 @@ Continuation of Phase H. Target: every UI screen + repository compiles on iOS, t
 
 ## Progress (session of 2026-05-23 → 2026-05-24)
 
-**Counts:** 56 androidMain / 159 commonMain / 17 iosMain
+**Counts:** 54 androidMain / 161 commonMain / 17 iosMain
 (started session at 61 / 150 / 17, started Phase H at 111 / 87 / 9).
 
 **Wave order revised bottom-up** because dependencies run leaf → root:
@@ -48,33 +48,45 @@ first, move leaves, then containers.
 - **Wave D wave 1 (partial)** (`e4d2aa9`) — `MainScaffoldDialogs` moves to
   commonMain; takes `backend` + `linkDialogs` + `userMessages` instead of
   `graph`. `joinByInvite` added to `HortayBackend` to support the invite-
-  confirm path. `NavOverlayRenderer` + `TabContentSwitcher` deferred —
-  they render `ChannelScreen` / `TimelineScreen` / `SettingsScreen`, which
-  are still androidMain, so they can't go to commonMain until Wave 3.
+  confirm path.
+- **Wave D wave 3 (partial)** (`9731608` + `2802aef`) — `ChannelViewModel`
+  + `ChannelScreen` move to commonMain. `prefetchThread` /
+  `viewMessages` added to `HortayBackend`. The screen drops direct
+  `PostsRepository` / `CommentsRepository` / `ChannelActionsRepository`
+  / `TranslationsStore` refs; `LocalContext` was unused.
 
 ### Next session resume points
-1. **Wave D wave 3 (the BIG one)**: move `TimelineScreen` (2002 lines),
-   `ChannelScreen` (1039 lines), `ChannelViewModel` (480 lines). Each
-   needs the backend Wave-C surface in place (now landed). Drop direct
-   `PostsRepository` / `CommentsRepository` / `ChannelActionsRepository`
-   / `TranslationsStore` references and route through `backend.*`
-   instead. **Split across multiple commits** — Phase H taught this the
-   hard way. Probably: TimelineScreen alone, then ChannelScreen +
-   ChannelViewModel together, possibly more sub-splits.
+1. **Wave D wave 3 finish — `TimelineScreen` (2002 lines, the BIG one)**.
+   Needs more `HortayBackend` surface first:
+   - `archivedChatIds: StateFlow<Set<Long>>` (currently on
+     PostsRepository — TDLib archive list).
+   - A `FoldersFacade` impl on Android that joins ChatFolderInfo +
+     ChatFolder + folderChatIds into `FolderTab` projections (DTO is
+     already in commonMain). Filter UI needs both the resolved tab
+     list and the "rules resolved yet" gate, so the facade should
+     expose `tabs: StateFlow<List<FolderTab>>` plus a
+     `rulesResolved: StateFlow<Boolean>` (or similar) and a suspend
+     `folderChatIds(folderId)`.
+   - Plus the existing reactions / poll / translations surface (all
+     landed in `657a3e9`).
+   The screen itself reads `LocalContext` once but never uses it —
+   delete the line.
 2. **Wave D wave 5**: `SettingsScreen` (1423 lines) + `AutoDownloadScreen`
-   (710 lines). `AutoDownloadFacade` interface landed already; settings
-   route through `backend.settingsStore`. Status-bar tweak / language
-   picker were already abstracted in I-A.
+   (710 lines). AutoDownloadScreen needs platform abstractions for
+   `ConnectivityManager` (restrict-background status) and
+   `Settings.ACTION_DATA_USAGE_SETTINGS` (open OS data-saver page) —
+   probably two new entries on `Platform.kt` / a `PlatformConnectivity`
+   class. SettingsScreen routes through `backend.settingsStore` /
+   `backend.statsRepository`.
 3. **Wave D wave 1 finish**: `NavOverlayRenderer`, `TabContentSwitcher`
-   move now that ChannelScreen + TimelineScreen + SettingsScreen are in
-   commonMain.
-4. **Wave D wave 2**: `MainScaffold` (557 lines) — the container ties
-   everything together.
+   move once TimelineScreen + SettingsScreen are in commonMain (those
+   are what the overlays render).
+4. **Wave D wave 2**: `MainScaffold` (557 lines) — the container.
 5. **Wave D wave 4**: `WebModeScaffold`, `AddChannelSheet`,
    `MigrationProposalSheet`. WebModeScaffold consumes
-   `LocalGuestReportDelegate` (slot already landed) for the report
-   delegation path. `MigrationProposalSheet` needs
-   `MigrationCoordinator.progress` exposed via backend.
+   `LocalGuestReportDelegate` (slot already landed).
+   `MigrationProposalSheet` needs `MigrationCoordinator.progress`
+   exposed via backend.
 6. **Wave D wave 7**: `Theme.kt` — last UI file.
 7. **I-D**: iOS UI parity ship — replace `MainViewController`'s parallel
    renderer with the real `WebModeScaffold` tree.
