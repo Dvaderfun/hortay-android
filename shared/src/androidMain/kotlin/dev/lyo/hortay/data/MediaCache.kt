@@ -34,26 +34,9 @@ import hortay.shared.generated.resources.media_load_stalled
  * one above: photo thumbs (16) never block the foreground viewer (32); avatar pyramids (2)
  * never block visible photo thumbs.
  */
-enum class DownloadPriority(val tdValue: Int) {
-    /** Active full-screen viewer / playing video. */
-    Foreground(32),
-    /**
-     * Card whose centre is closest to the viewport centre — i.e. what the user is
-     * most likely staring at right now. Sits one tier above plain [VisibleMedia]
-     * so on a tight TDLib pool (mobile/roaming, ~4 active slots per
-     * [tdlib/td#786](https://github.com/tdlib/td/issues/786)) the dominant card
-     * always grabs a slot first regardless of LIFO ordering inside lane 16. On
-     * Wi-Fi the pool is wide enough that the priority gap is invisible — same
-     * file lands on both, the gap is just defence in depth.
-     */
-    VisibleCenter(24),
-    /** Photo / video thumb currently visible in the timeline (off-centre). */
-    VisibleMedia(16),
-    /** Off-screen but next-up — speculative prefetch. */
-    Prefetch(8),
-    /** Avatar small (160×160). Always loses to media. */
-    Avatar(2),
-}
+// DownloadPriority + MediaState live in commonMain/data/MediaState.kt so UI files
+// in commonMain (MediaBinding, TdMediaImage, MediaProgressIndicator, …) can
+// reference them without dragging in the TDLib-bound MediaCache class.
 
 /**
  * App-scoped cache for TDLib file downloads.
@@ -1001,25 +984,7 @@ class MediaCache(
     }
 }
 
-sealed interface MediaState {
-    data object Idle : MediaState
-    /**
-     * @param progress 0..1, what fraction of [totalBytes] has reached disk.
-     * @param downloadedBytes mirror of TDLib's `local.downloadedSize` — what the UI shows
-     *   on the left of the "5.2 / 12.4 MB" label.
-     * @param totalBytes preferred from `size` (server-side total), falling back to
-     *   `expectedSize` (heuristic estimate) when the real size is still unknown. 0 when
-     *   neither is known — UI should hide the byte label in that case rather than print
-     *   "5.2 / 0 MB".
-     */
-    data class Downloading(
-        val progress: Float,
-        val downloadedBytes: Long = 0L,
-        val totalBytes: Long = 0L,
-    ) : MediaState
-    data class Ready(val path: String) : MediaState
-    data class Failed(val reason: String) : MediaState
-}
+// MediaState lives in commonMain/data/MediaState.kt — see DownloadPriority note above.
 
 private fun TdApi.File.toMediaState(): MediaState {
     val localPath = local.path.orEmpty()
