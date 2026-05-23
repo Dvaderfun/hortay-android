@@ -37,7 +37,9 @@ Single-process, single-Activity. `MainActivity` routes: `auth.Ready → MainScaf
 
 DI built in `HortayApp.onCreate` as `graph: AppGraph`, accessed via `(application as HortayApp).graph`. Heavy singletons (`MediaCache`, `CustomEmoji`, `ExoPlayerPool`, `ReadCursors`) injected via CompositionLocal in `MainActivity`.
 
-**Code distribution (current state, post-Phase 1):** All ~177 Kotlin source files live in `shared/src/androidMain/kotlin/`. `commonMain` directories exist but are empty — code moves to `commonMain` happen in subsequent phases. Migration plan: pure data models + CMP-ready UI (~65 files) → `commonMain`; TDLib + ExoPlayer + platform services stay in `androidMain` behind expect/actual.
+**Code distribution (current state, mid-migration):** 12 pure data files + SubscriptionsStore + DriverFactory (expect) + resources (strings + 94 drawables) live in `shared/src/commonMain/`. 165 files still in `shared/src/androidMain/kotlin/` — UI (60 use `R.string.*`), TDLib repositories (25), ExoPlayer (5), Lottie inline-emoji animator (6), Context-tied stores (24). Phase G migration moves the bulk to commonMain — see `C:\Users\dvade\.claude\plans\expressive-baking-sparkle.md` for the per-step plan.
+
+**iOS UI (current state):** `shared/src/iosMain/kotlin/dev/lyo/hortay/MainViewController.kt` mounts a minimal SubscriptionsScreen with real DataStore persistence. `iosApp/iosApp.xcodeproj` builds + runs on Mac/Simulator. Phase G replaces the placeholder with the full WebModeScaffold once UI files reach commonMain.
 
 **Modularization trigger (for further splits within `:shared`).** Stay single-source-set inside `:shared` until any of: > 300 Kotlin files in `androidMain`, cold build > 60 s on dev hardware, or > 1 active contributor. Cut lines are already encoded by packages — `data/web/*` → `:data-web`, `ui/timeline/*` + `ui/main/*` → `:feature-timeline`, `ui/theme/*` + `ui/components/*` → `:core-ui`. Until then, enforce boundaries with `internal` visibility, not separate modules.
 

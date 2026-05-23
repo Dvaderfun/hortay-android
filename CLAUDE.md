@@ -70,19 +70,51 @@ The Xcode "Compile Kotlin Framework" build phase invokes `:shared:embedAndSignAp
   - `compose-ui-text-google-fonts` → bundled `.ttf` in `commonMain/composeResources/font/`.
 - **Stays Android-only (behind expect/actual or skipped on iOS):** `androidx.media3` (ExoPlayer; iOS uses AVPlayer expect/actual), `coil-gif` / `coil-video`, `core-splashscreen`, `androidx.appcompat`, `androidx.browser`, `leakcanary`, `androidx.profileinstaller`, `androidx.graphics:graphics-shapes` (if not in CMP material3).
 
-## commonMain inventory (post-Phase C partial)
+## commonMain inventory (current state)
 
-Data layer files moved to `shared/src/commonMain/kotlin/dev/lyo/hortay/data/`:
-- `AuthStage.kt`, `ConnectionStatus.kt`, `FormattedText.kt`, `PostContent.kt`, `TimelinePost.kt`, `UserMessageBus.kt`, `PostFilterStrategy.kt`, `ReactionTogglePolicy.kt`, `ThreadRow.kt`, `FeedSource.kt`, `DeepLinkRouter.kt`
-- `report/ReportDialogState.kt`
-- `web/db/DriverFactory.kt` (`expect class`)
+Data layer in `shared/src/commonMain/kotlin/dev/lyo/hortay/`:
+- `data/` — 12 pure data files: `AuthStage`, `ConnectionStatus`, `FormattedText`, `PostContent`, `TimelinePost`, `UserMessageBus`, `PostFilterStrategy`, `ReactionTogglePolicy`, `ThreadRow`, `FeedSource`, `DeepLinkRouter`, `report/ReportDialogState`.
+- `data/PreferencesDataStoreFactory.kt` — `expect fun createPreferencesDataStore(name): DataStore<Preferences>` with platform actuals via Okio.
+- `data/web/SubscriptionsStore.kt` — KMP, takes `DataStore<Preferences>` from factory.
+- `data/web/db/DriverFactory.kt` — `expect class DriverFactory` with platform actuals (AndroidSqliteDriver / NativeSqliteDriver).
 
-Stays in androidMain (transitively depend on types still Android-resident):
-- `LinkDialogState.kt` (depends on `ChatInvitePreview` declared in `ChannelActionsRepository.kt`).
-- `ReadCursors.kt` (depends on `FeedOrder` enum declared in `SettingsStore.kt`).
-- All UI files (use `R.string.*` — need composeResources migration first).
+Resources in `shared/src/commonMain/composeResources/`:
+- `values/strings.xml` + `values-uk/strings.xml` (EN + UK).
+- `drawable/sym_*.xml` (94 vector drawables).
+- Duplicated in `shared/src/androidMain/res/` during migration so existing `R.string.*` keeps working.
 
-Next moves (Phase C continuation, future session):
-1. Extract `FeedOrder` + `ChatInvitePreview` into standalone files in commonMain → unblock LinkDialogState + ReadCursors moves.
-2. CMP composeResources migration (`R.string.*` → `Res.string.*`) → unblocks ~48 UI files.
-3. expect/actual `PlatformContext` for `LocalContext.current` usages → unblocks any UI file using Android Context directly.
+iOS UI in `shared/src/iosMain/kotlin/dev/lyo/hortay/MainViewController.kt`:
+- Working subscriptions screen with real DataStore persistence.
+- Mounted from `iosApp/iosApp/ContentView.swift` via `UIViewControllerRepresentable`.
+
+## Migration status
+
+**Completed phases:**
+- Phase 1 — KMP/CMP build system
+- Phase A2 — Jsoup → Ksoup
+- Phase A3 — OkHttp → Ktor
+- Phase A4 — Coil-network-okhttp → coil-network-ktor3
+- Phase A6 — DataStore KMP (factory + okio)
+- Phase A7 — SQLDelight multiplatform (native-driver + expect/actual DriverFactory)
+- Phase B — iOS targets (iosArm64, iosSimulatorArm64, iosX64)
+- Phase C — 12 pure data files + resources moved to commonMain
+- Phase D — `:iosApp` Xcode project
+- Phase E — iOS verification on Mac (build + simulator launch)
+- Phase F — Real iOS UI with DataStore persistence
+
+**Partial:**
+- Phase A1 — Compottie: only `LottieStickerView` migrated. Inline-emoji animator path (`CustomEmojiAnimator` + `InlineCustomEmojiRenderer` + stores) stays Airbnb Lottie on Android (Compottie has no `LottieDrawable` for bitmap-bg-rasterisation).
+
+**Deferred:**
+- Phase A5 — Google Fonts → bundled fonts (cosmetic).
+
+**Pending — Phase G (next session):**
+Move the remaining 165 androidMain files. See plan at `C:\Users\dvade\.claude\plans\expressive-baking-sparkle.md`. Steps:
+1. **G1** — Bulk `R.string` → `Res.string` migration script (37 UI files unblock).
+2. **G2** — TDLib expect/actual `HortayBackend` interface (25 TDLib-touching files).
+3. **G3** — `expect interface VideoPlayer` (5 ExoPlayer files).
+4. **G5** — Context-tied store + StringResolver expect/actual (24 files).
+5. **G6** — Move web pipeline (WebFeedSource etc.) to commonMain.
+6. **G7** — IosAppGraph + wire `MainViewController` to `WebModeScaffold`.
+
+Target: iOS Simulator runs the same Hortay UX as Android (guest-mode pipeline).
