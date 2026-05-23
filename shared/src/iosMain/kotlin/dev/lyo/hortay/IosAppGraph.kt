@@ -3,8 +3,11 @@ package dev.lyo.hortay
 import dev.lyo.hortay.data.ComposeResourcesStringResolver
 import dev.lyo.hortay.data.HortayBackend
 import dev.lyo.hortay.data.IgnoredChannelsStore
+import dev.lyo.hortay.data.SettingsStore
 import dev.lyo.hortay.data.StringResolver
 import dev.lyo.hortay.data.createPreferencesDataStore
+import dev.lyo.hortay.data.report.ReportExplainerStore
+import dev.lyo.hortay.data.report.ReportLogStore
 import dev.lyo.hortay.data.web.GuestModeStore
 import dev.lyo.hortay.data.web.SubscriptionsStore
 import dev.lyo.hortay.data.web.WebFeedSource
@@ -57,6 +60,18 @@ class IosAppGraph {
         ignoredChannels = ignoredChannels,
     )
 
+    val settingsStore: SettingsStore =
+        SettingsStore(createPreferencesDataStore(SettingsStore.FILE_NAME))
+
+    val reportLogStore: ReportLogStore = ReportLogStore()
+
+    val reportExplainerStore: ReportExplainerStore =
+        ReportExplainerStore(createPreferencesDataStore(ReportExplainerStore.FILE_NAME))
+
     /** Stub backend so commonMain UI screens compile on iOS. Guest-mode UI never calls into it. */
-    val backend: HortayBackend = HortayBackend()
+    val backend: HortayBackend = HortayBackend(
+        settingsStore = settingsStore,
+        reportLogStore = reportLogStore,
+        reportExplainerStore = reportExplainerStore,
+    )
 }

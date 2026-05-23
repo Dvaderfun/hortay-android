@@ -250,21 +250,6 @@ class AppGraph(context: Context) {
         .also { it.bindLogoutClear(tdClient.loggedOut, appScope) }
 
     /**
-     * Platform-agnostic delegate over TDLib for commonMain UI. Wraps the
-     * TDLib-typed repos so screens can take a single `HortayBackend` reference
-     * and compile on both Android and iOS. See [HortayBackend] KDoc for the
-     * rationale.
-     */
-    val backend: HortayBackend = HortayBackend(
-        client = tdClient,
-        countriesRepo = countries,
-        channelActions = channelActions,
-        linkResolver = linkResolver,
-        postsRepo = postsRepository,
-        commentsRepo = commentsRepository,
-    )
-
-    /**
      * Process-wide dialog state for link-confirmation flows. Hoisted off the scaffolds
      * because they live on the AppGraph: each is set by an in-flight suspending call
      * (`HortayUriHandler.openUri` for masked links, the deep-link collector for invite
@@ -480,6 +465,28 @@ class AppGraph(context: Context) {
      * lifetime contract.
      */
     val reportDialogs: ReportDialogState = ReportDialogState()
+
+    /**
+     * Platform-agnostic delegate over TDLib for commonMain UI. Wraps the
+     * TDLib-typed repos so screens can take a single `HortayBackend` reference
+     * and compile on both Android and iOS. See [HortayBackend] KDoc for the
+     * rationale.
+     */
+    val backend: HortayBackend = HortayBackend(
+        client = tdClient,
+        countriesRepo = countries,
+        channelActions = channelActions,
+        linkResolver = linkResolver,
+        postsRepo = postsRepository,
+        commentsRepo = commentsRepository,
+        reportRepo = reportRepository,
+        reportDialogs = reportDialogs,
+        reportLogStore = reportLogStore,
+        reportExplainerStore = reportExplainerStore,
+        settingsStore = settingsStore,
+        translationsStore = translations,
+        backendScope = appScope,
+    )
 
     /**
      * Guest-mode report delegation chain: tg:// → CustomTabsIntent → mailto:.
