@@ -1,6 +1,5 @@
 package dev.lyo.hortay.data
 
-import androidx.compose.runtime.Immutable
 import org.drinkless.tdlib.TdApi
 
 /**
@@ -87,8 +86,3 @@ class StatsRepository(private val td: TdSender) {
     }
 }
 
-@Immutable
-data class NetworkUsage(val rxBytes: Long, val txBytes: Long, val sinceMs: Long)
-
-@Immutable
-data class StorageUsage(val totalFilesBytes: Long, val databaseSizeBytes: Long)
