@@ -13,6 +13,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.drinkless.tdlib.TdApi
 import java.util.Locale
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.op_translate
 
 // Note: takes UserMessageBus + connection to surface translate failures (most common
 // real-world cause: Telegram Premium gate or per-method FLOOD_WAIT) directly to the
@@ -89,7 +91,7 @@ class TranslationsStore(
                 td.send(TdApi.TranslateMessageText(chatId, messageId, target, /* tone */ null))
             }.warnUnlessCancelled(TAG, "translate($chatId, $messageId, $target)")
             val result = attempt.getOrElse { err ->
-                err.surfaceTo(userMessages, res, dev.lyo.hortay.R.string.op_translate, connection.value)
+                err.surfaceTo(userMessages, res, Res.string.op_translate, connection.value)
                 return@withLock false
             }
 

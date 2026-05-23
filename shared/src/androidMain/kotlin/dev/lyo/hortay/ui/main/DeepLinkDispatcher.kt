@@ -2,22 +2,29 @@
 
 package dev.lyo.hortay.ui.main
 
-import android.content.res.Resources
 import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
-import dev.lyo.hortay.R
 import dev.lyo.hortay.data.ChatInvitePreview
+import dev.lyo.hortay.data.ComposeResourcesStringResolver
 import dev.lyo.hortay.data.DeepLink
 import dev.lyo.hortay.data.DeepLinkRouter
 import dev.lyo.hortay.data.InviteLinkKind
 import dev.lyo.hortay.data.LinkDialogState
+import dev.lyo.hortay.data.StringResolver
 import dev.lyo.hortay.data.posts.PublicHandleKind
 import dev.lyo.hortay.data.posts.PublicHandleResult
 import dev.lyo.hortay.data.UserMessageBus
+import hortay.shared.generated.resources.Res
+import org.jetbrains.compose.resources.StringResource
+import hortay.shared.generated.resources.link_hashtag_search
+import hortay.shared.generated.resources.link_hashtag_search_in_channel
+import hortay.shared.generated.resources.link_not_found
+import hortay.shared.generated.resources.link_unsupported_group
+import hortay.shared.generated.resources.link_unsupported_other
 
 /**
  * TDLib encodes message ids as `serverPostId shl 20` internally (MTProto convention; see
@@ -28,9 +35,9 @@ import dev.lyo.hortay.data.UserMessageBus
  */
 private const val SERVER_TO_TD_SHIFT = 20
 
-internal fun unsupportedHandleMessageId(kind: PublicHandleKind): Int = when (kind) {
-    PublicHandleKind.Group -> R.string.link_unsupported_group
-    PublicHandleKind.Unknown -> R.string.link_unsupported_other
+internal fun unsupportedHandleMessageId(kind: PublicHandleKind): StringResource = when (kind) {
+    PublicHandleKind.Group -> Res.string.link_unsupported_group
+    PublicHandleKind.Unknown -> Res.string.link_unsupported_other
 }
 
 /**
@@ -63,7 +70,7 @@ internal fun DeepLinkDispatcher(
     onOpenUser: (userId: Long) -> Unit,
 ) {
     val systemUriHandler: UriHandler = LocalUriHandler.current
-    val res: Resources = LocalContext.current.resources
+    val res: StringResolver = remember { ComposeResourcesStringResolver() }
     LaunchedEffect(router) {
         router.events.collect { link ->
             try {
@@ -93,7 +100,7 @@ internal fun DeepLinkDispatcher(
                                 return@collect
                             }
                             is PublicHandleResult.NotFound -> {
-                                userMessages.post(res.getString(R.string.link_not_found))
+                                userMessages.post(res.getString(Res.string.link_not_found))
                                 return@collect
                             }
                         }
@@ -126,7 +133,7 @@ internal fun DeepLinkDispatcher(
                                 return@collect
                             }
                             is PublicHandleResult.NotFound -> {
-                                userMessages.post(res.getString(R.string.link_not_found))
+                                userMessages.post(res.getString(Res.string.link_not_found))
                                 return@collect
                             }
                         }
@@ -157,7 +164,7 @@ internal fun DeepLinkDispatcher(
                                 return@collect
                             }
                             is PublicHandleResult.NotFound -> {
-                                userMessages.post(res.getString(R.string.link_not_found))
+                                userMessages.post(res.getString(Res.string.link_not_found))
                                 return@collect
                             }
                         }
@@ -179,12 +186,12 @@ internal fun DeepLinkDispatcher(
                         // URLs (no channel scope is documented for that shape).
                         val msg = if (link.channelHandle != null) {
                             res.getString(
-                                R.string.link_hashtag_search_in_channel,
+                                Res.string.link_hashtag_search_in_channel,
                                 link.tag,
                                 "@${link.channelHandle}",
                             )
                         } else {
-                            res.getString(R.string.link_hashtag_search, link.tag)
+                            res.getString(Res.string.link_hashtag_search, link.tag)
                         }
                         userMessages.post(msg, UserMessageBus.Severity.Info)
                         return@collect
@@ -193,7 +200,7 @@ internal fun DeepLinkDispatcher(
                         val preview = previewChatInvite(link.inviteLink)
                         when {
                             preview == null -> {
-                                userMessages.post(res.getString(R.string.link_not_found))
+                                userMessages.post(res.getString(Res.string.link_not_found))
                             }
                             preview.chatId != null -> {
                                 // Already a member — drill into the channel via the back-stack
@@ -206,7 +213,7 @@ internal fun DeepLinkDispatcher(
                             }
                             else -> {
                                 userMessages.post(
-                                    res.getString(R.string.link_unsupported_group),
+                                    res.getString(Res.string.link_unsupported_group),
                                     UserMessageBus.Severity.Info,
                                 )
                                 runCatching { systemUriHandler.openUri(link.originalUrl) }

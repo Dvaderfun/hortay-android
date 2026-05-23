@@ -35,14 +35,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
-import dev.lyo.hortay.R
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import dev.lyo.hortay.data.Country
 import dev.lyo.hortay.ui.icons.Symbol
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.country_picker_empty
+import hortay.shared.generated.resources.country_picker_search
+import hortay.shared.generated.resources.country_picker_title
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Telegram-style country picker. Modal bottom sheet with a search field above a single
@@ -88,7 +91,7 @@ fun CountryPickerSheet(
     ) {
         Column(modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
             Text(
-                text = stringResource(R.string.country_picker_title),
+                text = stringResource(Res.string.country_picker_title),
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSurface,
             )
@@ -96,7 +99,7 @@ fun CountryPickerSheet(
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
-                placeholder = { Text(stringResource(R.string.country_picker_search), color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                placeholder = { Text(stringResource(Res.string.country_picker_search), color = MaterialTheme.colorScheme.onSurfaceVariant) },
                 leadingIcon = {
                     Symbol(
                         name = "search",
@@ -123,7 +126,7 @@ fun CountryPickerSheet(
                     contentAlignment = Alignment.TopCenter,
                 ) {
                     Text(
-                        text = stringResource(R.string.country_picker_empty),
+                        text = stringResource(Res.string.country_picker_empty),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

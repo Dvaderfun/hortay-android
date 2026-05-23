@@ -1,8 +1,15 @@
 package dev.lyo.hortay.data
 
-import dev.lyo.hortay.R
 import kotlinx.coroutines.flow.StateFlow
 import org.drinkless.tdlib.TdApi
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.op_change_reaction
+import hortay.shared.generated.resources.op_close_poll
+import hortay.shared.generated.resources.op_join_channel
+import hortay.shared.generated.resources.op_leave_channel
+import hortay.shared.generated.resources.op_mute
+import hortay.shared.generated.resources.op_unmute
+import hortay.shared.generated.resources.op_vote_in_poll
 
 /**
  * Stateless TDLib write-actions for channel/chat operations: react, mute, join, leave.
@@ -64,7 +71,7 @@ class ChannelActionsRepository(
             }
         }
             .warnUnlessCancelled(TAG, "toggleReaction(${kind.stableKey}, isChosen=$isChosen)")
-            .onFailure { it.surfaceTo(userMessages, res, R.string.op_change_reaction, connection.value) }
+            .onFailure { it.surfaceTo(userMessages, res, Res.string.op_change_reaction, connection.value) }
         // TDLib code 406 = "silent no-op, do not display, wait for UpdateMessageInteractionInfo".
         // Treat as success so the caller does not revert the optimistic chip flip.
         return outcome.isSuccess || outcome.exceptionOrNull().isTdSilent()
@@ -96,7 +103,7 @@ class ChannelActionsRepository(
             td.send(TdApi.SetPollAnswer(chatId, messageId, optionIds))
         }
             .warnUnlessCancelled(TAG, "setPollAnswer(chat=$chatId msg=$messageId, n=${optionIds.size})")
-            .onFailure { it.surfaceTo(userMessages, res, R.string.op_vote_in_poll, connection.value) }
+            .onFailure { it.surfaceTo(userMessages, res, Res.string.op_vote_in_poll, connection.value) }
         // TDLib code 406 = silent no-op per the documented `error` contract — typically fires
         // when the local poll mirror already matches the requested selection (the canonical
         // "every tap shows error 406" repro for channel polls). The eventual
@@ -119,7 +126,7 @@ class ChannelActionsRepository(
             td.send(TdApi.StopPoll(chatId, messageId, /* replyMarkup */ null))
         }
             .warnUnlessCancelled(TAG, "stopPoll($chatId, $messageId)")
-            .onFailure { it.surfaceTo(userMessages, res, R.string.op_close_poll, connection.value) }
+            .onFailure { it.surfaceTo(userMessages, res, Res.string.op_close_poll, connection.value) }
         return outcome.isSuccess
     }
 
@@ -165,7 +172,7 @@ class ChannelActionsRepository(
         }
         runCatching { td.send(TdApi.SetChatNotificationSettings(chatId, updated)) }
             .warnUnlessCancelled(TAG, "setMuted($muted)")
-            .onFailure { it.surfaceTo(userMessages, res, if (muted) R.string.op_mute else R.string.op_unmute, connection.value) }
+            .onFailure { it.surfaceTo(userMessages, res, if (muted) Res.string.op_mute else Res.string.op_unmute, connection.value) }
     }
 
     suspend fun isMuted(chatId: Long): Boolean {
@@ -178,13 +185,13 @@ class ChannelActionsRepository(
     suspend fun joinChat(chatId: Long) {
         runCatching { td.send(TdApi.JoinChat(chatId)) }
             .warnUnlessCancelled(TAG, "joinChat")
-            .onFailure { it.surfaceTo(userMessages, res, R.string.op_join_channel, connection.value) }
+            .onFailure { it.surfaceTo(userMessages, res, Res.string.op_join_channel, connection.value) }
     }
 
     suspend fun leaveChat(chatId: Long) {
         runCatching { td.send(TdApi.LeaveChat(chatId)) }
             .warnUnlessCancelled(TAG, "leaveChat")
-            .onFailure { it.surfaceTo(userMessages, res, R.string.op_leave_channel, connection.value) }
+            .onFailure { it.surfaceTo(userMessages, res, Res.string.op_leave_channel, connection.value) }
     }
 
     /**
@@ -324,7 +331,7 @@ class ChannelActionsRepository(
             td.send(TdApi.JoinChatByInviteLink(inviteLink))
         }
             .warnUnlessCancelled(TAG, "joinByInvite")
-            .onFailure { it.surfaceTo(userMessages, res, R.string.op_join_channel, connection.value) }
+            .onFailure { it.surfaceTo(userMessages, res, Res.string.op_join_channel, connection.value) }
             .getOrNull() ?: return null
         return chat.id
     }

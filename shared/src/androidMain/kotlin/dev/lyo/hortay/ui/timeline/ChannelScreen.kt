@@ -25,7 +25,6 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -33,7 +32,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import dev.lyo.hortay.R
 import dev.lyo.hortay.data.BookmarkStore
 import dev.lyo.hortay.data.ChannelActionsRepository
 import dev.lyo.hortay.data.CommentsRepository
@@ -66,6 +64,16 @@ import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.action_back
+import hortay.shared.generated.resources.action_clear
+import hortay.shared.generated.resources.action_search
+import hortay.shared.generated.resources.channel_empty_body
+import hortay.shared.generated.resources.channel_empty_title
+import hortay.shared.generated.resources.timeline_search_empty
+import hortay.shared.generated.resources.timeline_search_in_channel
+import hortay.shared.generated.resources.timeline_subscribers
+import org.jetbrains.compose.resources.stringResource
 
 // FlowPreview opt-in stays: Flow.debounce(Long) is still preview-marked in
 // kotlinx-coroutines 1.10.1 even though Flow.debounce(Duration) graduated.
@@ -874,7 +882,7 @@ private fun ChannelTopBar(
                             Box {
                                 if (searchQuery.isEmpty()) {
                                     Text(
-                                        stringResource(R.string.timeline_search_in_channel),
+                                        stringResource(Res.string.timeline_search_in_channel),
                                         style = MaterialTheme.typography.titleMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
@@ -898,7 +906,7 @@ private fun ChannelTopBar(
                     IconButton(onClick = onSearchToggle) {
                         Symbol(
                             name = "arrow_back",
-                            contentDescription = stringResource(R.string.action_back),
+                            contentDescription = stringResource(Res.string.action_back),
                         )
                     }
                 },
@@ -907,7 +915,7 @@ private fun ChannelTopBar(
                         IconButton(onClick = { onSearchQueryChange("") }) {
                             Symbol(
                                 name = "close",
-                                contentDescription = stringResource(R.string.action_clear),
+                                contentDescription = stringResource(Res.string.action_clear),
                             )
                         }
                     }
@@ -917,7 +925,7 @@ private fun ChannelTopBar(
             )
         } else {
             val subtitleText = channelSubscribers?.let {
-                stringResource(R.string.timeline_subscribers, formatSubscribers(it))
+                stringResource(Res.string.timeline_subscribers, formatSubscribers(it))
             }
             // Telegram / X chat-screen header convention: avatar + name on the
             // first line, subscribers on the second, entire title row tappable
@@ -943,7 +951,7 @@ private fun ChannelTopBar(
                     IconButton(onClick = onSearchToggle) {
                         Symbol(
                             name = "search",
-                            contentDescription = stringResource(R.string.action_search),
+                            contentDescription = stringResource(Res.string.action_search),
                         )
                     }
                 },
@@ -971,7 +979,7 @@ private fun ChannelSearchEmpty() {
         )
         Spacer(Modifier.height(16.dp))
         Text(
-            text = stringResource(R.string.timeline_search_empty),
+            text = stringResource(Res.string.timeline_search_empty),
             style = MaterialTheme.typography.titleMedium,
             textAlign = TextAlign.Center,
         )
@@ -993,13 +1001,13 @@ private fun ChannelEmptyState() {
         )
         Spacer(Modifier.height(20.dp))
         Text(
-            text = stringResource(R.string.channel_empty_title),
+            text = stringResource(Res.string.channel_empty_title),
             style = MaterialTheme.typography.titleMedium,
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            text = stringResource(R.string.channel_empty_body),
+            text = stringResource(Res.string.channel_empty_body),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,

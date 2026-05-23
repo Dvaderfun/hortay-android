@@ -24,16 +24,12 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.res.pluralStringResource
-import androidx.compose.ui.res.stringArrayResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import dev.lyo.hortay.R
 import dev.lyo.hortay.data.AlbumItem
 import dev.lyo.hortay.data.ExpiredKind
 import dev.lyo.hortay.data.FormattedText
@@ -60,6 +56,33 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.lyo.hortay.ui.text.RichText
 import dev.lyo.hortay.ui.text.linkLongPress
 import dev.lyo.hortay.ui.text.rememberAnnotatedString
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.content_audio_fallback
+import hortay.shared.generated.resources.content_description_video_note
+import hortay.shared.generated.resources.content_open_in_telegram
+import hortay.shared.generated.resources.content_paid_locked
+import hortay.shared.generated.resources.content_paid_stars
+import hortay.shared.generated.resources.document_unnamed
+import hortay.shared.generated.resources.expired_photo
+import hortay.shared.generated.resources.expired_video
+import hortay.shared.generated.resources.expired_video_note
+import hortay.shared.generated.resources.expired_voice
+import hortay.shared.generated.resources.media_open_in_telegram
+import hortay.shared.generated.resources.post_show_more
+import hortay.shared.generated.resources.service_boost
+import hortay.shared.generated.resources.service_giveaway_started
+import hortay.shared.generated.resources.service_other
+import hortay.shared.generated.resources.service_pinned_message
+import hortay.shared.generated.resources.service_screenshot
+import hortay.shared.generated.resources.service_video_call
+import hortay.shared.generated.resources.service_video_chat_ended
+import hortay.shared.generated.resources.service_video_chat_started
+import hortay.shared.generated.resources.service_voice_call
+import hortay.shared.generated.resources.size_units
+import hortay.shared.generated.resources.voice_message
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringArrayResource
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Render the body of a post. [onMediaClick] fires with the resolved media list and the
@@ -257,10 +280,10 @@ private fun ChecklistBlock(content: PostContent.Checklist, maxLines: Int) {
 @Composable
 private fun ExpiredMediaBlock(content: PostContent.ExpiredMedia) {
     val (symbol, label) = when (content.kind) {
-        ExpiredKind.Photo -> "hide_image" to stringResource(R.string.expired_photo)
-        ExpiredKind.Video -> "videocam_off" to stringResource(R.string.expired_video)
-        ExpiredKind.VideoNote -> "videocam_off" to stringResource(R.string.expired_video_note)
-        ExpiredKind.VoiceNote -> "mic_off" to stringResource(R.string.expired_voice)
+        ExpiredKind.Photo -> "hide_image" to stringResource(Res.string.expired_photo)
+        ExpiredKind.Video -> "videocam_off" to stringResource(Res.string.expired_video)
+        ExpiredKind.VideoNote -> "videocam_off" to stringResource(Res.string.expired_video_note)
+        ExpiredKind.VoiceNote -> "mic_off" to stringResource(Res.string.expired_voice)
     }
     Row(
         modifier = Modifier
@@ -283,16 +306,16 @@ private fun ExpiredMediaBlock(content: PostContent.ExpiredMedia) {
 @Composable
 private fun ServiceBlock(content: PostContent.Service) {
     val (symbol, label) = when (val e = content.event) {
-        is ServiceEvent.PinnedMessage -> "push_pin" to stringResource(R.string.service_pinned_message)
+        is ServiceEvent.PinnedMessage -> "push_pin" to stringResource(Res.string.service_pinned_message)
         is ServiceEvent.ChannelBoosted -> "rocket_launch" to
-            pluralStringResource(R.plurals.service_boost, e.boostCount, e.boostCount)
-        ServiceEvent.GiveawayStarted -> "card_giftcard" to stringResource(R.string.service_giveaway_started)
-        ServiceEvent.ScreenshotTaken -> "photo_camera" to stringResource(R.string.service_screenshot)
-        is ServiceEvent.VideoChatStarted -> "video_call" to stringResource(R.string.service_video_chat_started)
-        ServiceEvent.VideoChatEnded -> "call_end" to stringResource(R.string.service_video_chat_ended)
+            pluralStringResource(Res.plurals.service_boost, e.boostCount, e.boostCount)
+        ServiceEvent.GiveawayStarted -> "card_giftcard" to stringResource(Res.string.service_giveaway_started)
+        ServiceEvent.ScreenshotTaken -> "photo_camera" to stringResource(Res.string.service_screenshot)
+        is ServiceEvent.VideoChatStarted -> "video_call" to stringResource(Res.string.service_video_chat_started)
+        ServiceEvent.VideoChatEnded -> "call_end" to stringResource(Res.string.service_video_chat_ended)
         is ServiceEvent.GroupCall -> "call" to
-            stringResource(if (e.isVideo) R.string.service_video_call else R.string.service_voice_call)
-        ServiceEvent.Other -> "info" to stringResource(R.string.service_other)
+            stringResource(if (e.isVideo) Res.string.service_video_call else Res.string.service_voice_call)
+        ServiceEvent.Other -> "info" to stringResource(Res.string.service_other)
     }
     Row(
         modifier = Modifier
@@ -527,7 +550,7 @@ private fun OpenInTelegramHint(modifier: Modifier = Modifier) {
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Text(
-            text = stringResource(R.string.media_open_in_telegram),
+            text = stringResource(Res.string.media_open_in_telegram),
             color = Color.White,
             style = MaterialTheme.typography.labelMedium,
         )
@@ -692,8 +715,8 @@ private fun DocumentBlock(
 ) {
     NonPlayableFileRow(
         symbol = "description",
-        primary = content.fileName.ifBlank { stringResource(R.string.document_unnamed) },
-        secondary = formatFileSize(content.sizeBytes, stringArrayResource(R.array.size_units)),
+        primary = content.fileName.ifBlank { stringResource(Res.string.document_unnamed) },
+        secondary = formatFileSize(content.sizeBytes, stringArrayResource(Res.array.size_units)),
         onClick = onOpenInSource,
     )
     // Documents never carry the caption-above flag (Telegram only exposes that toggle for
@@ -705,7 +728,7 @@ private fun DocumentBlock(
 private fun AudioBlock(content: PostContent.Audio, onOpenInSource: () -> Unit) {
     NonPlayableFileRow(
         symbol = "audio_file",
-        primary = content.title.ifBlank { stringResource(R.string.content_audio_fallback) },
+        primary = content.title.ifBlank { stringResource(Res.string.content_audio_fallback) },
         secondary = listOfNotNull(
             content.performer.takeUnless { it.isBlank() },
             formatDuration(content.durationSec),
@@ -718,7 +741,7 @@ private fun AudioBlock(content: PostContent.Audio, onOpenInSource: () -> Unit) {
 private fun VoiceNoteBlock(content: PostContent.VoiceNote, onOpenInSource: () -> Unit) {
     NonPlayableFileRow(
         symbol = "mic",
-        primary = stringResource(R.string.voice_message),
+        primary = stringResource(Res.string.voice_message),
         secondary = formatDuration(content.durationSec),
         onClick = onOpenInSource,
         shape = MaterialTheme.shapes.large,
@@ -774,7 +797,7 @@ private fun VideoNoteStaticBubble(
     hasPlayback: Boolean,
     onOpenInSource: () -> Unit,
 ) {
-    val a11y = stringResource(R.string.content_description_video_note)
+    val a11y = stringResource(Res.string.content_description_video_note)
     Box(
         modifier = Modifier
             .shadow(elevation = 2.dp, shape = CircleShape, clip = false)
@@ -975,12 +998,12 @@ private fun PaidMediaBlock(
     onOpenInSource: () -> Unit,
 ) {
     val caption = translation ?: content.caption
-    val starsLabel = stringResource(R.string.content_paid_stars, content.starCount)
+    val starsLabel = stringResource(Res.string.content_paid_stars, content.starCount)
     if (content.isLocked) {
         NonPlayableFileRow(
             symbol = "lock",
-            primary = stringResource(R.string.content_paid_locked),
-            secondary = "$starsLabel · ${stringResource(R.string.content_open_in_telegram)}",
+            primary = stringResource(Res.string.content_paid_locked),
+            secondary = "$starsLabel · ${stringResource(Res.string.content_open_in_telegram)}",
             onClick = onOpenInSource,
         )
         MediaCaption(caption, maxLines, above = false, show = true)
@@ -1015,7 +1038,7 @@ private fun OpenInSourceBlock(content: PostContent.OpenInSource, onOpenInSource:
     NonPlayableFileRow(
         symbol = content.iconSymbol,
         primary = content.title,
-        secondary = content.subtitle.ifBlank { stringResource(R.string.content_open_in_telegram) },
+        secondary = content.subtitle.ifBlank { stringResource(Res.string.content_open_in_telegram) },
         onClick = onOpenInSource,
     )
 }
@@ -1410,7 +1433,7 @@ private fun ExpandableText(
     )
     if (canExpand && !expanded) {
         Text(
-            text = stringResource(R.string.post_show_more),
+            text = stringResource(Res.string.post_show_more),
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier
@@ -1493,7 +1516,7 @@ private fun isPosterDownloading(fileId: Int?): Boolean {
     return state is MediaState.Downloading
 }
 
-private fun formatFileSize(bytes: Long, units: Array<String>): String {
+private fun formatFileSize(bytes: Long, units: List<String>): String {
     if (bytes <= 0) return "—"
     var size = bytes.toDouble()
     var idx = 0

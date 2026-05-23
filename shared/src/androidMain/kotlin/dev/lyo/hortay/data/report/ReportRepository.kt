@@ -11,6 +11,8 @@ import dev.lyo.hortay.data.TdSender
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
 import org.drinkless.tdlib.TdApi
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.error_generic
 
 /**
  * States surfaced to [ReportFlowSheet] during the multi-step TDLib ReportChat flow.
@@ -143,12 +145,12 @@ class ReportRepository(
         is TdApi.ReportChatResultMessagesRequired -> {
             // We have no multi-message selection UI yet; surface a generic error
             // so the user at least knows the report was attempted.
-            val msg = resolver.getString(dev.lyo.hortay.R.string.error_generic)
+            val msg = resolver.getString(Res.string.error_generic)
             logTerminal("tdlib", "delegated", chatId, messageId)
             ReportStep(ReportState.Error(msg))
         }
         else -> {
-            val msg = resolver.getString(dev.lyo.hortay.R.string.error_generic)
+            val msg = resolver.getString(Res.string.error_generic)
             logTerminal("tdlib", "failed", chatId, messageId)
             ReportStep(ReportState.Error(msg))
         }
@@ -165,7 +167,7 @@ class ReportRepository(
             logTerminal("tdlib", "failed", chatId, messageId)
             return ReportState.FloodWait(seconds)
         }
-        val msg = resolver.getString(dev.lyo.hortay.R.string.error_generic)
+        val msg = resolver.getString(Res.string.error_generic)
         logTerminal("tdlib", "failed", chatId, messageId)
         return ReportState.Error(msg)
     }

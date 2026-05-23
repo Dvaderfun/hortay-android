@@ -1,8 +1,20 @@
 package dev.lyo.hortay.data
 
-import androidx.annotation.StringRes
-import dev.lyo.hortay.R
 import kotlinx.coroutines.CancellationException
+import org.jetbrains.compose.resources.StringResource
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.duration_hours_short
+import hortay.shared.generated.resources.duration_minutes_short
+import hortay.shared.generated.resources.duration_seconds_short
+import hortay.shared.generated.resources.err_failed_op
+import hortay.shared.generated.resources.err_flood_generic
+import hortay.shared.generated.resources.err_flood_with_time
+import hortay.shared.generated.resources.err_forbidden
+import hortay.shared.generated.resources.err_no_connection
+import hortay.shared.generated.resources.err_not_found
+import hortay.shared.generated.resources.err_server
+import hortay.shared.generated.resources.err_unauthorized
+import hortay.shared.generated.resources.op_refresh_feed
 
 /**
  * Categorisation of a TDLib failure into a small set of user-meaningful kinds. The
@@ -37,7 +49,7 @@ enum class TdErrorKind {
 /**
  * Translate any [Throwable] (TDLib-originated or otherwise) into a user-facing,
  * locale-resolved message tied to a specific [operationRes] verb in the infinitive
- * form (e.g. R.string.op_refresh_feed → "refresh the feed" / "оновити стрічку").
+ * form (e.g. Res.string.op_refresh_feed → "refresh the feed" / "оновити стрічку").
  * Returning a [Pair] keeps the [TdErrorKind] available for callers that want to
  * suppress presentation when the network is already known to be down.
  *
@@ -46,7 +58,7 @@ enum class TdErrorKind {
  */
 fun Throwable.toUserFacing(
     res: StringResolver,
-    @StringRes operationRes: Int,
+    operationRes: StringResource,
 ): Pair<TdErrorKind, String> {
     if (this is CancellationException) throw this
     val code = (this as? TdClient.TdException)?.code ?: 0
@@ -59,22 +71,22 @@ fun Throwable.toUserFacing(
         TdClient.isFloodWaitCode(code) -> {
             val seconds = parseLeadingDigits(raw)
             val human = seconds?.let { humaniseSeconds(res, it) }
-            val msg = if (human != null) res.getString(R.string.err_flood_with_time, human)
-            else res.getString(R.string.err_flood_generic)
+            val msg = if (human != null) res.getString(Res.string.err_flood_with_time, human)
+            else res.getString(Res.string.err_flood_generic)
             TdErrorKind.FloodWait to msg
         }
-        code == 401 -> TdErrorKind.AccessDenied to res.getString(R.string.err_unauthorized)
-        code == 403 -> TdErrorKind.AccessDenied to res.getString(R.string.err_forbidden, operation)
-        code == 404 -> TdErrorKind.NotFound to res.getString(R.string.err_not_found, operation)
+        code == 401 -> TdErrorKind.AccessDenied to res.getString(Res.string.err_unauthorized)
+        code == 403 -> TdErrorKind.AccessDenied to res.getString(Res.string.err_forbidden, operation)
+        code == 404 -> TdErrorKind.NotFound to res.getString(Res.string.err_not_found, operation)
         // 406 — TDLib's "do not surface" sentinel. The empty message intentionally
         // satisfies the docstring contract; surfaceTo discards Silent without reading it.
         code == 406 -> TdErrorKind.Silent to ""
-        code in 500..599 -> TdErrorKind.ServerError to res.getString(R.string.err_server)
+        code in 500..599 -> TdErrorKind.ServerError to res.getString(Res.string.err_server)
         // 0 covers non-TdException throwables (timeouts, JNI quirks, IO exceptions). The
         // underlying cause is usually a network blip — call it that explicitly so the
         // message lines up with the connection banner's wording.
-        code == 0 -> TdErrorKind.Network to res.getString(R.string.err_no_connection)
-        else -> TdErrorKind.Unknown to res.getString(R.string.err_failed_op, operation, code)
+        code == 0 -> TdErrorKind.Network to res.getString(Res.string.err_no_connection)
+        else -> TdErrorKind.Unknown to res.getString(Res.string.err_failed_op, operation, code)
     }
 }
 
@@ -88,9 +100,9 @@ private fun parseLeadingDigits(text: String): Long? =
     Regex("(\\d+)").find(text)?.value?.toLongOrNull()
 
 private fun humaniseSeconds(res: StringResolver, total: Long): String = when {
-    total < 60 -> res.getString(R.string.duration_seconds_short, total.toInt())
-    total < 3600 -> res.getString(R.string.duration_minutes_short, (total / 60).toInt())
-    else -> res.getString(R.string.duration_hours_short, (total / 3600).toInt())
+    total < 60 -> res.getString(Res.string.duration_seconds_short, total.toInt())
+    total < 3600 -> res.getString(Res.string.duration_minutes_short, (total / 60).toInt())
+    else -> res.getString(Res.string.duration_hours_short, (total / 3600).toInt())
 }
 
 /**
@@ -108,7 +120,7 @@ private fun humaniseSeconds(res: StringResolver, total: Long): String = when {
 fun Throwable.surfaceTo(
     bus: UserMessageBus,
     res: StringResolver,
-    @StringRes operationRes: Int,
+    operationRes: StringResource,
     connection: ConnectionStatus,
 ) {
     val (kind, msg) = try {

@@ -55,6 +55,11 @@ import kotlinx.coroutines.sync.withLock
 import org.drinkless.tdlib.TdApi
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.op_load_channel
+import hortay.shared.generated.resources.op_load_older
+import hortay.shared.generated.resources.op_refresh_feed
+import hortay.shared.generated.resources.op_search
 
 /**
  * Twitter-style chronological feed merged from every channel chat the user follows.
@@ -774,7 +779,7 @@ class PostsRepository(
             runCatching { refreshLocked() }
                 .onSuccess { lastRefreshAtMs = System.currentTimeMillis() }
                 .warnUnlessCancelled("refresh")
-                .onFailure { it.surfaceTo(userMessages, res, dev.lyo.hortay.R.string.op_refresh_feed, connection.value) }
+                .onFailure { it.surfaceTo(userMessages, res, Res.string.op_refresh_feed, connection.value) }
         }
     }
 
@@ -788,7 +793,7 @@ class PostsRepository(
             runCatching { refreshLocked() }
                 .onSuccess { lastRefreshAtMs = System.currentTimeMillis() }
                 .warnUnlessCancelled("refreshIfStale")
-                .onFailure { it.surfaceTo(userMessages, res, dev.lyo.hortay.R.string.op_refresh_feed, connection.value) }
+                .onFailure { it.surfaceTo(userMessages, res, Res.string.op_refresh_feed, connection.value) }
         }
     }
 
@@ -861,7 +866,7 @@ class PostsRepository(
         return result
             .map { Unit }
             .warnUnlessCancelled(TAG, "loadChannelHistory($chatId)")
-            .onFailure { it.surfaceTo(userMessages, res, dev.lyo.hortay.R.string.op_load_channel, connection.value) }
+            .onFailure { it.surfaceTo(userMessages, res, Res.string.op_load_channel, connection.value) }
     }
 
     private suspend fun loadChannelHistoryLocked(chatId: Long, limit: Int): Boolean {
@@ -957,7 +962,7 @@ class PostsRepository(
         pageJobs.remove(chatId, deferred)
         return result
             .warnUnlessCancelled(TAG, "loadOlder($chatId)")
-            .onFailure { it.surfaceTo(userMessages, res, dev.lyo.hortay.R.string.op_load_older, connection.value) }
+            .onFailure { it.surfaceTo(userMessages, res, Res.string.op_load_older, connection.value) }
             .getOrDefault(0)
     }
 
@@ -1019,7 +1024,7 @@ class PostsRepository(
         if (query.isBlank()) return emptyList()
         val chat = chatCache[chatId] ?: runCatching { td.send(TdApi.GetChat(chatId)) }
             .warnUnlessCancelled(TAG, "searchInChannel/getChat")
-            .onFailure { it.surfaceTo(userMessages, res, dev.lyo.hortay.R.string.op_search, connection.value) }
+            .onFailure { it.surfaceTo(userMessages, res, Res.string.op_search, connection.value) }
             .getOrNull()?.also { chatCache[chatId] = it } ?: return emptyList()
         // Search failures used to be silently swallowed → empty list, leaving the
         // user wondering whether the channel really has nothing matching or
@@ -1042,7 +1047,7 @@ class PostsRepository(
             )
         }
             .warnUnlessCancelled(TAG, "searchInChannel")
-            .onFailure { it.surfaceTo(userMessages, res, dev.lyo.hortay.R.string.op_search, connection.value) }
+            .onFailure { it.surfaceTo(userMessages, res, Res.string.op_search, connection.value) }
             .getOrNull() ?: return emptyList()
 
         val raw = result.messages.orEmpty().toList()

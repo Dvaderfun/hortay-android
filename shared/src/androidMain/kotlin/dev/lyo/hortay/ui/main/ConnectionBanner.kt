@@ -23,14 +23,18 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.res.pluralStringResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import dev.lyo.hortay.R
 import dev.lyo.hortay.data.ConnectionStatus
 import dev.lyo.hortay.ui.icons.Symbol
 import kotlinx.coroutines.delay
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.connection_connecting
+import hortay.shared.generated.resources.connection_flood_wait
+import hortay.shared.generated.resources.connection_updating
+import hortay.shared.generated.resources.connection_waiting
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Slim banner that surfaces TDLib's connection state and, with priority, the
@@ -116,7 +120,7 @@ fun ConnectionBanner(
             Quad(
                 "pause",
                 pluralStringResource(
-                    R.plurals.connection_flood_wait,
+                    Res.plurals.connection_flood_wait,
                     floodSecondsRemaining.toInt(),
                     floodSecondsRemaining.toInt(),
                 ),
@@ -126,19 +130,19 @@ fun ConnectionBanner(
         } else when (status) {
             ConnectionStatus.WaitingForNetwork -> Quad(
                 "wifi_off",
-                stringResource(R.string.connection_waiting),
+                stringResource(Res.string.connection_waiting),
                 MaterialTheme.colorScheme.errorContainer,
                 MaterialTheme.colorScheme.onErrorContainer,
             )
             ConnectionStatus.Connecting -> Quad(
                 "cloud_off",
-                stringResource(R.string.connection_connecting),
+                stringResource(Res.string.connection_connecting),
                 MaterialTheme.colorScheme.secondaryContainer,
                 MaterialTheme.colorScheme.onSecondaryContainer,
             )
             ConnectionStatus.Updating -> Quad(
                 "sync",
-                stringResource(R.string.connection_updating),
+                stringResource(Res.string.connection_updating),
                 MaterialTheme.colorScheme.secondaryContainer,
                 MaterialTheme.colorScheme.onSecondaryContainer,
             )

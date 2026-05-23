@@ -20,10 +20,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import dev.lyo.hortay.R
 import dev.lyo.hortay.ui.theme.rememberPressedSelectedCornerRadius
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.folder_all
+import hortay.shared.generated.resources.folder_archive
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Top-level scope a feed item belongs to. Mirrors how Telegram itself splits chats: the
@@ -64,7 +66,7 @@ fun FoldersBar(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         FolderChip(
-            label = stringResource(R.string.folder_all),
+            label = stringResource(Res.string.folder_all),
             selected = selected is FilterScope.All,
             onClick = { onSelected(FilterScope.All) },
         )
@@ -78,7 +80,7 @@ fun FoldersBar(
         }
         if (showArchive) {
             FolderChip(
-                label = stringResource(R.string.folder_archive),
+                label = stringResource(Res.string.folder_archive),
                 selected = selected is FilterScope.Archive,
                 onClick = { onSelected(FilterScope.Archive) },
             )

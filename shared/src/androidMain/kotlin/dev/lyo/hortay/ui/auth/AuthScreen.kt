@@ -57,7 +57,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -67,12 +66,47 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.lyo.hortay.AppGraph
-import dev.lyo.hortay.R
 import dev.lyo.hortay.data.AuthStage
 import dev.lyo.hortay.data.Country
 import dev.lyo.hortay.data.TdClient
 import dev.lyo.hortay.ui.icons.Symbol
 import kotlinx.coroutines.launch
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.app_name
+import hortay.shared.generated.resources.auth_back
+import hortay.shared.generated.resources.auth_change_number
+import hortay.shared.generated.resources.auth_code_placeholder
+import hortay.shared.generated.resources.auth_continue
+import hortay.shared.generated.resources.auth_continue_without_login
+import hortay.shared.generated.resources.auth_country_label
+import hortay.shared.generated.resources.auth_country_loading
+import hortay.shared.generated.resources.auth_open_telegram_hint
+import hortay.shared.generated.resources.auth_password_forgot
+import hortay.shared.generated.resources.auth_password_helper
+import hortay.shared.generated.resources.auth_password_hide
+import hortay.shared.generated.resources.auth_password_hint
+import hortay.shared.generated.resources.auth_password_label
+import hortay.shared.generated.resources.auth_password_recovery_back
+import hortay.shared.generated.resources.auth_password_recovery_code_label
+import hortay.shared.generated.resources.auth_password_recovery_sent
+import hortay.shared.generated.resources.auth_password_recovery_unavailable
+import hortay.shared.generated.resources.auth_password_show
+import hortay.shared.generated.resources.auth_phone_helper
+import hortay.shared.generated.resources.auth_phone_placeholder
+import hortay.shared.generated.resources.auth_resend_again
+import hortay.shared.generated.resources.auth_resend_countdown
+import hortay.shared.generated.resources.auth_resend_sending
+import hortay.shared.generated.resources.auth_resend_via
+import hortay.shared.generated.resources.auth_retry
+import hortay.shared.generated.resources.auth_send_code
+import hortay.shared.generated.resources.auth_subtitle_default
+import hortay.shared.generated.resources.auth_subtitle_password_no_hint
+import hortay.shared.generated.resources.auth_subtitle_password_with_hint
+import hortay.shared.generated.resources.auth_subtitle_wait_code
+import hortay.shared.generated.resources.auth_title_error
+import hortay.shared.generated.resources.auth_title_wait_code
+import hortay.shared.generated.resources.auth_title_wait_password
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Auth flow entry point. Reads three signals from [TdClient]:
@@ -166,11 +200,11 @@ private fun BackAffordance(onBack: () -> Unit) {
                 name = "arrow_back",
                 tint = MaterialTheme.colorScheme.onSurface,
                 size = 24.dp,
-                contentDescription = stringResource(R.string.auth_back),
+                contentDescription = stringResource(Res.string.auth_back),
             )
         }
         Text(
-            text = stringResource(R.string.auth_back),
+            text = stringResource(Res.string.auth_back),
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.clickable(onClick = onBack),
@@ -202,10 +236,10 @@ private fun HeroBlock(stage: AuthStage) {
         Spacer(Modifier.height(20.dp))
         Text(
             text = when (stage) {
-                is AuthStage.WaitCode -> stringResource(R.string.auth_title_wait_code)
-                is AuthStage.WaitPassword -> stringResource(R.string.auth_title_wait_password)
-                is AuthStage.Error -> stringResource(R.string.auth_title_error)
-                else -> stringResource(R.string.app_name)
+                is AuthStage.WaitCode -> stringResource(Res.string.auth_title_wait_code)
+                is AuthStage.WaitPassword -> stringResource(Res.string.auth_title_wait_password)
+                is AuthStage.Error -> stringResource(Res.string.auth_title_error)
+                else -> stringResource(Res.string.app_name)
             },
             style = MaterialTheme.typography.displaySmall,
             color = MaterialTheme.colorScheme.onBackground,
@@ -213,13 +247,13 @@ private fun HeroBlock(stage: AuthStage) {
         Spacer(Modifier.height(8.dp))
         Text(
             text = when (stage) {
-                is AuthStage.WaitCode -> stringResource(R.string.auth_subtitle_wait_code, stage.channelLabel)
+                is AuthStage.WaitCode -> stringResource(Res.string.auth_subtitle_wait_code, stage.channelLabel)
                 is AuthStage.WaitPassword -> stringResource(
-                    if (stage.hint.isNotEmpty()) R.string.auth_subtitle_password_no_hint
-                    else R.string.auth_subtitle_password_with_hint,
+                    if (stage.hint.isNotEmpty()) Res.string.auth_subtitle_password_no_hint
+                    else Res.string.auth_subtitle_password_with_hint,
                 )
-                is AuthStage.Error -> stringResource(R.string.auth_open_telegram_hint)
-                else -> stringResource(R.string.auth_subtitle_default)
+                is AuthStage.Error -> stringResource(Res.string.auth_open_telegram_hint)
+                else -> stringResource(Res.string.auth_subtitle_default)
             },
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -288,13 +322,13 @@ private fun PhoneForm(graph: AppGraph, errorMessage: String?) {
         AnimatedFieldError(text = errorMessage)
         Spacer(Modifier.height(8.dp))
         Text(
-            text = stringResource(R.string.auth_phone_helper),
+            text = stringResource(Res.string.auth_phone_helper),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(24.dp))
         PrimaryActionButton(
-            text = stringResource(R.string.auth_send_code),
+            text = stringResource(Res.string.auth_send_code),
             enabled = !submitting &&
                 (selected != null) &&
                 phoneNational.length >= 5 &&
@@ -333,7 +367,7 @@ private fun PhoneForm(graph: AppGraph, errorMessage: String?) {
             Symbol(name = "visibility", contentDescription = null, size = 18.dp)
             Spacer(Modifier.width(8.dp))
             Text(
-                text = stringResource(R.string.auth_continue_without_login),
+                text = stringResource(Res.string.auth_continue_without_login),
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
@@ -371,12 +405,12 @@ private fun CountrySelectorRow(country: Country?, onClick: () -> Unit) {
         }
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = stringResource(R.string.auth_country_label),
+                text = stringResource(Res.string.auth_country_label),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                text = country?.name ?: stringResource(R.string.auth_country_loading),
+                text = country?.name ?: stringResource(Res.string.auth_country_loading),
                 style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
                 color = MaterialTheme.colorScheme.onSurface,
             )
@@ -427,7 +461,7 @@ private fun PhoneNumberRow(
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
-            placeholder = { Text(stringResource(R.string.auth_phone_placeholder)) },
+            placeholder = { Text(stringResource(Res.string.auth_phone_placeholder)) },
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Phone,
                 imeAction = ImeAction.Done,
@@ -513,7 +547,7 @@ private fun CodeForm(graph: AppGraph, stage: AuthStage.WaitCode, errorMessage: S
                 isError = errorMessage != null,
                 enabled = !submitting,
                 shape = MaterialTheme.shapes.medium,
-                placeholder = { Text(stringResource(R.string.auth_code_placeholder)) },
+                placeholder = { Text(stringResource(Res.string.auth_code_placeholder)) },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -526,7 +560,7 @@ private fun CodeForm(graph: AppGraph, stage: AuthStage.WaitCode, errorMessage: S
         AnimatedFieldError(text = errorMessage)
         Spacer(Modifier.height(20.dp))
         PrimaryActionButton(
-            text = stringResource(R.string.auth_continue),
+            text = stringResource(Res.string.auth_continue),
             enabled = !submitting && code.length >= minSubmitLength(stage),
             loading = submitting,
             onClick = {
@@ -549,7 +583,7 @@ private fun CodeForm(graph: AppGraph, stage: AuthStage.WaitCode, errorMessage: S
                     }
                 },
             ) {
-                val ctxRes = LocalContext.current.resources
+                val ctxRes = remember { dev.lyo.hortay.data.ComposeResourcesStringResolver() }
                 Text(
                     text = resendLabel(
                         res = ctxRes,
@@ -565,7 +599,7 @@ private fun CodeForm(graph: AppGraph, stage: AuthStage.WaitCode, errorMessage: S
                 onClick = { scope.launch { client.cancelAuth() } },
             ) {
                 Text(
-                    text = stringResource(R.string.auth_change_number),
+                    text = stringResource(Res.string.auth_change_number),
                     style = MaterialTheme.typography.labelLarge,
                 )
             }
@@ -586,15 +620,15 @@ private fun minSubmitLength(stage: AuthStage.WaitCode): Int =
  * down state. Pulling this out keeps CodeForm's layout block readable.
  */
 private fun resendLabel(
-    res: android.content.res.Resources,
+    res: dev.lyo.hortay.data.StringResolver,
     secondsLeft: Int,
     resending: Boolean,
     nextChannelLabel: String?,
 ): String = when {
-    resending -> res.getString(R.string.auth_resend_sending)
-    secondsLeft > 0 -> res.getString(R.string.auth_resend_countdown, secondsLeft / 60, secondsLeft % 60)
-    nextChannelLabel != null -> res.getString(R.string.auth_resend_via, nextChannelLabel)
-    else -> res.getString(R.string.auth_resend_again)
+    resending -> res.getString(Res.string.auth_resend_sending)
+    secondsLeft > 0 -> res.getString(Res.string.auth_resend_countdown, secondsLeft / 60, secondsLeft % 60)
+    nextChannelLabel != null -> res.getString(Res.string.auth_resend_via, nextChannelLabel)
+    else -> res.getString(Res.string.auth_resend_again)
 }
 
 // ---------- Password ----------
@@ -628,7 +662,7 @@ private fun PasswordForm(graph: AppGraph, stage: AuthStage.WaitPassword, errorMe
             OutlinedTextField(
                 value = password,
                 onValueChange = { password = it },
-                label = { Text(stringResource(R.string.auth_password_label)) },
+                label = { Text(stringResource(Res.string.auth_password_label)) },
                 singleLine = true,
                 isError = errorMessage != null,
                 visualTransformation = if (visible) VisualTransformation.None
@@ -645,7 +679,7 @@ private fun PasswordForm(graph: AppGraph, stage: AuthStage.WaitPassword, errorMe
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             size = 22.dp,
                             contentDescription = stringResource(
-                                if (visible) R.string.auth_password_hide else R.string.auth_password_show,
+                                if (visible) Res.string.auth_password_hide else Res.string.auth_password_show,
                             ),
                         )
                     }
@@ -675,7 +709,7 @@ private fun PasswordForm(graph: AppGraph, stage: AuthStage.WaitPassword, errorMe
                         size = 18.dp,
                     )
                     Text(
-                        text = stringResource(R.string.auth_password_hint, stage.hint),
+                        text = stringResource(Res.string.auth_password_hint, stage.hint),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -683,7 +717,7 @@ private fun PasswordForm(graph: AppGraph, stage: AuthStage.WaitPassword, errorMe
             }
             Spacer(Modifier.height(8.dp))
             Text(
-                text = stringResource(R.string.auth_password_helper),
+                text = stringResource(Res.string.auth_password_helper),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -691,13 +725,13 @@ private fun PasswordForm(graph: AppGraph, stage: AuthStage.WaitPassword, errorMe
         if (recoveryMode == RecoveryMode.Unavailable) {
             Spacer(Modifier.height(12.dp))
             RecoveryInfoCard(
-                text = stringResource(R.string.auth_password_recovery_unavailable),
+                text = stringResource(Res.string.auth_password_recovery_unavailable),
             )
         }
         if (recoveryMode == RecoveryMode.Sent) {
             RecoveryInfoCard(
                 text = stringResource(
-                    R.string.auth_password_recovery_sent,
+                    Res.string.auth_password_recovery_sent,
                     stage.recoveryEmailPattern.ifEmpty { "***" },
                 ),
             )
@@ -705,7 +739,7 @@ private fun PasswordForm(graph: AppGraph, stage: AuthStage.WaitPassword, errorMe
             OutlinedTextField(
                 value = recoveryCode,
                 onValueChange = { recoveryCode = it.filter { c -> c.isDigit() }.take(8) },
-                label = { Text(stringResource(R.string.auth_password_recovery_code_label)) },
+                label = { Text(stringResource(Res.string.auth_password_recovery_code_label)) },
                 singleLine = true,
                 isError = errorMessage != null,
                 keyboardOptions = KeyboardOptions(
@@ -728,8 +762,8 @@ private fun PasswordForm(graph: AppGraph, stage: AuthStage.WaitPassword, errorMe
         if (recoveryMode != RecoveryMode.Unavailable) {
             Spacer(Modifier.height(8.dp))
             val toggleText = stringResource(
-                if (recoveryMode == RecoveryMode.Sent) R.string.auth_password_recovery_back
-                else R.string.auth_password_forgot,
+                if (recoveryMode == RecoveryMode.Sent) Res.string.auth_password_recovery_back
+                else Res.string.auth_password_forgot,
             )
             Text(
                 text = toggleText,
@@ -753,7 +787,7 @@ private fun PasswordForm(graph: AppGraph, stage: AuthStage.WaitPassword, errorMe
         Spacer(Modifier.height(20.dp))
         when (recoveryMode) {
             RecoveryMode.Sent -> PrimaryActionButton(
-                text = stringResource(R.string.auth_continue),
+                text = stringResource(Res.string.auth_continue),
                 enabled = !submitting && recoveryCode.isNotEmpty(),
                 loading = submitting,
                 onClick = {
@@ -766,7 +800,7 @@ private fun PasswordForm(graph: AppGraph, stage: AuthStage.WaitPassword, errorMe
             )
             RecoveryMode.Unavailable -> Unit
             RecoveryMode.Idle -> PrimaryActionButton(
-                text = stringResource(R.string.auth_continue),
+                text = stringResource(Res.string.auth_continue),
                 enabled = !submitting && password.isNotEmpty(),
                 loading = submitting,
                 onClick = {
@@ -907,7 +941,7 @@ private fun RecoverableErrorBlock(message: String, onRetry: () -> Unit) {
         )
         Spacer(Modifier.height(20.dp))
         PrimaryActionButton(
-            text = stringResource(R.string.auth_retry),
+            text = stringResource(Res.string.auth_retry),
             enabled = true,
             loading = false,
             onClick = onRetry,

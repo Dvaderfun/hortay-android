@@ -3,7 +3,6 @@ package dev.lyo.hortay.data
 import android.content.Context
 import android.util.Log
 import dev.lyo.hortay.AppConfig
-import dev.lyo.hortay.R
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -23,6 +22,24 @@ import kotlinx.coroutines.withTimeout
 import org.drinkless.tdlib.Client
 import org.drinkless.tdlib.TdApi
 import kotlin.coroutines.resume
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.auth_channel_call
+import hortay.shared.generated.resources.auth_channel_call_with_phone
+import hortay.shared.generated.resources.auth_channel_firebase
+import hortay.shared.generated.resources.auth_channel_flash_call
+import hortay.shared.generated.resources.auth_channel_fragment
+import hortay.shared.generated.resources.auth_channel_missed_call
+import hortay.shared.generated.resources.auth_channel_other
+import hortay.shared.generated.resources.auth_channel_sms
+import hortay.shared.generated.resources.auth_channel_sms_phrase
+import hortay.shared.generated.resources.auth_channel_sms_with_phone
+import hortay.shared.generated.resources.auth_channel_sms_word
+import hortay.shared.generated.resources.auth_channel_telegram_message
+import hortay.shared.generated.resources.auth_err_email_required
+import hortay.shared.generated.resources.auth_err_init_failure
+import hortay.shared.generated.resources.auth_err_other_device
+import hortay.shared.generated.resources.auth_err_phone_unregistered
+import hortay.shared.generated.resources.auth_err_premium_required
 
 /**
  * Thin Kotlin wrapper around TDLib's [Client].
@@ -38,7 +55,7 @@ class TdClient private constructor(
     private val settings: SettingsStore,
 ) : TdSender {
 
-    private val strings: StringResolver = context.resources.toStringResolver()
+    private val strings: StringResolver = ComposeResourcesStringResolver()
 
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -246,7 +263,7 @@ class TdClient private constructor(
                         if (err is CancellationException) throw err
                         Log.e(TAG, "SetTdlibParameters failed", err)
                         _authStage.value = AuthStage.Error(
-                            strings.getString(R.string.auth_err_init_failure),
+                            strings.getString(Res.string.auth_err_init_failure),
                         )
                     }
             }
@@ -306,18 +323,18 @@ class TdClient private constructor(
             // commonly requires email-2FA on first sign-in, so WaitEmail* hits real users.
             is TdApi.AuthorizationStateWaitEmailAddress,
             is TdApi.AuthorizationStateWaitEmailCode -> _authStage.value =
-                AuthStage.Error(strings.getString(R.string.auth_err_email_required))
+                AuthStage.Error(strings.getString(Res.string.auth_err_email_required))
             is TdApi.AuthorizationStateWaitRegistration -> _authStage.value =
-                AuthStage.Error(strings.getString(R.string.auth_err_phone_unregistered))
+                AuthStage.Error(strings.getString(Res.string.auth_err_phone_unregistered))
             is TdApi.AuthorizationStateWaitOtherDeviceConfirmation -> _authStage.value =
-                AuthStage.Error(strings.getString(R.string.auth_err_other_device))
+                AuthStage.Error(strings.getString(Res.string.auth_err_other_device))
             // TDLib emits this when sign-in requires a Telegram Premium purchase to
             // continue (a server-side rule for some fresh accounts / regions). The
             // purchase has to go through the official client's in-app billing — we
             // can't complete it ourselves. Surface that explicitly so the user isn't
             // left on a blank Loading.
             is TdApi.AuthorizationStateWaitPremiumPurchase -> _authStage.value =
-                AuthStage.Error(strings.getString(R.string.auth_err_premium_required))
+                AuthStage.Error(strings.getString(Res.string.auth_err_premium_required))
             else -> Unit
         }
     }
@@ -749,19 +766,19 @@ private fun TdApi.AuthenticationCodeType.isNumeric(): Boolean = numericLength() 
  * for completeness in case Telegram lifts the restriction.
  */
 private fun TdApi.AuthenticationCodeType.toLabel(res: StringResolver, phone: String): String = when (this) {
-    is TdApi.AuthenticationCodeTypeTelegramMessage -> res.getString(R.string.auth_channel_telegram_message)
+    is TdApi.AuthenticationCodeTypeTelegramMessage -> res.getString(Res.string.auth_channel_telegram_message)
     is TdApi.AuthenticationCodeTypeSms ->
-        if (phone.isNotEmpty()) res.getString(R.string.auth_channel_sms_with_phone, phone)
-        else res.getString(R.string.auth_channel_sms)
-    is TdApi.AuthenticationCodeTypeSmsWord -> res.getString(R.string.auth_channel_sms_word)
-    is TdApi.AuthenticationCodeTypeSmsPhrase -> res.getString(R.string.auth_channel_sms_phrase)
+        if (phone.isNotEmpty()) res.getString(Res.string.auth_channel_sms_with_phone, phone)
+        else res.getString(Res.string.auth_channel_sms)
+    is TdApi.AuthenticationCodeTypeSmsWord -> res.getString(Res.string.auth_channel_sms_word)
+    is TdApi.AuthenticationCodeTypeSmsPhrase -> res.getString(Res.string.auth_channel_sms_phrase)
     is TdApi.AuthenticationCodeTypeCall ->
-        if (phone.isNotEmpty()) res.getString(R.string.auth_channel_call_with_phone, phone)
-        else res.getString(R.string.auth_channel_call)
-    is TdApi.AuthenticationCodeTypeMissedCall -> res.getString(R.string.auth_channel_missed_call)
-    is TdApi.AuthenticationCodeTypeFlashCall -> res.getString(R.string.auth_channel_flash_call)
-    is TdApi.AuthenticationCodeTypeFragment -> res.getString(R.string.auth_channel_fragment)
+        if (phone.isNotEmpty()) res.getString(Res.string.auth_channel_call_with_phone, phone)
+        else res.getString(Res.string.auth_channel_call)
+    is TdApi.AuthenticationCodeTypeMissedCall -> res.getString(Res.string.auth_channel_missed_call)
+    is TdApi.AuthenticationCodeTypeFlashCall -> res.getString(Res.string.auth_channel_flash_call)
+    is TdApi.AuthenticationCodeTypeFragment -> res.getString(Res.string.auth_channel_fragment)
     is TdApi.AuthenticationCodeTypeFirebaseAndroid,
-    is TdApi.AuthenticationCodeTypeFirebaseIos -> res.getString(R.string.auth_channel_firebase)
-    else -> res.getString(R.string.auth_channel_other)
+    is TdApi.AuthenticationCodeTypeFirebaseIos -> res.getString(Res.string.auth_channel_firebase)
+    else -> res.getString(Res.string.auth_channel_other)
 }

@@ -18,7 +18,6 @@ import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import dev.lyo.hortay.AppGraph
-import dev.lyo.hortay.R
 import dev.lyo.hortay.data.FeedOrder
 import dev.lyo.hortay.data.NavEntry
 import dev.lyo.hortay.data.TimelinePost
@@ -27,6 +26,8 @@ import dev.lyo.hortay.ui.comments.CommentsScreen
 import dev.lyo.hortay.ui.timeline.ChannelScreen
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.link_not_found
 
 /**
  * Per-[NavEntry] [ViewModelStoreOwner] with deterministic cleanup. The host
@@ -104,7 +105,7 @@ internal fun NavOverlayRenderer(
     onPostReportClick: (TimelinePost) -> Unit,
     canReportPost: (TimelinePost) -> Boolean,
 ) {
-    val res = androidx.compose.ui.platform.LocalContext.current.resources
+    val res = androidx.compose.runtime.remember { dev.lyo.hortay.data.ComposeResourcesStringResolver() }
 
     visibleEntries.forEachIndexed { idx, entry ->
         val isTop = idx == visibleEntries.lastIndex
@@ -151,7 +152,7 @@ internal fun NavOverlayRenderer(
                             canReportPost = canReportPost,
                             onLinkNotFound = {
                                 graph.userMessages.post(
-                                    res.getString(R.string.link_not_found),
+                                    res.getString(Res.string.link_not_found),
                                     UserMessageBus.Severity.Info,
                                 )
                             },

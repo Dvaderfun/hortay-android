@@ -6,13 +6,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.lyo.hortay.AppGraph
-import dev.lyo.hortay.R
 import dev.lyo.hortay.data.UserMessageBus
 import dev.lyo.hortay.ui.report.ReportFlowSheet
 import dev.lyo.hortay.ui.text.ChatInvitePreviewDialog
 import dev.lyo.hortay.ui.users.UserProfileSheet
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.report_success
 
 /**
  * Three modal surfaces that live at MainScaffold scope rather than inside the
@@ -45,7 +46,7 @@ internal fun MainScaffoldDialogs(
     onUserSheetDismiss: () -> Unit,
     onPushChannel: (chatId: Long, scrollTo: Long?) -> Unit,
 ) {
-    val res = androidx.compose.ui.platform.LocalContext.current.resources
+    val res = androidx.compose.runtime.remember { dev.lyo.hortay.data.ComposeResourcesStringResolver() }
     val pendingInvitePreview by graph.linkDialogs.invitePreview.collectAsStateWithLifecycle()
     val pendingReport by graph.reportDialogs.target.collectAsStateWithLifecycle()
 
@@ -80,7 +81,7 @@ internal fun MainScaffoldDialogs(
                 // actually happened.
                 if (success) {
                     graph.userMessages.post(
-                        res.getString(R.string.report_success),
+                        res.getString(Res.string.report_success),
                         UserMessageBus.Severity.Info,
                     )
                 }

@@ -23,16 +23,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.stringArrayResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import dev.lyo.hortay.R
 import dev.lyo.hortay.data.VideoQualities
 import dev.lyo.hortay.data.VideoQuality
 import dev.lyo.hortay.ui.icons.Symbol
 import dev.lyo.hortay.ui.theme.HortayExpressive
 import dev.lyo.hortay.ui.theme.asComposeShape
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.media_video_quality
+import hortay.shared.generated.resources.size_units
+import org.jetbrains.compose.resources.stringArrayResource
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Compact quality indicator that lives on the full-screen viewer's overlay row.
@@ -115,7 +117,7 @@ private fun VideoQualityPickerSheet(
             verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
             Text(
-                text = stringResource(R.string.media_video_quality),
+                text = stringResource(Res.string.media_video_quality),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 16.dp),
@@ -162,7 +164,7 @@ private fun QualityRow(
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
             )
-            val units = stringArrayResource(R.array.size_units)
+            val units = stringArrayResource(Res.array.size_units)
             val subtitle = buildString {
                 append("${quality.width}×${quality.height}")
                 if (quality.sizeBytes > 0) append("  ·  ${formatSize(quality.sizeBytes, units)}")
@@ -176,7 +178,7 @@ private fun QualityRow(
     }
 }
 
-private fun formatSize(bytes: Long, units: Array<String>): String {
+private fun formatSize(bytes: Long, units: List<String>): String {
     if (bytes <= 0) return ""
     var size = bytes.toDouble()
     var idx = 0

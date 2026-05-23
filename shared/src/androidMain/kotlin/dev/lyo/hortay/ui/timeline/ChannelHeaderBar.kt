@@ -27,17 +27,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
-import dev.lyo.hortay.R
 import dev.lyo.hortay.ui.components.HortayTopBar
 import dev.lyo.hortay.ui.components.HortayTopBarSize
 import dev.lyo.hortay.ui.icons.Symbol
 import dev.lyo.hortay.ui.media.TdAvatar
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.action_back
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Shared chat-screen header used by both TDLib-mode [ChannelScreen] and guest-mode
@@ -159,7 +160,7 @@ internal fun ChannelHeaderBar(
             IconButton(onClick = onBack) {
                 Symbol(
                     name = "arrow_back",
-                    contentDescription = stringResource(R.string.action_back),
+                    contentDescription = stringResource(Res.string.action_back),
                 )
             }
         },

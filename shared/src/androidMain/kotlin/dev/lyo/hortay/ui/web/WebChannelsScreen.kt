@@ -42,14 +42,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.lyo.hortay.AppGraph
-import dev.lyo.hortay.R
 import dev.lyo.hortay.data.web.ChannelEntry
 import dev.lyo.hortay.data.web.ChannelFetchStatus
 import dev.lyo.hortay.data.web.WebPostAdapter
@@ -59,6 +57,29 @@ import dev.lyo.hortay.ui.components.HortayTopBarSize
 import dev.lyo.hortay.ui.icons.Symbol
 import dev.lyo.hortay.ui.media.TdAvatar
 import kotlinx.coroutines.launch
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.avatar_for_channel
+import hortay.shared.generated.resources.channels_hide_from_feed_for
+import hortay.shared.generated.resources.channels_unhide_from_feed_for
+import hortay.shared.generated.resources.guest_mode_badge
+import hortay.shared.generated.resources.web_add_channel
+import hortay.shared.generated.resources.web_cancel
+import hortay.shared.generated.resources.web_channels_title
+import hortay.shared.generated.resources.web_empty_channels_body
+import hortay.shared.generated.resources.web_empty_channels_title
+import hortay.shared.generated.resources.web_retry_for
+import hortay.shared.generated.resources.web_status_error
+import hortay.shared.generated.resources.web_status_loading
+import hortay.shared.generated.resources.web_status_not_found
+import hortay.shared.generated.resources.web_status_parse_failure
+import hortay.shared.generated.resources.web_status_private
+import hortay.shared.generated.resources.web_status_rate_limited
+import hortay.shared.generated.resources.web_subscribers
+import hortay.shared.generated.resources.web_unsubscribe_body
+import hortay.shared.generated.resources.web_unsubscribe_confirm
+import hortay.shared.generated.resources.web_unsubscribe_from
+import hortay.shared.generated.resources.web_unsubscribe_title
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Subscribed-channels list for guest mode. Mirrors [dev.lyo.hortay.ui.channels.ChannelsScreen]
@@ -100,7 +121,7 @@ fun WebChannelsScreen(
             .nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             HortayTopBar(
-                title = stringResource(R.string.web_channels_title),
+                title = stringResource(Res.string.web_channels_title),
                 size = HortayTopBarSize.Large,
                 actions = { GuestModeBadge() },
                 scrollBehavior = scrollBehavior,
@@ -150,8 +171,8 @@ fun WebChannelsScreen(
     pendingUnsubscribe?.let { entry ->
         AlertDialog(
             onDismissRequest = { pendingUnsubscribe = null },
-            title = { Text(stringResource(R.string.web_unsubscribe_title)) },
-            text = { Text(stringResource(R.string.web_unsubscribe_body, entry.info.username)) },
+            title = { Text(stringResource(Res.string.web_unsubscribe_title)) },
+            text = { Text(stringResource(Res.string.web_unsubscribe_body, entry.info.username)) },
             confirmButton = {
                 TextButton(onClick = {
                     val u = entry.info.username
@@ -159,14 +180,14 @@ fun WebChannelsScreen(
                     scope.launch { graph.webSubscriptions.remove(u) }
                 }) {
                     Text(
-                        stringResource(R.string.web_unsubscribe_confirm),
+                        stringResource(Res.string.web_unsubscribe_confirm),
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
             },
             dismissButton = {
                 TextButton(onClick = { pendingUnsubscribe = null }) {
-                    Text(stringResource(R.string.web_cancel))
+                    Text(stringResource(Res.string.web_cancel))
                 }
             },
         )
@@ -207,14 +228,14 @@ private fun EmptyChannelsState(
         }
         Spacer(Modifier.size(20.dp))
         Text(
-            text = stringResource(R.string.web_empty_channels_title),
+            text = stringResource(Res.string.web_empty_channels_title),
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.size(8.dp))
         Text(
-            text = stringResource(R.string.web_empty_channels_body),
+            text = stringResource(Res.string.web_empty_channels_body),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -226,7 +247,7 @@ private fun EmptyChannelsState(
         ) {
             Symbol(name = "add", contentDescription = null, size = 18.dp)
             Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.web_add_channel))
+            Text(stringResource(Res.string.web_add_channel))
         }
     }
 }
@@ -272,7 +293,7 @@ private fun ChannelRow(
                             Symbol(
                                 name = "refresh",
                                 contentDescription = stringResource(
-                                    R.string.web_retry_for,
+                                    Res.string.web_retry_for,
                                     entry.info.title,
                                 ),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -288,8 +309,8 @@ private fun ChannelRow(
                     Symbol(
                         name = if (isHidden) "visibility_off" else "visibility",
                         contentDescription = stringResource(
-                            if (isHidden) R.string.channels_unhide_from_feed_for
-                            else R.string.channels_hide_from_feed_for,
+                            if (isHidden) Res.string.channels_unhide_from_feed_for
+                            else Res.string.channels_hide_from_feed_for,
                             entry.info.title,
                         ),
                         tint = if (isHidden) MaterialTheme.colorScheme.primary
@@ -305,7 +326,7 @@ private fun ChannelRow(
                     Symbol(
                         name = "close",
                         contentDescription = stringResource(
-                            R.string.web_unsubscribe_from,
+                            Res.string.web_unsubscribe_from,
                             entry.info.title,
                         ),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -385,7 +406,7 @@ private fun ChannelSubtitle(entry: ChannelEntry) {
     val statusRes = entry.status.subtitleStringRes()
     val statusLine = statusRes?.let { stringResource(it) }
     val subscriberLine = entry.info.subscribers?.let {
-        stringResource(R.string.web_subscribers, it)
+        stringResource(Res.string.web_subscribers, it)
     }
     val tail = statusLine ?: subscriberLine
     val isError = statusLine != null && entry.status != ChannelFetchStatus.Loading
@@ -406,14 +427,14 @@ private fun ChannelSubtitle(entry: ChannelEntry) {
     )
 }
 
-private fun ChannelFetchStatus.subtitleStringRes(): Int? = when (this) {
+private fun ChannelFetchStatus.subtitleStringRes(): org.jetbrains.compose.resources.StringResource? = when (this) {
     ChannelFetchStatus.Idle, ChannelFetchStatus.Ok -> null
-    ChannelFetchStatus.Loading -> R.string.web_status_loading
-    ChannelFetchStatus.Error -> R.string.web_status_error
-    ChannelFetchStatus.RateLimited -> R.string.web_status_rate_limited
-    ChannelFetchStatus.NotFound -> R.string.web_status_not_found
-    ChannelFetchStatus.Private -> R.string.web_status_private
-    ChannelFetchStatus.ParseFailure -> R.string.web_status_parse_failure
+    ChannelFetchStatus.Loading -> Res.string.web_status_loading
+    ChannelFetchStatus.Error -> Res.string.web_status_error
+    ChannelFetchStatus.RateLimited -> Res.string.web_status_rate_limited
+    ChannelFetchStatus.NotFound -> Res.string.web_status_not_found
+    ChannelFetchStatus.Private -> Res.string.web_status_private
+    ChannelFetchStatus.ParseFailure -> Res.string.web_status_parse_failure
 }
 
 @Composable
@@ -435,7 +456,7 @@ private fun ChannelAvatar(name: String, avatarUrl: String?) {
         if (avatarUrl != null) {
             coil3.compose.AsyncImage(
                 model = avatarUrl,
-                contentDescription = stringResource(R.string.avatar_for_channel, name),
+                contentDescription = stringResource(Res.string.avatar_for_channel, name),
                 modifier = Modifier
                     .size(48.dp)
                     .clip(CircleShape),
@@ -462,7 +483,7 @@ internal fun GuestModeBadge() {
         },
         label = {
             Text(
-                text = stringResource(R.string.guest_mode_badge),
+                text = stringResource(Res.string.guest_mode_badge),
                 style = MaterialTheme.typography.labelSmall,
             )
         },

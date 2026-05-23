@@ -23,10 +23,12 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import dev.lyo.hortay.R
 import dev.lyo.hortay.ui.icons.Symbol
 import dev.lyo.hortay.ui.theme.HortayExpressive
 import dev.lyo.hortay.ui.theme.MorphShape
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.unread_remaining
+import hortay.shared.generated.resources.unread_remaining_overflow
 
 /**
  * Ambient jump-to-next-unread chip in `OldestUnreadFirst` mode, bottom-end
@@ -106,8 +108,8 @@ fun UnreadCounterPill(
     val shape = remember(pressProgress) {
         MorphShape(HortayExpressive.FabPressMorph, pressProgress)
     }
-    val ctx = LocalContext.current
-    val label = unreadRemainingLabel(ctx.resources, count)
+    val ctx = androidx.compose.runtime.remember { dev.lyo.hortay.data.ComposeResourcesStringResolver() }
+    val label = unreadRemainingLabel(ctx, count)
     BadgedBox(
         // mergeDescendants collapses the FAB + Symbol + Badge into a single
         // accessibility node so TalkBack reads "12 непрочитаних лишилось" once
@@ -159,9 +161,9 @@ fun UnreadCounterPill(
  * `contentDescription` carries the full localised phrase so a11y users get
  * the same meaning.
  */
-private fun unreadRemainingLabel(res: android.content.res.Resources, n: Int): String {
-    if (n > 99) return res.getString(R.string.unread_remaining_overflow)
-    return res.getQuantityString(R.plurals.unread_remaining, n, n)
+private fun unreadRemainingLabel(res: dev.lyo.hortay.data.StringResolver, n: Int): String {
+    if (n > 99) return res.getString(Res.string.unread_remaining_overflow)
+    return res.getQuantityString(Res.plurals.unread_remaining, n, n)
 }
 
 private fun countText(n: Int): String = if (n > 99) "99+" else n.toString()

@@ -19,6 +19,8 @@ import kotlinx.coroutines.launch
 import org.drinkless.tdlib.TdApi
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.comments_unavailable
 
 /**
  * Live discussion-thread feed for a channel post. Emits a [ThreadState] that updates as new
@@ -54,7 +56,7 @@ class CommentsRepository(
     private val res: StringResolver,
 ) {
 
-    private val unavailableMsg: String get() = res.getString(dev.lyo.hortay.R.string.comments_unavailable)
+    private val unavailableMsg: String get() = res.getString(Res.string.comments_unavailable)
 
 
     sealed interface ThreadState {

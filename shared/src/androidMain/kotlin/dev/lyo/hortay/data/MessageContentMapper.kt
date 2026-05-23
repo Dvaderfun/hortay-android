@@ -1,9 +1,17 @@
 package dev.lyo.hortay.data
 
-import dev.lyo.hortay.R
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toPersistentList
 import org.drinkless.tdlib.TdApi
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.content_game
+import hortay.shared.generated.resources.content_gift
+import hortay.shared.generated.resources.content_giveaway
+import hortay.shared.generated.resources.content_giveaway_completed
+import hortay.shared.generated.resources.content_giveaway_winners
+import hortay.shared.generated.resources.content_invoice
+import hortay.shared.generated.resources.content_premium_gift
+import hortay.shared.generated.resources.content_story
 
 /**
  * Pure, synchronous mapper from [TdApi.MessageContent] to UI-facing [PostContent].
@@ -209,37 +217,37 @@ internal object MessageContentMapper {
 
         is TdApi.MessageInvoice -> PostContent.OpenInSource(
             iconSymbol = "description",
-            title = res.getString(R.string.content_invoice),
+            title = res.getString(Res.string.content_invoice),
             subtitle = content.productInfo?.title.orEmpty(),
         )
         is TdApi.MessageGiveaway -> PostContent.OpenInSource(
             iconSymbol = "card_giftcard",
-            title = res.getString(R.string.content_giveaway),
+            title = res.getString(Res.string.content_giveaway),
         )
         is TdApi.MessageGiveawayCompleted -> PostContent.OpenInSource(
             iconSymbol = "card_giftcard",
-            title = res.getString(R.string.content_giveaway_completed),
+            title = res.getString(Res.string.content_giveaway_completed),
         )
         is TdApi.MessageGiveawayWinners -> PostContent.OpenInSource(
             iconSymbol = "card_giftcard",
-            title = res.getString(R.string.content_giveaway_winners),
+            title = res.getString(Res.string.content_giveaway_winners),
         )
         is TdApi.MessageGame -> PostContent.OpenInSource(
             iconSymbol = "info",
-            title = res.getString(R.string.content_game),
+            title = res.getString(Res.string.content_game),
             subtitle = content.game?.title.orEmpty(),
         )
         is TdApi.MessageStory -> PostContent.OpenInSource(
             iconSymbol = "visibility",
-            title = res.getString(R.string.content_story),
+            title = res.getString(Res.string.content_story),
         )
         is TdApi.MessagePremiumGiftCode -> PostContent.OpenInSource(
             iconSymbol = "card_giftcard",
-            title = res.getString(R.string.content_premium_gift),
+            title = res.getString(Res.string.content_premium_gift),
         )
         is TdApi.MessageGift -> PostContent.OpenInSource(
             iconSymbol = "card_giftcard",
-            title = res.getString(R.string.content_gift),
+            title = res.getString(Res.string.content_gift),
         )
         is TdApi.MessagePaidMedia -> mapPaidMedia(content, res)
         else -> PostContent.Unsupported(content::class.java.simpleName)

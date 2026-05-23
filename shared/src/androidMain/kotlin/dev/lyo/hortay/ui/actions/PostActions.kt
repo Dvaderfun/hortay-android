@@ -10,6 +10,8 @@ import android.widget.Toast
 import androidx.core.net.toUri
 import dev.lyo.hortay.data.posts.PostsRepository
 import dev.lyo.hortay.data.TimelinePost
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.post_copied_toast
 
 /**
  * Side-effects that bridge a post into the Android system: open the original in the
@@ -93,7 +95,11 @@ object PostActions {
         val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
         cm.setPrimaryClip(ClipData.newPlainText(post.senderName, text))
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-            Toast.makeText(context, context.getString(dev.lyo.hortay.R.string.post_copied_toast), Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                context,
+                kotlinx.coroutines.runBlocking { org.jetbrains.compose.resources.getString(Res.string.post_copied_toast) },
+                Toast.LENGTH_SHORT,
+            ).show()
         }
     }
 

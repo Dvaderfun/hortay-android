@@ -9,8 +9,11 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.res.stringResource
-import dev.lyo.hortay.R
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.report_about_dialog_body
+import hortay.shared.generated.resources.report_about_dialog_ok
+import hortay.shared.generated.resources.report_about_dialog_title
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * One-time explainer shown before the first report in either mode.
@@ -29,10 +32,10 @@ fun ReportAboutDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
             TextButton(onClick = onConfirm) {
-                Text(stringResource(R.string.report_about_dialog_ok))
+                Text(stringResource(Res.string.report_about_dialog_ok))
             }
         },
-        title = { Text(stringResource(R.string.report_about_dialog_title)) },
-        text = { Text(stringResource(R.string.report_about_dialog_body)) },
+        title = { Text(stringResource(Res.string.report_about_dialog_title)) },
+        text = { Text(stringResource(Res.string.report_about_dialog_body)) },
     )
 }

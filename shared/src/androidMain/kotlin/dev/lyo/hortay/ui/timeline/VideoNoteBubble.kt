@@ -34,7 +34,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -46,7 +45,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.ui.AspectRatioFrameLayout
-import dev.lyo.hortay.R
 import dev.lyo.hortay.data.DownloadPriority
 import dev.lyo.hortay.data.PostContent
 import dev.lyo.hortay.ui.icons.Symbol
@@ -55,6 +53,9 @@ import dev.lyo.hortay.ui.media.TdMediaImage
 import dev.lyo.hortay.ui.media.rememberMediaBinding
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.content_description_video_note
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Telegram-parity round video message (`messageVideoNote`).
@@ -101,7 +102,7 @@ internal fun VideoNotePlayerBubble(
     var muted by remember(fileId) { mutableStateOf(true) }
     var playing by remember(fileId) { mutableStateOf(true) }
 
-    val a11y = stringResource(R.string.content_description_video_note)
+    val a11y = stringResource(Res.string.content_description_video_note)
     Box(
         modifier = Modifier
             .shadow(elevation = 2.dp, shape = CircleShape, clip = false)

@@ -32,9 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import dev.lyo.hortay.R
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.lyo.hortay.data.ChannelActionsRepository
@@ -44,6 +42,17 @@ import dev.lyo.hortay.ui.icons.Symbol
 import kotlinx.coroutines.launch
 import java.text.NumberFormat
 import java.util.Locale
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.channels_hide_from_feed
+import hortay.shared.generated.resources.channels_join
+import hortay.shared.generated.resources.channels_leave
+import hortay.shared.generated.resources.channels_loading
+import hortay.shared.generated.resources.channels_mute
+import hortay.shared.generated.resources.channels_subscribers
+import hortay.shared.generated.resources.channels_unhide_from_feed
+import hortay.shared.generated.resources.channels_unmute
+import hortay.shared.generated.resources.report_action
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Bottom sheet rendered when the user taps a channel header in filtered-feed mode. Pulls
@@ -99,7 +108,7 @@ fun ChannelInfoSheet(
         Column(modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 24.dp)) {
             if (current == null) {
                 Text(
-                    stringResource(R.string.channels_loading),
+                    stringResource(Res.string.channels_loading),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(vertical = 24.dp),
@@ -123,7 +132,7 @@ fun ChannelInfoSheet(
             Spacer(Modifier.height(8.dp))
             current.subscribers?.let {
                 Text(
-                    text = stringResource(R.string.channels_subscribers, formatThousands(it)),
+                    text = stringResource(Res.string.channels_subscribers, formatThousands(it)),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -146,7 +155,7 @@ fun ChannelInfoSheet(
             Spacer(Modifier.height(20.dp))
             ActionRow(
                 symbol = if (current.isMuted) "notifications_active" else "notifications_off",
-                label = stringResource(if (current.isMuted) R.string.channels_unmute else R.string.channels_mute),
+                label = stringResource(if (current.isMuted) Res.string.channels_unmute else Res.string.channels_mute),
                 onClick = {
                     val target = !current.isMuted
                     info = current.copy(isMuted = target)
@@ -163,8 +172,8 @@ fun ChannelInfoSheet(
                 ActionRow(
                     symbol = if (isIgnored) "visibility" else "visibility_off",
                     label = stringResource(
-                        if (isIgnored) R.string.channels_unhide_from_feed
-                        else R.string.channels_hide_from_feed,
+                        if (isIgnored) Res.string.channels_unhide_from_feed
+                        else Res.string.channels_hide_from_feed,
                     ),
                     onClick = { scope.launch { ignoredChannels.toggle(chatId) } },
                 )
@@ -172,7 +181,7 @@ fun ChannelInfoSheet(
             if (current.isMember) {
                 ActionRow(
                     symbol = "logout",
-                    label = stringResource(R.string.channels_leave),
+                    label = stringResource(Res.string.channels_leave),
                     tint = MaterialTheme.colorScheme.error,
                     onClick = {
                         info = current.copy(isMember = false)
@@ -182,7 +191,7 @@ fun ChannelInfoSheet(
             } else {
                 ActionRow(
                     symbol = "add",
-                    label = stringResource(R.string.channels_join),
+                    label = stringResource(Res.string.channels_join),
                     tint = MaterialTheme.colorScheme.primary,
                     onClick = {
                         info = current.copy(isMember = true)
@@ -197,7 +206,7 @@ fun ChannelInfoSheet(
             if (onReport != null) {
                 ActionRow(
                     symbol = "flag",
-                    label = stringResource(R.string.report_action),
+                    label = stringResource(Res.string.report_action),
                     onClick = {
                         onReport()
                         onDismiss()

@@ -25,17 +25,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.lyo.hortay.R
 import dev.lyo.hortay.data.posts.PostsRepository
 import dev.lyo.hortay.data.TimelinePost
 import dev.lyo.hortay.ui.components.HortayTopBar
 import dev.lyo.hortay.ui.components.HortayTopBarSize
 import dev.lyo.hortay.ui.media.TdAvatar
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.channels_empty_helper
+import hortay.shared.generated.resources.channels_empty_title
+import hortay.shared.generated.resources.channels_title
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * List of channels the user is subscribed to. Data is derived from the same feed as the
@@ -65,7 +68,7 @@ fun ChannelsScreen(
             .nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             HortayTopBar(
-                title = stringResource(R.string.channels_title),
+                title = stringResource(Res.string.channels_title),
                 size = HortayTopBarSize.Large,
                 scrollBehavior = scrollBehavior,
             )
@@ -199,12 +202,12 @@ private fun EmptyChannels(modifier: Modifier = Modifier) {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            stringResource(R.string.channels_empty_title),
+            stringResource(Res.string.channels_empty_title),
             style = MaterialTheme.typography.headlineSmall,
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            stringResource(R.string.channels_empty_helper),
+            stringResource(Res.string.channels_empty_helper),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

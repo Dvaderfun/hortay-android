@@ -23,13 +23,20 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import dev.lyo.hortay.R
 import dev.lyo.hortay.ui.icons.Symbol
 import dev.lyo.hortay.ui.theme.asComposeShape
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.timeline_empty_caught_up_helper
+import hortay.shared.generated.resources.timeline_empty_caught_up_title
+import hortay.shared.generated.resources.timeline_empty_default_helper
+import hortay.shared.generated.resources.timeline_empty_default_title
+import hortay.shared.generated.resources.timeline_empty_saved_helper
+import hortay.shared.generated.resources.timeline_empty_saved_title
+import hortay.shared.generated.resources.timeline_unread_boundary
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Distinct empty-state variants surfaced inside the timeline. Each carries its
@@ -67,7 +74,7 @@ internal fun UnreadBoundaryRow() {
         HorizontalDivider(modifier = Modifier.weight(1f), color = tint)
         Spacer(Modifier.width(10.dp))
         Text(
-            text = stringResource(R.string.timeline_unread_boundary),
+            text = stringResource(Res.string.timeline_unread_boundary),
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.primary,
@@ -97,14 +104,14 @@ internal fun EmptyState(kind: EmptyKind) {
         ExpressiveEmptyHero(symbol = symbol, shape = shape)
         Spacer(Modifier.height(20.dp))
         val titleRes = when (kind) {
-            EmptyKind.Saved -> R.string.timeline_empty_saved_title
-            EmptyKind.CaughtUp -> R.string.timeline_empty_caught_up_title
-            EmptyKind.Default -> R.string.timeline_empty_default_title
+            EmptyKind.Saved -> Res.string.timeline_empty_saved_title
+            EmptyKind.CaughtUp -> Res.string.timeline_empty_caught_up_title
+            EmptyKind.Default -> Res.string.timeline_empty_default_title
         }
         val helperRes = when (kind) {
-            EmptyKind.Saved -> R.string.timeline_empty_saved_helper
-            EmptyKind.CaughtUp -> R.string.timeline_empty_caught_up_helper
-            EmptyKind.Default -> R.string.timeline_empty_default_helper
+            EmptyKind.Saved -> Res.string.timeline_empty_saved_helper
+            EmptyKind.CaughtUp -> Res.string.timeline_empty_caught_up_helper
+            EmptyKind.Default -> Res.string.timeline_empty_default_helper
         }
         Text(
             text = stringResource(titleRes),

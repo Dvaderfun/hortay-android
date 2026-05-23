@@ -34,11 +34,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.lyo.hortay.R
 import dev.lyo.hortay.data.BookmarkStore
 import dev.lyo.hortay.data.TimelinePost
 import dev.lyo.hortay.data.bookmarkKey
@@ -55,6 +53,13 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.web_cancel
+import hortay.shared.generated.resources.web_search_clear
+import hortay.shared.generated.resources.web_search_hint
+import hortay.shared.generated.resources.web_search_no_results
+import hortay.shared.generated.resources.web_search_prompt
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Cross-channel local search for guest mode. Reads posts straight from `web.db`
@@ -169,7 +174,7 @@ fun WebSearchScreen(
                 onSearch = { keyboard?.hide() },
                 placeholder = {
                     Text(
-                        text = stringResource(R.string.web_search_hint),
+                        text = stringResource(Res.string.web_search_hint),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 },
@@ -182,7 +187,7 @@ fun WebSearchScreen(
                     }) {
                         Symbol(
                             name = "arrow_back",
-                            contentDescription = stringResource(R.string.web_cancel),
+                            contentDescription = stringResource(Res.string.web_cancel),
                         )
                     }
                 },
@@ -191,7 +196,7 @@ fun WebSearchScreen(
                         IconButton(onClick = { textFieldState.clearText() }) {
                             Symbol(
                                 name = "close",
-                                contentDescription = stringResource(R.string.web_search_clear),
+                                contentDescription = stringResource(Res.string.web_search_clear),
                             )
                         }
                     }
@@ -228,10 +233,10 @@ private fun ColumnScope.WebSearchBody(
     ) {
         when {
             query.length < MIN_QUERY_LENGTH -> SearchEmptyState(
-                text = stringResource(R.string.web_search_prompt),
+                text = stringResource(Res.string.web_search_prompt),
             )
             results.isEmpty() -> SearchEmptyState(
-                text = stringResource(R.string.web_search_no_results, query),
+                text = stringResource(Res.string.web_search_no_results, query),
             )
             else -> LazyColumn(
                 state = listState,

@@ -43,19 +43,28 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.pluralStringResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import dev.lyo.hortay.R
 import dev.lyo.hortay.data.report.ReportExplainerStore
 import dev.lyo.hortay.data.report.ReportRepository
 import dev.lyo.hortay.data.report.ReportState
 import dev.lyo.hortay.ui.icons.Symbol
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.report_flood_wait_generic
+import hortay.shared.generated.resources.report_flood_wait_plural
+import hortay.shared.generated.resources.report_loading
+import hortay.shared.generated.resources.report_retry
+import hortay.shared.generated.resources.report_skip
+import hortay.shared.generated.resources.report_submit
+import hortay.shared.generated.resources.report_success
+import hortay.shared.generated.resources.report_text_hint
+import hortay.shared.generated.resources.report_text_placeholder
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Full reporting flow rendered inside a [ModalBottomSheet].
@@ -182,7 +191,7 @@ fun ReportFlowSheet(
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
-                            text = stringResource(R.string.report_success),
+                            text = stringResource(Res.string.report_success),
                             style = MaterialTheme.typography.bodyLarge,
                         )
                     }
@@ -211,7 +220,7 @@ private fun LoadingContent() {
             LoadingIndicator(modifier = Modifier.size(48.dp))
             Spacer(Modifier.height(16.dp))
             Text(
-                text = stringResource(R.string.report_loading),
+                text = stringResource(Res.string.report_loading),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -266,7 +275,7 @@ private fun TextRequiredContent(
     var text by remember { mutableStateOf("") }
 
     Text(
-        text = stringResource(R.string.report_text_hint),
+        text = stringResource(Res.string.report_text_hint),
         style = MaterialTheme.typography.titleMedium,
         fontWeight = FontWeight.SemiBold,
         modifier = Modifier.padding(bottom = 12.dp),
@@ -279,7 +288,7 @@ private fun TextRequiredContent(
         maxLines = 6,
         placeholder = {
             Text(
-                text = stringResource(R.string.report_text_placeholder),
+                text = stringResource(Res.string.report_text_placeholder),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         },
@@ -288,7 +297,7 @@ private fun TextRequiredContent(
     Row {
         if (onSkip != null) {
             TextButton(onClick = onSkip) {
-                Text(stringResource(R.string.report_skip))
+                Text(stringResource(Res.string.report_skip))
             }
             Spacer(Modifier.width(8.dp))
         }
@@ -297,7 +306,7 @@ private fun TextRequiredContent(
             enabled = isOptional || text.isNotEmpty(),
             modifier = Modifier.weight(1f),
         ) {
-            Text(stringResource(R.string.report_submit))
+            Text(stringResource(Res.string.report_submit))
         }
     }
 }
@@ -323,7 +332,7 @@ private fun ErrorContent(message: String, onRetry: () -> Unit) {
         )
         Spacer(Modifier.height(16.dp))
         FilledTonalButton(onClick = onRetry) {
-            Text(stringResource(R.string.report_retry))
+            Text(stringResource(Res.string.report_retry))
         }
     }
 }
@@ -343,9 +352,9 @@ private fun FloodWaitContent(seconds: Int) {
         )
         Spacer(Modifier.height(12.dp))
         val message = if (seconds > 0) {
-            pluralStringResource(R.plurals.report_flood_wait_plural, seconds, seconds)
+            pluralStringResource(Res.plurals.report_flood_wait_plural, seconds, seconds)
         } else {
-            stringResource(R.string.report_flood_wait_generic)
+            stringResource(Res.string.report_flood_wait_generic)
         }
         Text(
             text = message,

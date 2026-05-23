@@ -1,7 +1,9 @@
 package dev.lyo.hortay.data
 
-import dev.lyo.hortay.R
 import org.drinkless.tdlib.TdApi
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.channel_default_name
+import hortay.shared.generated.resources.user_default_name
 
 /**
  * Async layer over [MessageContentMapper] that resolves real channel handles, forward
@@ -26,8 +28,8 @@ import org.drinkless.tdlib.TdApi
  */
 class MessageMapper(private val td: TdSender, private val res: StringResolver) {
 
-    private val defaultUserName: String get() = res.getString(R.string.user_default_name)
-    private val defaultChannelName: String get() = res.getString(R.string.channel_default_name)
+    private val defaultUserName: String get() = res.getString(Res.string.user_default_name)
+    private val defaultChannelName: String get() = res.getString(Res.string.channel_default_name)
 
     /**
      * Map a channel feed post.

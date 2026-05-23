@@ -37,15 +37,23 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.pluralStringResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.lyo.hortay.R
 import dev.lyo.hortay.data.web.MigrationCoordinator
 import dev.lyo.hortay.ui.icons.Symbol
 import kotlinx.coroutines.launch
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.migration_confirm
+import hortay.shared.generated.resources.migration_deselect_all
+import hortay.shared.generated.resources.migration_progress_label
+import hortay.shared.generated.resources.migration_select_all
+import hortay.shared.generated.resources.migration_skip
+import hortay.shared.generated.resources.migration_subtitle
+import hortay.shared.generated.resources.migration_subtitle_disclaimer
+import hortay.shared.generated.resources.migration_title
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * One-time bottom sheet shown after the user signs in if they had any
@@ -94,12 +102,12 @@ fun MigrationProposalSheet(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
-                text = stringResource(R.string.migration_title),
+                text = stringResource(Res.string.migration_title),
                 style = MaterialTheme.typography.titleLarge,
             )
             Text(
                 text = pluralStringResource(
-                    R.plurals.migration_subtitle,
+                    Res.plurals.migration_subtitle,
                     candidates.size,
                     candidates.size,
                 ),
@@ -112,7 +120,7 @@ fun MigrationProposalSheet(
             // the channel admin's member list. Surface that explicitly so the
             // confirmation is informed, not surprised-by-default.
             Text(
-                text = stringResource(R.string.migration_subtitle_disclaimer),
+                text = stringResource(Res.string.migration_subtitle_disclaimer),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -129,8 +137,8 @@ fun MigrationProposalSheet(
                 ) {
                     Text(
                         text = stringResource(
-                            if (allSelected) R.string.migration_deselect_all
-                            else R.string.migration_select_all,
+                            if (allSelected) Res.string.migration_deselect_all
+                            else Res.string.migration_select_all,
                         ),
                     )
                 }
@@ -203,7 +211,7 @@ fun MigrationProposalSheet(
                     )
                     Text(
                         text = stringResource(
-                            R.string.migration_progress_label,
+                            Res.string.migration_progress_label,
                             p.processed,
                             p.total,
                         ),
@@ -239,7 +247,7 @@ fun MigrationProposalSheet(
                 ) {
                     Text(
                         text = stringResource(
-                            R.string.migration_confirm,
+                            Res.string.migration_confirm,
                             selected.value.size,
                         ),
                         maxLines = 1,
@@ -257,7 +265,7 @@ fun MigrationProposalSheet(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(
-                        text = stringResource(R.string.migration_skip),
+                        text = stringResource(Res.string.migration_skip),
                         maxLines = 1,
                     )
                 }

@@ -29,13 +29,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import android.widget.Toast
-import dev.lyo.hortay.R
 import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import dev.lyo.hortay.data.AlbumItem
@@ -50,6 +48,19 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.action_close
+import hortay.shared.generated.resources.action_copy_image
+import hortay.shared.generated.resources.action_save_to_gallery
+import hortay.shared.generated.resources.action_share_media
+import hortay.shared.generated.resources.media_copied
+import hortay.shared.generated.resources.media_copy_failed
+import hortay.shared.generated.resources.media_save_failed
+import hortay.shared.generated.resources.media_saved_photo
+import hortay.shared.generated.resources.media_saved_video
+import hortay.shared.generated.resources.media_share_error_source_missing
+import hortay.shared.generated.resources.media_share_failed
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Full-screen, gesture-driven media viewer. Photos pinch-zoom + pan; videos and animations
@@ -156,7 +167,7 @@ fun FullScreenMediaViewer(
                     .size(44.dp)
                     .background(Color.Black.copy(alpha = 0.45f), closeShape),
             ) {
-                Symbol(name = "close", contentDescription = stringResource(R.string.action_close), tint = Color.White)
+                Symbol(name = "close", contentDescription = stringResource(Res.string.action_close), tint = Color.White)
             }
 
             // Top-right tool column for the active page: QualityChip (videos
@@ -173,15 +184,15 @@ fun FullScreenMediaViewer(
             val activeQualities = (activeItem as? AlbumItem.Video)?.qualities
 
             val actionContext = LocalContext.current
-            val saveLabel = stringResource(R.string.action_save_to_gallery)
-            val copyLabel = stringResource(R.string.action_copy_image)
-            val shareLabel = stringResource(R.string.action_share_media)
-            val savedPhotoMsg = stringResource(R.string.media_saved_photo)
-            val savedVideoMsg = stringResource(R.string.media_saved_video)
-            val saveFailedMsg = stringResource(R.string.media_save_failed)
-            val copiedMsg = stringResource(R.string.media_copied)
-            val copyFailedMsg = stringResource(R.string.media_copy_failed)
-            val shareFailedMsg = stringResource(R.string.media_share_failed)
+            val saveLabel = stringResource(Res.string.action_save_to_gallery)
+            val copyLabel = stringResource(Res.string.action_copy_image)
+            val shareLabel = stringResource(Res.string.action_share_media)
+            val savedPhotoMsg = stringResource(Res.string.media_saved_photo)
+            val savedVideoMsg = stringResource(Res.string.media_saved_video)
+            val saveFailedMsg = stringResource(Res.string.media_save_failed)
+            val copiedMsg = stringResource(Res.string.media_copied)
+            val copyFailedMsg = stringResource(Res.string.media_copy_failed)
+            val shareFailedMsg = stringResource(Res.string.media_share_failed)
 
             val activeFileId = activeItem?.viewerFileId(qualityChoices[pagerState.currentPage]?.fileId)
             val activeState by produceMediaState(cache, activeFileId)
@@ -235,7 +246,7 @@ fun FullScreenMediaViewer(
                                         is MediaShareActions.Result.Success -> successMsg
                                         is MediaShareActions.Result.Failure ->
                                             saveFailedMsg.format(
-                                                actionContext.resources.getString(res.reasonResId, *res.args.toTypedArray()),
+                                                org.jetbrains.compose.resources.getString(res.reasonResId, *res.args.toTypedArray()),
                                             )
                                     }
                                     Toast.makeText(actionContext, toast, Toast.LENGTH_SHORT).show()
@@ -267,14 +278,14 @@ fun FullScreenMediaViewer(
                                         } else if (!webShareUrl.isNullOrBlank()) {
                                             MediaShareActions.shareUrl(actionContext, webShareUrl)
                                         } else {
-                                            MediaShareActions.Result.Failure(R.string.media_share_error_source_missing)
+                                            MediaShareActions.Result.Failure(Res.string.media_share_error_source_missing)
                                         }
                                     }
                                     if (res is MediaShareActions.Result.Failure) {
                                         Toast.makeText(
                                             actionContext,
                                             shareFailedMsg.format(
-                                                actionContext.resources.getString(res.reasonResId, *res.args.toTypedArray()),
+                                                org.jetbrains.compose.resources.getString(res.reasonResId, *res.args.toTypedArray()),
                                             ),
                                             Toast.LENGTH_SHORT,
                                         ).show()
@@ -304,7 +315,7 @@ fun FullScreenMediaViewer(
                                         is MediaShareActions.Result.Success -> copiedMsg
                                         is MediaShareActions.Result.Failure ->
                                             copyFailedMsg.format(
-                                                actionContext.resources.getString(res.reasonResId, *res.args.toTypedArray()),
+                                                org.jetbrains.compose.resources.getString(res.reasonResId, *res.args.toTypedArray()),
                                             )
                                     }
                                     Toast.makeText(actionContext, toast, Toast.LENGTH_SHORT).show()

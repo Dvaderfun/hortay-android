@@ -62,10 +62,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import dev.lyo.hortay.R
 import dev.lyo.hortay.data.AutoDownloadCategory
 import dev.lyo.hortay.data.AutoDownloadPolicy
 import dev.lyo.hortay.data.AutoDownloadSettings
@@ -77,6 +75,33 @@ import dev.lyo.hortay.ui.components.HortayTopBar
 import dev.lyo.hortay.ui.components.HortayTopBarSize
 import dev.lyo.hortay.ui.icons.Symbol
 import kotlinx.coroutines.launch
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.autodownload_category_mobile
+import hortay.shared.generated.resources.autodownload_category_roaming
+import hortay.shared.generated.resources.autodownload_category_wifi
+import hortay.shared.generated.resources.autodownload_data_saver_note
+import hortay.shared.generated.resources.autodownload_header_helper
+import hortay.shared.generated.resources.autodownload_reset
+import hortay.shared.generated.resources.autodownload_reset_done
+import hortay.shared.generated.resources.autodownload_screen_title
+import hortay.shared.generated.resources.autodownload_summary_animations
+import hortay.shared.generated.resources.autodownload_summary_off
+import hortay.shared.generated.resources.autodownload_summary_photos
+import hortay.shared.generated.resources.autodownload_summary_videos_capped
+import hortay.shared.generated.resources.autodownload_toggle_animations
+import hortay.shared.generated.resources.autodownload_toggle_animations_helper
+import hortay.shared.generated.resources.autodownload_toggle_photos
+import hortay.shared.generated.resources.autodownload_toggle_photos_helper
+import hortay.shared.generated.resources.autodownload_toggle_videos
+import hortay.shared.generated.resources.autodownload_toggle_videos_helper
+import hortay.shared.generated.resources.autodownload_video_max_label
+import hortay.shared.generated.resources.autodownload_video_max_value
+import hortay.shared.generated.resources.settings_subtitle_auto_download
+import hortay.shared.generated.resources.settings_subtitle_auto_download_category_mobile
+import hortay.shared.generated.resources.settings_subtitle_auto_download_category_roaming
+import hortay.shared.generated.resources.settings_subtitle_auto_download_category_wifi
+import hortay.shared.generated.resources.size_mb_int
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Two-level navigation for auto-download settings, mirroring Telegram's
@@ -110,7 +135,7 @@ fun AutoDownloadHost(
     var openCategory by rememberSaveable { mutableStateOf<AutoDownloadCategory?>(null) }
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
-    val resetMessage = stringResource(R.string.autodownload_reset_done)
+    val resetMessage = stringResource(Res.string.autodownload_reset_done)
 
     BackHandler(enabled = openCategory != null) { openCategory = null }
 
@@ -189,8 +214,8 @@ private fun AutoDownloadListScreen(
             .nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             HortayTopBar(
-                title = stringResource(R.string.autodownload_screen_title),
-                subtitle = stringResource(R.string.settings_subtitle_auto_download),
+                title = stringResource(Res.string.autodownload_screen_title),
+                subtitle = stringResource(Res.string.settings_subtitle_auto_download),
                 size = HortayTopBarSize.Large,
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -213,7 +238,7 @@ private fun AutoDownloadListScreen(
                 ),
         ) {
             Text(
-                text = stringResource(R.string.autodownload_header_helper),
+                text = stringResource(Res.string.autodownload_header_helper),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
@@ -229,7 +254,7 @@ private fun AutoDownloadListScreen(
                 verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
             ) {
                 CategoryRow(
-                    title = stringResource(R.string.autodownload_category_wifi),
+                    title = stringResource(Res.string.autodownload_category_wifi),
                     summary = summarize(settings.onWifi),
                     symbol = "wifi",
                     index = 0,
@@ -237,7 +262,7 @@ private fun AutoDownloadListScreen(
                     onClick = { onCategoryClick(AutoDownloadCategory.Wifi) },
                 )
                 CategoryRow(
-                    title = stringResource(R.string.autodownload_category_mobile),
+                    title = stringResource(Res.string.autodownload_category_mobile),
                     summary = summarize(settings.onMobile),
                     symbol = "signal_cellular_alt",
                     index = 1,
@@ -245,7 +270,7 @@ private fun AutoDownloadListScreen(
                     onClick = { onCategoryClick(AutoDownloadCategory.Mobile) },
                 )
                 CategoryRow(
-                    title = stringResource(R.string.autodownload_category_roaming),
+                    title = stringResource(Res.string.autodownload_category_roaming),
                     summary = summarize(settings.onRoaming),
                     symbol = "public",
                     index = 2,
@@ -264,7 +289,7 @@ private fun AutoDownloadListScreen(
             ) {
                 Symbol(name = "refresh", size = 20.dp, tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.autodownload_reset), fontWeight = FontWeight.SemiBold)
+                Text(stringResource(Res.string.autodownload_reset), fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -330,14 +355,14 @@ private fun AutoDownloadCategoryScreen(
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     val isDataSaverActive by rememberDataSaverActive(category)
     val title = when (category) {
-        AutoDownloadCategory.Wifi -> stringResource(R.string.autodownload_category_wifi)
-        AutoDownloadCategory.Mobile -> stringResource(R.string.autodownload_category_mobile)
-        AutoDownloadCategory.Roaming -> stringResource(R.string.autodownload_category_roaming)
+        AutoDownloadCategory.Wifi -> stringResource(Res.string.autodownload_category_wifi)
+        AutoDownloadCategory.Mobile -> stringResource(Res.string.autodownload_category_mobile)
+        AutoDownloadCategory.Roaming -> stringResource(Res.string.autodownload_category_roaming)
     }
     val subtitle = when (category) {
-        AutoDownloadCategory.Wifi -> stringResource(R.string.settings_subtitle_auto_download_category_wifi)
-        AutoDownloadCategory.Mobile -> stringResource(R.string.settings_subtitle_auto_download_category_mobile)
-        AutoDownloadCategory.Roaming -> stringResource(R.string.settings_subtitle_auto_download_category_roaming)
+        AutoDownloadCategory.Wifi -> stringResource(Res.string.settings_subtitle_auto_download_category_wifi)
+        AutoDownloadCategory.Mobile -> stringResource(Res.string.settings_subtitle_auto_download_category_mobile)
+        AutoDownloadCategory.Roaming -> stringResource(Res.string.settings_subtitle_auto_download_category_roaming)
     }
 
     Scaffold(
@@ -371,7 +396,7 @@ private fun AutoDownloadCategoryScreen(
             if (isDataSaverActive) {
                 val context = LocalContext.current
                 DataSaverBanner(
-                    text = stringResource(R.string.autodownload_data_saver_note),
+                    text = stringResource(Res.string.autodownload_data_saver_note),
                     onClick = {
                         // Surface the OS toggle directly so the user can flip it without
                         // hunting through Android Settings. ACTION_DATA_USAGE_SETTINGS
@@ -402,8 +427,8 @@ private fun AutoDownloadCategoryScreen(
                 verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
             ) {
                 ToggleRow(
-                    title = stringResource(R.string.autodownload_toggle_photos),
-                    subtitle = stringResource(R.string.autodownload_toggle_photos_helper),
+                    title = stringResource(Res.string.autodownload_toggle_photos),
+                    subtitle = stringResource(Res.string.autodownload_toggle_photos_helper),
                     symbol = "image",
                     checked = policy.photos,
                     index = 0,
@@ -411,8 +436,8 @@ private fun AutoDownloadCategoryScreen(
                     onCheckedChange = { onPolicyChange(policy.copy(photos = it)) },
                 )
                 ToggleRow(
-                    title = stringResource(R.string.autodownload_toggle_videos),
-                    subtitle = stringResource(R.string.autodownload_toggle_videos_helper),
+                    title = stringResource(Res.string.autodownload_toggle_videos),
+                    subtitle = stringResource(Res.string.autodownload_toggle_videos_helper),
                     symbol = "play_circle",
                     checked = policy.videos,
                     index = 1,
@@ -432,8 +457,8 @@ private fun AutoDownloadCategoryScreen(
             // semantically (sticker-set traffic, not media autodownload).
             Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                 ToggleRow(
-                    title = stringResource(R.string.autodownload_toggle_animations),
-                    subtitle = stringResource(R.string.autodownload_toggle_animations_helper),
+                    title = stringResource(Res.string.autodownload_toggle_animations),
+                    subtitle = stringResource(Res.string.autodownload_toggle_animations_helper),
                     symbol = "gif_box",
                     checked = policy.animations,
                     onCheckedChange = { onPolicyChange(policy.copy(animations = it)) },
@@ -450,7 +475,7 @@ private fun AutoDownloadCategoryScreen(
             ) {
                 Symbol(name = "refresh", size = 20.dp, tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.autodownload_reset), fontWeight = FontWeight.SemiBold)
+                Text(stringResource(Res.string.autodownload_reset), fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -542,14 +567,14 @@ private fun VideoSizeSlider(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = stringResource(R.string.autodownload_video_max_label),
+                text = stringResource(Res.string.autodownload_video_max_label),
                 style = MaterialTheme.typography.labelLarge,
                 color = if (enabled) MaterialTheme.colorScheme.onSurface
                 else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f),
             )
             Text(
-                text = stringResource(R.string.autodownload_video_max_value, displayValue),
+                text = stringResource(Res.string.autodownload_video_max_value, displayValue),
                 style = MaterialTheme.typography.titleMedium,
                 color = if (enabled) MaterialTheme.colorScheme.primary
                 else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -618,17 +643,17 @@ private fun DataSaverBanner(
 private fun summarize(policy: AutoDownloadPolicy): String {
     val context = LocalContext.current
     if (!policy.photos && !policy.videos && !policy.animations) {
-        return stringResource(R.string.autodownload_summary_off)
+        return stringResource(Res.string.autodownload_summary_off)
     }
     val parts = mutableListOf<String>()
-    if (policy.photos) parts += stringResource(R.string.autodownload_summary_photos)
+    if (policy.photos) parts += stringResource(Res.string.autodownload_summary_photos)
     if (policy.videos) {
         parts += stringResource(
-            R.string.autodownload_summary_videos_capped,
+            Res.string.autodownload_summary_videos_capped,
             formatMbInt(policy.videoMaxBytes, context),
         )
     }
-    if (policy.animations) parts += stringResource(R.string.autodownload_summary_animations)
+    if (policy.animations) parts += stringResource(Res.string.autodownload_summary_animations)
     return parts.joinToString(", ")
 }
 
@@ -677,7 +702,9 @@ private fun rememberDataSaverActive(category: AutoDownloadCategory): State<Boole
 }
 
 /** Round MB display to the nearest int — matches Telegram's slider labels exactly. */
-private fun formatMbInt(bytes: Long, context: Context): String {
+private fun formatMbInt(bytes: Long, @Suppress("UNUSED_PARAMETER") context: Context): String {
     val mb = (bytes / (1024 * 1024)).toInt().coerceAtLeast(1)
-    return context.getString(R.string.size_mb_int, mb)
+    return kotlinx.coroutines.runBlocking {
+        org.jetbrains.compose.resources.getString(Res.string.size_mb_int, mb)
+    }
 }

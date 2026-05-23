@@ -19,8 +19,6 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.layout
-import androidx.compose.ui.res.pluralStringResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -31,7 +29,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
-import dev.lyo.hortay.R
 import dev.lyo.hortay.data.AlbumItem
 import dev.lyo.hortay.data.CommentsRepository
 import dev.lyo.hortay.data.posts.PostsRepository
@@ -63,6 +60,17 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.action_back
+import hortay.shared.generated.resources.comments_count
+import hortay.shared.generated.resources.comments_disabled_body
+import hortay.shared.generated.resources.comments_disabled_title
+import hortay.shared.generated.resources.comments_empty_body
+import hortay.shared.generated.resources.comments_empty_title
+import hortay.shared.generated.resources.comments_title
+import hortay.shared.generated.resources.post_badge_edited
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Disabled-state copy + glyph used when the screen renders without a live thread
@@ -391,7 +399,7 @@ fun CommentsScreen(
             // calm and let the body's empty-state hero communicate the situation.
             val replyCount = (state as? CommentsRepository.ThreadState.Ready)?.rows?.size ?: 0
             val subtitleText = if (replyCount > 0) {
-                pluralStringResource(R.plurals.comments_count, replyCount, replyCount)
+                pluralStringResource(Res.plurals.comments_count, replyCount, replyCount)
             } else {
                 null
             }
@@ -421,12 +429,12 @@ fun CommentsScreen(
                     }
                 ) {
                     HortayTopBar(
-                        title = stringResource(R.string.comments_title),
+                        title = stringResource(Res.string.comments_title),
                         subtitle = subtitleText,
                         size = HortayTopBarSize.Medium,
                         navigationIcon = {
                             IconButton(onClick = onDismiss) {
-                                Symbol(name = "arrow_back", contentDescription = stringResource(R.string.action_back))
+                                Symbol(name = "arrow_back", contentDescription = stringResource(Res.string.action_back))
                             }
                         },
                         scrollBehavior = scrollBehavior,
@@ -495,8 +503,8 @@ fun CommentsScreen(
                     item(key = "empty") {
                         CommentsEmptyState(
                             symbol = "forum",
-                            title = stringResource(R.string.comments_empty_title),
-                            body = stringResource(R.string.comments_empty_body),
+                            title = stringResource(Res.string.comments_empty_title),
+                            body = stringResource(Res.string.comments_empty_body),
                         )
                     }
                 } else {
@@ -524,8 +532,8 @@ fun CommentsScreen(
                 is CommentsRepository.ThreadState.Error -> item(key = "disabled") {
                     CommentsEmptyState(
                         symbol = "chat_bubble",
-                        title = stringResource(R.string.comments_disabled_title),
-                        body = stringResource(R.string.comments_disabled_body),
+                        title = stringResource(Res.string.comments_disabled_title),
+                        body = stringResource(Res.string.comments_disabled_body),
                     )
                 }
             }
@@ -686,7 +694,7 @@ private fun CommentBubble(
                 if (message.editDate > 0L) {
                     Symbol(
                         name = "edit",
-                        contentDescription = stringResource(R.string.post_badge_edited),
+                        contentDescription = stringResource(Res.string.post_badge_edited),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         size = 13.dp,
                     )

@@ -29,12 +29,16 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import dev.lyo.hortay.R
 import dev.lyo.hortay.ui.icons.Symbol
 import kotlinx.coroutines.launch
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.link_action_copy
+import hortay.shared.generated.resources.link_action_open
+import hortay.shared.generated.resources.link_action_share
+import hortay.shared.generated.resources.link_copied_toast
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Telegram-style action sheet for a long-pressed link. Three rows rendered as a single
@@ -93,7 +97,7 @@ fun LinkActionsSheet(
                 LinkAction(
                     index = 0,
                     count = 3,
-                    label = stringResource(R.string.link_action_open),
+                    label = stringResource(Res.string.link_action_open),
                     icon = "open_in_new",
                     onClick = {
                         uriHandler.openUri(url)
@@ -103,7 +107,7 @@ fun LinkActionsSheet(
                 LinkAction(
                     index = 1,
                     count = 3,
-                    label = stringResource(R.string.link_action_copy),
+                    label = stringResource(Res.string.link_action_copy),
                     icon = "content_copy",
                     onClick = {
                         copyLink(context, url)
@@ -113,7 +117,7 @@ fun LinkActionsSheet(
                 LinkAction(
                     index = 2,
                     count = 3,
-                    label = stringResource(R.string.link_action_share),
+                    label = stringResource(Res.string.link_action_share),
                     icon = "share",
                     onClick = {
                         shareLink(context, url)
@@ -144,7 +148,11 @@ private fun copyLink(context: Context, url: String) {
     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
     cm.setPrimaryClip(ClipData.newPlainText("link", url))
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-        Toast.makeText(context, context.getString(R.string.link_copied_toast), Toast.LENGTH_SHORT).show()
+        Toast.makeText(
+            context,
+            kotlinx.coroutines.runBlocking { org.jetbrains.compose.resources.getString(Res.string.link_copied_toast) },
+            Toast.LENGTH_SHORT,
+        ).show()
     }
 }
 

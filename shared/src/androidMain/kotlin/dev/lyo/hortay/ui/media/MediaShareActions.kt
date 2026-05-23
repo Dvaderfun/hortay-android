@@ -10,16 +10,22 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.Log
-import androidx.annotation.StringRes
 import androidx.core.content.FileProvider
+import org.jetbrains.compose.resources.StringResource
 import androidx.core.content.getSystemService
 import coil3.SingletonImageLoader
-import dev.lyo.hortay.R
 import dev.lyo.hortay.data.AlbumItem
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.media_share_error_clipboard_unavailable
+import hortay.shared.generated.resources.media_share_error_insert_failed
+import hortay.shared.generated.resources.media_share_error_intent_failed
+import hortay.shared.generated.resources.media_share_error_mkdir
+import hortay.shared.generated.resources.media_share_error_only_photos
+import hortay.shared.generated.resources.media_share_error_source_missing
 
 /**
  * "Save" / "Copy" actions for the fullscreen media viewer. The fileId TDLib
@@ -69,7 +75,7 @@ object MediaShareActions {
          * but bug-report digging still has the original cause.
          */
         data class Failure(
-            @StringRes val reasonResId: Int,
+            val reasonResId: StringResource,
             val args: List<Any> = emptyList(),
             val debugDetail: String? = null,
         ) : Result
@@ -97,7 +103,7 @@ object MediaShareActions {
         localPath: String,
     ): Result {
         val src = File(localPath)
-        if (!src.exists()) return Result.Failure(R.string.media_share_error_source_missing)
+        if (!src.exists()) return Result.Failure(Res.string.media_share_error_source_missing)
 
         val isVideo = item !is AlbumItem.Photo
         val mime = item.guessMimeType()
@@ -112,7 +118,7 @@ object MediaShareActions {
         } catch (t: Throwable) {
             Log.w(TAG, "saveToGallery failed", t)
             Result.Failure(
-                reasonResId = R.string.media_share_error_insert_failed,
+                reasonResId = Res.string.media_share_error_insert_failed,
                 debugDetail = t.message ?: t.javaClass.simpleName,
             )
         }
@@ -129,9 +135,9 @@ object MediaShareActions {
         item: AlbumItem,
         localPath: String,
     ): Result {
-        if (item !is AlbumItem.Photo) return Result.Failure(R.string.media_share_error_only_photos)
+        if (item !is AlbumItem.Photo) return Result.Failure(Res.string.media_share_error_only_photos)
         val src = File(localPath)
-        if (!src.exists()) return Result.Failure(R.string.media_share_error_source_missing)
+        if (!src.exists()) return Result.Failure(Res.string.media_share_error_source_missing)
         val mime = item.guessMimeType()
 
         return try {
@@ -146,7 +152,7 @@ object MediaShareActions {
                 }
             }
             val cm = context.getSystemService<ClipboardManager>()
-                ?: return Result.Failure(R.string.media_share_error_clipboard_unavailable)
+                ?: return Result.Failure(Res.string.media_share_error_clipboard_unavailable)
             cm.setPrimaryClip(clip)
             // Without the read-grant flag a paster on Q+ receives a SecurityException
             // when resolving the URI. ClipData.newUri does NOT auto-grant on its own;
@@ -164,7 +170,7 @@ object MediaShareActions {
         } catch (t: Throwable) {
             Log.w(TAG, "copyToClipboard failed", t)
             Result.Failure(
-                reasonResId = R.string.media_share_error_clipboard_unavailable,
+                reasonResId = Res.string.media_share_error_clipboard_unavailable,
                 debugDetail = t.message ?: t.javaClass.simpleName,
             )
         }
@@ -183,7 +189,7 @@ object MediaShareActions {
         localPath: String,
     ): Result {
         val src = File(localPath)
-        if (!src.exists()) return Result.Failure(R.string.media_share_error_source_missing)
+        if (!src.exists()) return Result.Failure(Res.string.media_share_error_source_missing)
         val mime = item.guessMimeType()
 
         return try {
@@ -202,14 +208,14 @@ object MediaShareActions {
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             if (send.resolveActivity(context.packageManager) == null) {
-                return Result.Failure(R.string.media_share_error_intent_failed)
+                return Result.Failure(Res.string.media_share_error_intent_failed)
             }
             context.startActivity(chooser)
             Result.Success
         } catch (t: Throwable) {
             Log.w(TAG, "shareMedia failed", t)
             Result.Failure(
-                reasonResId = R.string.media_share_error_intent_failed,
+                reasonResId = Res.string.media_share_error_intent_failed,
                 debugDetail = t.message ?: t.javaClass.simpleName,
             )
         }
@@ -223,14 +229,14 @@ object MediaShareActions {
      * the URL back to bytes via their own HTTP stack, or just open the link.
      */
     fun shareUrl(context: Context, url: String): Result {
-        if (url.isBlank()) return Result.Failure(R.string.media_share_error_source_missing)
+        if (url.isBlank()) return Result.Failure(Res.string.media_share_error_source_missing)
         return try {
             val send = Intent(Intent.ACTION_SEND).apply {
                 type = "text/plain"
                 putExtra(Intent.EXTRA_TEXT, url)
             }
             if (send.resolveActivity(context.packageManager) == null) {
-                return Result.Failure(R.string.media_share_error_intent_failed)
+                return Result.Failure(Res.string.media_share_error_intent_failed)
             }
             val chooser = Intent.createChooser(send, null).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -240,7 +246,7 @@ object MediaShareActions {
         } catch (t: Throwable) {
             Log.w(TAG, "shareUrl failed", t)
             Result.Failure(
-                reasonResId = R.string.media_share_error_intent_failed,
+                reasonResId = Res.string.media_share_error_intent_failed,
                 debugDetail = t.message ?: t.javaClass.simpleName,
             )
         }
@@ -292,7 +298,7 @@ object MediaShareActions {
         }
 
         val uri = resolver.insert(collection, values)
-            ?: return Result.Failure(R.string.media_share_error_insert_failed)
+            ?: return Result.Failure(Res.string.media_share_error_insert_failed)
         try {
             resolver.openOutputStream(uri, "w")?.use { out ->
                 src.inputStream().use { it.copyTo(out) }
@@ -319,7 +325,7 @@ object MediaShareActions {
         val dir = File(Environment.getExternalStoragePublicDirectory(rootName), SUBFOLDER)
         if (!dir.exists() && !dir.mkdirs()) {
             return Result.Failure(
-                reasonResId = R.string.media_share_error_mkdir,
+                reasonResId = Res.string.media_share_error_mkdir,
                 args = listOf(dir.toString()),
             )
         }

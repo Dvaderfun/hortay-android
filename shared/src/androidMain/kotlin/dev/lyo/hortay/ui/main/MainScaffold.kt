@@ -21,7 +21,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlin.coroutines.cancellation.CancellationException
 import dev.lyo.hortay.AppGraph
-import dev.lyo.hortay.R
 import dev.lyo.hortay.data.NavEntry
 import dev.lyo.hortay.data.posts.PublicHandleResult
 import dev.lyo.hortay.data.TimelinePost
@@ -31,6 +30,8 @@ import dev.lyo.hortay.ui.timeline.LocalReadCursors
 import dev.lyo.hortay.ui.users.LocalUserProfileOpener
 import dev.lyo.hortay.ui.users.UserProfileOpener
 import kotlinx.coroutines.launch
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.link_not_found
 
 /**
  * Predictive-back progress contract shared with [dev.lyo.hortay.ui.comments.CommentsScreen]'s
@@ -177,7 +178,7 @@ fun MainScaffold(graph: AppGraph) {
         }
     }
 
-    val res = LocalContext.current.resources
+    val res = remember { dev.lyo.hortay.data.ComposeResourcesStringResolver() }
 
     // User-profile sheet pendant. Local state — unlike the report flow, no TDLib write
     // is staged in here, so a rotation just re-fetches the profile (cheap, three cached
@@ -257,7 +258,7 @@ fun MainScaffold(graph: AppGraph) {
                     )
                 }
                 is PublicHandleResult.NotFound -> {
-                    graph.userMessages.post(res.getString(R.string.link_not_found))
+                    graph.userMessages.post(res.getString(Res.string.link_not_found))
                 }
             }
         }
