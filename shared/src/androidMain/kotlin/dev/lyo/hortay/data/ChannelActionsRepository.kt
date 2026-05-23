@@ -347,75 +347,9 @@ class ChannelActionsRepository(
 // ChatInvitePreview + InviteLinkKind live in commonMain/data/ChatInvitePreview.kt so
 // the ChatInvitePreviewDialog + LinkDialogState surfaces can use them from shared UI.
 
-/** Data bundle backing the channel info bottom sheet. */
-data class ChannelInfo(
-    val chatId: Long,
-    val title: String,
-    val handle: String?,
-    val description: String?,
-    val subscribers: Int?,
-    val isMuted: Boolean,
-    val isMember: Boolean,
-)
-
-/**
- * Data bundle backing the user-profile bottom sheet. Resolved on-entry by
- * [ChannelActionsRepository.userProfile] — three coalesced TDLib calls land here,
- * fields are nullable when TDLib does not surface them (e.g. bot users never have a
- * birthdate; non-Premium users with no linked channel leave [personalChannel] null).
- */
-@androidx.compose.runtime.Immutable
-data class UserProfile(
-    val userId: Long,
-    val displayName: String,
-    /** `@username` (with leading `@`); null when the user hasn't picked a public handle. */
-    val handle: String?,
-    /** Inline JPEG (~40×40) — instant placeholder, no download. */
-    val avatarThumb: ByteArray?,
-    /** ProfilePhoto.small.id (160×160). Downloaded at avatar priority by the renderer. */
-    val avatarFileId: Int?,
-    val verification: SenderVerification?,
-    val isPremium: Boolean,
-    val isBot: Boolean,
-    val isSupport: Boolean,
-    val isContact: Boolean,
-    val status: PresenceStatus,
-    val bio: String?,
-    val birthMonth: Int?,
-    val birthDay: Int?,
-    val birthYear: Int?,
-    val groupsInCommon: Int,
-    val personalChannel: PersonalChannelLink?,
-    /** Bot description / short-description (whichever TDLib surfaces). Null for human users. */
-    val botDescription: String?,
-)
-
-/** Premium "personal channel" linked to a user profile. Tapping the row drills the
- *  channel-overlay screen inside Hortay — same path as a regular subscribed channel. */
-@androidx.compose.runtime.Immutable
-data class PersonalChannelLink(
-    val chatId: Long,
-    val title: String,
-    val handle: String?,
-    val avatarThumb: ByteArray?,
-    val avatarFileId: Int?,
-    val subscribers: Int?,
-)
-
-/**
- * UI-facing collapse of [TdApi.UserStatus]. Reader app: we surface the bucket Telegram
- * shows, never the precise minute. [Offline.wasOnlineSeconds] is the original Unix
- * timestamp from TDLib so the renderer can format "5 хв тому" / "вчора" / "10 травня"
- * with the user's locale instead of a fixed UK string.
- */
-sealed interface PresenceStatus {
-    object Online : PresenceStatus
-    object Recently : PresenceStatus
-    object LastWeek : PresenceStatus
-    object LastMonth : PresenceStatus
-    data class Offline(val wasOnlineSeconds: Long) : PresenceStatus
-    object Empty : PresenceStatus
-}
+// ChannelInfo + UserProfile + PersonalChannelLink + PresenceStatus live in
+// commonMain/data/ChannelInfo.kt so the sheet/profile UI surfaces can use
+// them without dragging in this TDLib-bound repository.
 
 private fun TdApi.UserStatus.toPresence(): PresenceStatus = when (this) {
     is TdApi.UserStatusOnline -> PresenceStatus.Online
