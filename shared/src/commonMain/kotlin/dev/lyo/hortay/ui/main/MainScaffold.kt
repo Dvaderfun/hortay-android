@@ -1,10 +1,10 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+@file:OptIn(
+    androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class,
+    androidx.compose.ui.ExperimentalComposeUiApi::class,
+)
 
 package dev.lyo.hortay.ui.main
 
-import androidx.activity.BackEventCompat
-import androidx.activity.compose.BackHandler
-import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
@@ -16,19 +16,31 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.backhandler.BackHandler
+import androidx.compose.ui.backhandler.PredictiveBackHandler
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlin.coroutines.cancellation.CancellationException
-import dev.lyo.hortay.AppGraph
+import dev.lyo.hortay.data.HortayBackend
 import dev.lyo.hortay.data.NavEntry
+import dev.lyo.hortay.data.NavStack
+import dev.lyo.hortay.data.BookmarkStore
+import dev.lyo.hortay.data.ComposeResourcesStringResolver
+import dev.lyo.hortay.data.DeepLinkRouter
+import dev.lyo.hortay.data.IgnoredChannelsStore
+import dev.lyo.hortay.data.LinkDialogState
+import dev.lyo.hortay.data.StartupCoordinator
 import dev.lyo.hortay.data.posts.PublicHandleResult
 import dev.lyo.hortay.data.TimelinePost
 import dev.lyo.hortay.data.UserMessageBus
 import dev.lyo.hortay.data.report.ReportTarget
+import dev.lyo.hortay.data.web.GuestModeStore
+import dev.lyo.hortay.nowMs
 import dev.lyo.hortay.ui.timeline.LocalReadCursors
 import dev.lyo.hortay.ui.users.LocalUserProfileOpener
 import dev.lyo.hortay.ui.users.UserProfileOpener
+import kotlinx.atomicfu.atomic
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import hortay.shared.generated.resources.Res
 import hortay.shared.generated.resources.link_not_found
@@ -67,8 +79,30 @@ private const val CHANNEL_PUSH_PREFETCH_TIMEOUT_MS = 400L
  *  - [NavOverlayRenderer]  — top-2 entries of the polymorphic nav stack as overlay layers.
  *  - [MainScaffoldDialogs] — invite preview, report flow sheet, user profile sheet.
  */
+/**
+ * Atomic per-process "tap token" counter — replaces the JVM `nextTapToken()`
+ * the original Android-only scaffold used to mint unique ids for home-tap
+ * bumps and report-flow sessions. Monotonic, lock-free, KMP-safe.
+ */
+private val tapTokenCounter = atomic(1L)
+
+private fun nextTapToken(): Long = tapTokenCounter.incrementAndGet()
+
 @Composable
-fun MainScaffold(graph: AppGraph) {
+fun MainScaffold(
+    feed: dev.lyo.hortay.data.FeedSource,
+    backend: HortayBackend,
+    bookmarks: BookmarkStore,
+    ignoredChannels: IgnoredChannelsStore,
+    guestMode: GuestModeStore,
+    userMessages: UserMessageBus,
+    linkDialogs: LinkDialogState,
+    deepLinkRouter: DeepLinkRouter,
+    startupPhase: kotlinx.coroutines.flow.StateFlow<StartupCoordinator.Phase>,
+    nav: NavStack,
+    appScope: CoroutineScope,
+    chatReadCursors: kotlinx.coroutines.flow.Flow<dev.lyo.hortay.data.ReadCursors>,
+) {
     // Navigation state — plain `remember`, deliberately NOT `rememberSaveable`. Tab
     // selection and the channel back-stack reset to defaults on every fresh Activity
     // create (cold launch, swipe-from-recents, memory-pressure restart), so opening
@@ -96,7 +130,7 @@ fun MainScaffold(graph: AppGraph) {
     // screen instance with its own scroll position and ViewModel — pushing the
     // same channel twice produces two independent screens.
     var selectedTab by remember { mutableStateOf(NavTab.Feed) }
-    val stack by graph.nav.stack.collectAsStateWithLifecycle()
+    val stack by nav.stack.collectAsStateWithLifecycle()
     val topEntry = stack.lastOrNull()
 
     val scope = rememberCoroutineScope()
@@ -143,9 +177,9 @@ fun MainScaffold(graph: AppGraph) {
     val pushChannel: (Long, Long?) -> Unit = { chatId, scrollTo ->
         scope.launch {
             kotlinx.coroutines.withTimeoutOrNull(CHANNEL_PUSH_PREFETCH_TIMEOUT_MS) {
-                graph.postsRepository.loadChannelHistory(chatId)
+                backend.loadChannelHistory(chatId)
             }
-            graph.nav.push(NavEntry.Channel(chatId = chatId, scrollToMessageId = scrollTo))
+            nav.push(NavEntry.Channel(chatId = chatId, scrollToMessageId = scrollTo))
         }
         Unit
     }
@@ -155,16 +189,16 @@ fun MainScaffold(graph: AppGraph) {
     // local DB. The screen-side grace decides whether to paint the
     // loading overlay.
     val pushComments: (TimelinePost) -> Unit = { post ->
-        graph.commentsRepository.primeCommentsForOpen(post)
-        graph.nav.push(NavEntry.Comments(anchor = post))
+        backend.primeCommentsForOpen(post)
+        nav.push(NavEntry.Comments(anchor = post))
     }
-    val popNav: () -> Unit = { graph.nav.pop() }
+    val popNav: () -> Unit = { nav.pop() }
 
     // Monotonic counter: each re-tap on Home (or brand) bumps it once. The Feed observes the
     // value and decides scroll-to-top vs refresh based on its own scroll position.
     var homeTapTrigger by remember { mutableLongStateOf(0L) }
-    val connection by graph.tdClient.connection.collectAsStateWithLifecycle()
-    val floodWaitUntilMs by graph.tdClient.floodWaitUntilMs.collectAsStateWithLifecycle()
+    val connection by backend.connection.collectAsStateWithLifecycle()
+    val floodWaitUntilMs by backend.floodWaitUntilMs.collectAsStateWithLifecycle()
 
     // Single SnackbarHost owned by the scaffold so transient errors land on whichever
     // tab the user is currently looking at. Subscribing to the bus only while composed
@@ -173,7 +207,7 @@ fun MainScaffold(graph: AppGraph) {
     // a stale apology that no longer reflects the current state.
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(Unit) {
-        graph.userMessages.messages.collect { msg ->
+        userMessages.messages.collect { msg ->
             snackbarHostState.showSnackbar(message = msg.text)
         }
     }
@@ -238,27 +272,27 @@ fun MainScaffold(graph: AppGraph) {
      */
     val safelyOpenChannel: (Long, Long?) -> Unit = { chatId, scrollTo ->
         scope.launch {
-            when (val resolved = graph.postsRepository.resolveChatKind(chatId)) {
+            when (val resolved = backend.resolveChatKind(chatId)) {
                 is PublicHandleResult.Channel -> {
-                    val below = graph.nav.stack.value.dropLast(1).lastOrNull()
+                    val below = nav.stack.value.dropLast(1).lastOrNull()
                     val matchesBelow = scrollTo == null &&
                         below is NavEntry.Channel &&
                         below.chatId == resolved.chatId
-                    if (matchesBelow) graph.nav.pop()
+                    if (matchesBelow) nav.pop()
                     else pushChannel(resolved.chatId, scrollTo)
                 }
                 is PublicHandleResult.User -> {
-                    if (graph.nav.top is NavEntry.Comments) graph.nav.pop()
+                    if (nav.top is NavEntry.Comments) nav.pop()
                     userProfileOpener.open(resolved.userId)
                 }
                 is PublicHandleResult.Unsupported -> {
-                    graph.userMessages.post(
+                    userMessages.post(
                         res.getString(unsupportedHandleMessageId(resolved.kind)),
                         UserMessageBus.Severity.Info,
                     )
                 }
                 is PublicHandleResult.NotFound -> {
-                    graph.userMessages.post(res.getString(Res.string.link_not_found))
+                    userMessages.post(res.getString(Res.string.link_not_found))
                 }
             }
         }
@@ -266,12 +300,12 @@ fun MainScaffold(graph: AppGraph) {
     }
 
     DeepLinkDispatcher(
-        router = graph.deepLinkRouter,
-        userMessages = graph.userMessages,
-        linkDialogs = graph.linkDialogs,
-        resolvePublicHandle = graph.postsRepository::resolvePublicHandle,
-        resolveChatKind = graph.postsRepository::resolveChatKind,
-        previewChatInvite = graph.channelActions::previewChatInvite,
+        router = deepLinkRouter,
+        userMessages = userMessages,
+        linkDialogs = linkDialogs,
+        resolvePublicHandle = backend::resolvePublicHandle,
+        resolveChatKind = backend::resolveChatKind,
+        previewChatInvite = backend::previewChatInvite,
         onPushChannel = pushChannel,
         onOpenUser = { userId -> userProfileOpener.open(userId) },
     )
@@ -282,7 +316,7 @@ fun MainScaffold(graph: AppGraph) {
     // roundtrips, and a re-created composition starting with null target would
     // erase the user's progress visibly.
     val openReport: (Long, Long?) -> Unit = { chatId, messageId ->
-        graph.reportDialogs.open(ReportTarget(chatId, messageId, System.nanoTime()))
+        backend.reportDialogs.open(ReportTarget(chatId, messageId, nextTapToken()))
     }
 
     // Single predictive-back handler for the top nav-entry. Translates,
@@ -297,7 +331,7 @@ fun MainScaffold(graph: AppGraph) {
     val backCommitSpec = MaterialTheme.motionScheme.fastEffectsSpec<Float>()
     val backRewindSpec = MaterialTheme.motionScheme.fastEffectsSpec<Float>()
     val navBackProgress = remember { Animatable(0f) }
-    var navBackEdge by remember { mutableIntStateOf(BackEventCompat.EDGE_LEFT) }
+    var navBackEdge by remember { mutableIntStateOf(BackSwipeEdge.Left) }
     PredictiveBackHandler(enabled = topEntry != null) { progress ->
         try {
             progress.collect { event ->
@@ -355,14 +389,14 @@ fun MainScaffold(graph: AppGraph) {
     // the feed LazyColumn) for every dwell-ack and external read sync,
     // producing the per-frame jank the user reported during scroll.
     val cursorHolder =
-        dev.lyo.hortay.ui.timeline.rememberCursorHolder(graph.postsRepository.chatReadCursors)
-    val feedOrder by graph.settingsStore.feedOrder.collectAsStateWithLifecycle(
+        dev.lyo.hortay.ui.timeline.rememberCursorHolder(chatReadCursors)
+    val feedOrder by backend.settingsStore.feedOrder.collectAsStateWithLifecycle(
         initialValue = dev.lyo.hortay.data.FeedOrder.OldestUnreadFirst,
     )
-    val snapScroll by graph.settingsStore.snapScroll.collectAsStateWithLifecycle(
+    val snapScroll by backend.settingsStore.snapScroll.collectAsStateWithLifecycle(
         initialValue = false,
     )
-    val inlineVideoAutoplay by graph.settingsStore.inlineVideoAutoplay.collectAsStateWithLifecycle(
+    val inlineVideoAutoplay by backend.settingsStore.inlineVideoAutoplay.collectAsStateWithLifecycle(
         initialValue = true,
     )
 
@@ -377,7 +411,7 @@ fun MainScaffold(graph: AppGraph) {
     // skippability of TimelineScreen's `interactions = remember(...)` and
     // `ackedRead = remember(markAsRead)` blocks — which would trigger redundant
     // `viewMessages` RPCs on every dwell-batch evaluation.
-    val tdlibMarkAsRead: suspend (List<TimelinePost>) -> Unit = remember(graph) {
+    val tdlibMarkAsRead: suspend (List<TimelinePost>) -> Unit = remember(backend) {
         { batch ->
             batch.groupBy { it.chatId }.forEach { (chatId, group) ->
                 // Expand each post to every album-member id so TDLib advances
@@ -389,7 +423,7 @@ fun MainScaffold(graph: AppGraph) {
                 val ids = group.flatMap { post ->
                     post.albumMessageIds.ifEmpty { listOf(post.id) }
                 }.distinct()
-                graph.postsRepository.viewMessages(chatId, ids)
+                backend.viewMessages(chatId, ids)
             }
         }
     }
@@ -397,13 +431,13 @@ fun MainScaffold(graph: AppGraph) {
     // hold `onReportClick` and `canReport` as parameters that feed into
     // `interactions = remember(...)`. Fresh lambdas per recomposition would invalidate
     // that remember block and propagate unstable callbacks down to PostCard.
-    val onPostReportClick = remember(graph) {
+    val onPostReportClick = remember(backend) {
         { post: TimelinePost ->
-            graph.reportDialogs.open(
+            backend.reportDialogs.open(
                 ReportTarget(
                     post.chatId,
                     if (post.id != 0L) post.id else null,
-                    System.nanoTime(),
+                    nextTapToken(),
                 ),
             )
         }
@@ -417,10 +451,10 @@ fun MainScaffold(graph: AppGraph) {
     // interceptor wired here is cheaper than wrapping every Text call-site individually
     // and guarantees no path leaks straight to ACTION_VIEW.
     LinkAwareScaffold(
-        backend = graph.backend,
-        router = graph.deepLinkRouter,
-        linkDialogs = graph.linkDialogs,
-        scope = graph.appScope,
+        backend = backend,
+        router = deepLinkRouter,
+        linkDialogs = linkDialogs,
+        scope = appScope,
     ) {
         CompositionLocalProvider(
             LocalReadCursors provides cursorHolder,
@@ -489,7 +523,7 @@ fun MainScaffold(graph: AppGraph) {
                                 // above.)
                                 val reselectingActiveFeed =
                                     tab == NavTab.Feed && tab == selectedTab
-                                if (reselectingActiveFeed) homeTapTrigger = System.nanoTime()
+                                if (reselectingActiveFeed) homeTapTrigger = nextTapToken()
                                 selectedTab = tab
                             },
                         )
@@ -501,20 +535,20 @@ fun MainScaffold(graph: AppGraph) {
                     TabContentSwitcher(
                         selectedTab = selectedTab,
                         tabStateHolder = tabStateHolder,
-                        feed = graph.postsRepository,
-                        backend = graph.backend,
-                        bookmarks = graph.bookmarkStore,
-                        ignoredChannels = graph.ignoredChannels,
-                        guestMode = graph.guestMode,
-                        userMessages = graph.userMessages,
-                        startupPhase = graph.startupCoordinator.phase,
+                        feed = feed,
+                        backend = backend,
+                        bookmarks = bookmarks,
+                        ignoredChannels = ignoredChannels,
+                        guestMode = guestMode,
+                        userMessages = userMessages,
+                        startupPhase = startupPhase,
                         padding = padding,
                         feedOrder = feedOrder,
                         snapScroll = snapScroll,
                         homeTapTrigger = homeTapTrigger,
                         coveredByOverlay = stack.isNotEmpty(),
                         scope = scope,
-                        onHomeTapTriggerBump = { homeTapTrigger = System.nanoTime() },
+                        onHomeTapTriggerBump = { homeTapTrigger = nextTapToken() },
                         onSafelyOpenChannel = safelyOpenChannel,
                         onPushChannel = pushChannel,
                         onPushComments = pushComments,
@@ -528,11 +562,11 @@ fun MainScaffold(graph: AppGraph) {
                         navStateHolder = navStateHolder,
                         navBackProgress = navBackProgress.value,
                         navBackEdge = navBackEdge,
-                        backend = graph.backend,
-                        bookmarks = graph.bookmarkStore,
-                        ignoredChannels = graph.ignoredChannels,
-                        userMessages = graph.userMessages,
-                        startupPhase = graph.startupCoordinator.phase,
+                        backend = backend,
+                        bookmarks = bookmarks,
+                        ignoredChannels = ignoredChannels,
+                        userMessages = userMessages,
+                        startupPhase = startupPhase,
                         padding = padding,
                         feedOrder = feedOrder,
                         scope = scope,
@@ -556,9 +590,9 @@ fun MainScaffold(graph: AppGraph) {
             }
 
             MainScaffoldDialogs(
-                backend = graph.backend,
-                linkDialogs = graph.linkDialogs,
-                userMessages = graph.userMessages,
+                backend = backend,
+                linkDialogs = linkDialogs,
+                userMessages = userMessages,
                 scope = scope,
                 pendingUserId = pendingUserId,
                 onUserSheetDismiss = { pendingUserId = null },

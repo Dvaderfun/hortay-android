@@ -127,6 +127,11 @@ actual class HortayBackend(
 
     actual val isAuthenticated: StateFlow<Boolean> = MutableStateFlow(false).asStateFlow()
     actual suspend fun logOut() {}
+    actual val connection: StateFlow<ConnectionStatus> =
+        MutableStateFlow<ConnectionStatus>(ConnectionStatus.Connecting).asStateFlow()
+    actual val floodWaitUntilMs: StateFlow<Long> = MutableStateFlow(0L).asStateFlow()
+    actual suspend fun previewChatInvite(inviteLink: String): ChatInvitePreview? = null
+    actual fun primeCommentsForOpen(post: TimelinePost) {}
 
     actual val reportController: ReportFlowController = NoopReportController
     actual val reportDialogs: ReportDialogState = ReportDialogState()
