@@ -47,7 +47,7 @@ import dev.lyo.hortay.data.web.db.WebDatabaseProvider
 import java.io.File
 import androidx.lifecycle.ProcessLifecycleOwner
 import dev.lyo.hortay.ui.media.CustomEmojiAnimator
-import dev.lyo.hortay.ui.media.ExoPlayerPool
+import dev.lyo.hortay.ui.media.VideoPlayerPool
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -230,12 +230,15 @@ class AppGraph(context: Context) {
     val stickerOutline: dev.lyo.hortay.ui.media.StickerOutlineStore =
         dev.lyo.hortay.ui.media.StickerOutlineStore(tdClient)
 
-    // Shared ExoPlayer pool. Each ExoPlayer instance is heavy (MediaCodec decoders +
-    // surface threads + WakeLockManager + AudioMix wakelock), and the per-Composable
-    // `Builder().build()` pattern in TdVideoPlayer / WebmStickerPlayer churned 38 of
-    // them per minute of fast scroll on profiling — most living 0 ms. Pooling makes
-    // scroll past video cards essentially free at the player layer.
-    val exoPlayerPool: ExoPlayerPool = ExoPlayerPool(context)
+    // Shared platform video-player pool. Wraps ExoPlayer on Android (with the
+    // muted-vs-audio sub-pool split that skips audio renderers entirely for
+    // silent feed / sticker playback). Each ExoPlayer instance is heavy
+    // (MediaCodec decoders + surface threads + WakeLockManager + AudioMix
+    // wakelock), and the per-Composable `Builder().build()` pattern in
+    // TdVideoPlayer / WebmStickerPlayer churned 38 of them per minute of fast
+    // scroll on profiling — most living 0 ms. Pooling makes scroll past video
+    // cards essentially free at the player layer.
+    val videoPlayerPool: VideoPlayerPool = VideoPlayerPool()
 
     /**
      * Process-wide delivery channel for resolved Telegram deep links. The parser
