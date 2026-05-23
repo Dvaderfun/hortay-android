@@ -188,9 +188,10 @@ private fun formatSize(bytes: Long, units: List<String>): String {
         size /= 1024
         idx++
     }
-    return if (size >= 100 || idx == 0 || size == size.toLong().toDouble()) {
-        "${size.toLong()} ${units[idx]}"
-    } else {
-        "%.1f %s".format(size, units[idx])
+    if (size >= 100 || idx == 0 || size == size.toLong().toDouble()) {
+        return "${size.toLong()} ${units[idx]}"
     }
+    val whole = size.toLong()
+    val tenth = ((size * 10).toLong()) % 10
+    return "$whole.$tenth ${units[idx]}"
 }
