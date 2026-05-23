@@ -191,7 +191,11 @@ internal fun formatSubscribers(count: Int): String {
     fun compact(value: Double, suffix: String): String {
         val rounded = ((value * 10).toLong()) / 10.0
         return if (rounded == rounded.toLong().toDouble()) "${rounded.toLong()}$suffix"
-        else "%.1f%s".format(rounded, suffix)
+        else {
+            // KMP-safe one-decimal format. String.format("%.1f", ...) is JVM-only.
+            val tenth = ((rounded * 10).toLong()) % 10
+            "${rounded.toLong()}.${tenth}$suffix"
+        }
     }
     return when {
         count < 1_000 -> count.toString()
