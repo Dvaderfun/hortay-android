@@ -1,5 +1,9 @@
 package dev.lyo.hortay.data
 
+import dev.lyo.hortay.data.report.ReportDialogState
+import dev.lyo.hortay.data.report.ReportExplainerStore
+import dev.lyo.hortay.data.report.ReportFlowController
+import dev.lyo.hortay.data.report.ReportLogStore
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
@@ -169,4 +173,66 @@ expect class HortayBackend {
      * `canGetLink = false`) — callers fall back to a hand-rolled URL.
      */
     suspend fun canonicalShareUrl(post: TimelinePost): String?
+
+    // ---- Auth / session ----------------------------------------------
+
+    /**
+     * `true` once TDLib has reached `AuthStage.Ready`. Distinct from
+     * [authStage] so consumers (top-bar avatar, settings logout row) can
+     * gate UI on a simple boolean without pattern-matching the full state
+     * machine. iOS stub stays `false` forever — guest mode never reaches
+     * authenticated state without TDLib.
+     */
+    val isAuthenticated: StateFlow<Boolean>
+
+    /**
+     * Sign out of the current Telegram account. Triggers TDLib's
+     * `LogOut → AuthorizationStateClosing → Closed` chain; the surrounding
+     * `AppGraph` flushes every per-account cache before TDLib respawns a
+     * fresh session for the AuthScreen. No-op on iOS.
+     */
+    suspend fun logOut()
+
+    // ---- Reporting (CSAE) --------------------------------------------
+
+    /**
+     * Drives the multi-step TDLib ReportChat flow. On iOS this is a stub
+     * that returns immediate failure — guest UI gates the Report action on
+     * [isAuthenticated] and routes through `LocalGuestReportDelegate`
+     * instead.
+     */
+    val reportController: ReportFlowController
+
+    /**
+     * Process-wide single-slot tracker for "Report sheet currently open
+     * against (chatId, messageId)". Backed by a [MutableStateFlow] so the
+     * scaffold can show / hide the [ui.report.ReportFlowSheet] reactively.
+     */
+    val reportDialogs: ReportDialogState
+
+    /**
+     * Append-only audit log of every report attempt (auth + guest mode).
+     * Surfaced in Settings for compliance review. iOS guest mode writes
+     * here via the local delegate adapter.
+     */
+    val reportLogStore: ReportLogStore
+
+    /**
+     * One-shot explainer flag: the first time the user opens the Report
+     * flow we show [ui.report.ReportAboutDialog] before the sheet content.
+     * Persisted across launches.
+     */
+    val reportExplainerStore: ReportExplainerStore
+
+    // ---- Settings / translations -------------------------------------
+
+    /** User preferences (theme, feed order, snap scroll, etc). */
+    val settingsStore: SettingsStore
+
+    /**
+     * In-memory translation cache (TDLib `TranslateMessageText` on Android).
+     * Null on iOS guest mode — no TDLib backing service, and the translate
+     * button is hidden in the post chrome when this is null.
+     */
+    val translations: TranslationsFacade?
 }

@@ -1,9 +1,18 @@
 package dev.lyo.hortay.data
 
 import dev.lyo.hortay.data.posts.PostsRepository
+import dev.lyo.hortay.data.report.ReportDialogState
+import dev.lyo.hortay.data.report.ReportExplainerStore
+import dev.lyo.hortay.data.report.ReportFlowController
+import dev.lyo.hortay.data.report.ReportLogStore
+import dev.lyo.hortay.data.report.ReportRepository
 import kotlinx.collections.immutable.PersistentList
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 
 /**
  * Android actual for [HortayBackend]. Pure delegation onto the concrete repos
@@ -18,6 +27,13 @@ actual class HortayBackend(
     private val linkResolver: TelegramLinkResolver,
     private val postsRepo: PostsRepository,
     private val commentsRepo: CommentsRepository,
+    private val reportRepo: ReportRepository,
+    actual val reportDialogs: ReportDialogState,
+    actual val reportLogStore: ReportLogStore,
+    actual val reportExplainerStore: ReportExplainerStore,
+    actual val settingsStore: SettingsStore,
+    private val translationsStore: TranslationsStore,
+    private val backendScope: CoroutineScope,
 ) {
     actual val authStage: StateFlow<AuthStage> get() = client.authStage
     actual val authError: StateFlow<String?> get() = client.authError
@@ -59,4 +75,14 @@ actual class HortayBackend(
 
     actual suspend fun canonicalShareUrl(post: TimelinePost): String? =
         postsRepo.canonicalShareUrl(post)
+
+    actual val isAuthenticated: StateFlow<Boolean> = client.authStage
+        .map { it == AuthStage.Ready }
+        .stateIn(backendScope, SharingStarted.Eagerly, client.authStage.value == AuthStage.Ready)
+
+    actual suspend fun logOut() = client.logOut()
+
+    actual val reportController: ReportFlowController get() = reportRepo
+
+    actual val translations: TranslationsFacade? get() = translationsStore
 }
