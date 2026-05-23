@@ -350,18 +350,5 @@ class TimelineViewModel(
     }
 }
 
-@Immutable
-data class ChannelBadge(
-    val chatId: Long,
-    val title: String,
-    val thumb: ByteArray?,
-    val fileId: Int?,
-    /**
-     * Web/guest-mode CDN avatar URL. Null in TDLib mode (where [fileId] /
-     * [thumb] do the work); set in guest mode where TDLib services aren't
-     * available. Without it the new-posts pill rendered guest-mode channels
-     * as plain initial-letter circles.
-     */
-    val avatarUrl: String? = null,
-    val latestPostDate: Long,
-)
+// ChannelBadge moved to commonMain/ui/timeline/ChannelBadge.kt so NewPostsPill
+// can render it on iOS.
