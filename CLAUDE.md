@@ -23,7 +23,7 @@ Human-facing docs: README.md (setup), ARCHITECTURE.md (decisions), CHANGELOG.md 
 - `:libtdlib` — TDLib JNI (Android-only; iOS port deferred — see "TDLib iOS strategy" in ARCHITECTURE.md).
 - `:baselineprofile` — macrobenchmark.
 
-Current code distribution (after Phase G1/G5/G6/G7): ~154 files in `androidMain`, ~37 in `commonMain`, ~9 in `iosMain`. The data layer (web pipeline, stores, helpers) lives in `commonMain`; the UI layer is still mostly `androidMain` because PostCard/PostBody pull ExoPlayer / Lottie / Coil-video which need expect/actual splits (Phase G3 / G4 work). iOS gets a slimmer parallel renderer in `iosMain/MainViewController.kt` driven off the SAME `WebFeedSource` flow.
+Current code distribution (post-Phase I): **49 files in `androidMain`, 176 in `commonMain`, 20 in `iosMain`**. Every UI screen lives in commonMain — `MainScaffold`, `TabContentSwitcher`, `TimelineScreen`, `ChannelScreen`, `CommentsScreen`, `WebModeScaffold`, `SettingsScreen`, `AutoDownloadScreen`, `ReportFlowSheet`, `MediaShareActions` + `FullScreenMediaViewer`, `NavOverlayRenderer`, `MainScaffoldDialogs`. androidMain is the irreducible core: `HortayApp` + `AppGraph` + TDLib-bound repositories + platform actuals (Coil disk cache, status bar, language picker, ConnectivityManager data-saver probe). iOS guest mode mounts the SAME `WebModeScaffold` tree the Android guest-mode path renders.
 
 ## Build commands
 
@@ -83,11 +83,14 @@ Resources (`shared/src/commonMain/composeResources/`):
 - Plus duplicated in `shared/src/androidMain/res/` for legacy `R.string.*` paths during transitional builds.
 
 UI:
-- `:shared:androidMain/kotlin/dev/lyo/hortay/ui/` — full PostCard tree, all screens. Uses CMP `Res.string.*` everywhere (Phase G1 migration). TDLib-bound files (MigrationCoordinator, WebCustomEmojiBridge) stay androidMain — they reference repos that depend on TDApi types.
-- `:shared:iosMain/kotlin/dev/lyo/hortay/IosAppGraph.kt` — slim DI root for guest-mode.
-- `:shared:iosMain/kotlin/dev/lyo/hortay/MainViewController.kt` — iOS entry point. Renders a feed of channel header + text caption + first photo via Coil AsyncImage, driven off `IosAppGraph.webFeedSource`. Parallel to Android's PostCard until ExoPlayer / Lottie / Coil-video get expect/actual.
+- `:shared:commonMain/kotlin/dev/lyo/hortay/ui/` — the whole UI tree: every screen, every dialog, the entire PostCard chain. Uses CMP `Res.string.*`. Backend access goes through `HortayBackend` (expect/actual) plus a small set of `Local*` CompositionLocal slots.
+- `:shared:androidMain/kotlin/dev/lyo/hortay/ui/` — only platform actuals: `MediaShareActions.android.kt`, `ImageDiskCache.android.kt`, `DataSaver.android.kt`, `AndroidLanguagePicker.kt`. TDLib-bound data files (MigrationCoordinator, WebCustomEmojiBridge, TdClient, PostsRepository, CommentsRepository, …) stay here.
+- `:shared:iosMain/kotlin/dev/lyo/hortay/IosAppGraph.kt` — DI root for guest-mode (subscriptions, web pipeline, stub MediaCache / CustomEmoji / VideoPlayerPool).
+- `:shared:iosMain/kotlin/dev/lyo/hortay/MainViewController.kt` — iOS entry point. Mounts the shared `WebModeScaffold` tree directly, wraps it in the required CompositionLocalProviders.
 
 ## Migration status
+
+**Phase I complete.** Final code distribution: **49 androidMain / 176 commonMain / 20 iosMain** (started Phase H at 111 / 87 / 9). iOS guest mode reaches feature parity with Android guest mode: same `WebModeScaffold` tree, same `PostCard`, same `SettingsScreen`, same predictive back, same deep-link nudges.
 
 **Completed phases:**
 - Phase 1 — KMP/CMP build system
@@ -101,29 +104,12 @@ UI:
 - Phase D — `:iosApp` Xcode project
 - Phase E — iOS verification on Mac (build + simulator launch)
 - Phase F — Real iOS UI with DataStore persistence
+- Phase G — Bulk `R.*` → CMP `Res.*`, web pipeline + Coil-compose to commonMain.
+- Phase H — `VideoPlayer` / `MediaCache` / `CustomEmojiRepository` expect/actual; PostCard / PostBody / RichText / sticker / video player chains to commonMain; `HortayBackend` expect/actual born here.
+- Phase I — every remaining UI screen moves to commonMain; `HortayBackend` grows the full TDLib-shaped surface (folders, archive, reports, settings, stats, autoDownload, translations, comments, reactions, polls, …); platform abstractions for `LocalMediaShareActions`, `LocalLanguagePicker`, `LocalGuestReportDelegate`, `ClipEntry.plainText`, `DataSaver`, `ImageDiskCache`. iOS `MainViewController` collapses from a 583-line parallel renderer to a 75-line mount of `WebModeScaffold`.
 
 **Deferred:**
 - Phase A5 — Google Fonts → bundled fonts (cosmetic).
+- **Phase II** — TDLib iOS port via cinterop. Cross-compile `libtdjni` for Apple, write cinterop `.def` files for ~200 `TdApi.*` types, port `TdClient.kt` to cinterop, flip `HortayBackend.ios.actual` from the stub to the real impl. Multi-week.
 
-**Completed in this session:**
-- **G1** — Bulk `R.string` / `R.drawable` / `R.plurals` migration to CMP `Res.*`. New `StringResolver` (commonMain, wraps CMP `getString` via `runBlocking`). 60 files converted.
-- **G5** — Context expect/actual: `PlatformLog`, `PlatformLocale.currentLanguageTag`, `PlatformDispatchers.ioDispatcher`, plus `IgnoredChannelsStore` / `GuestModeStore` / `MigrationStore` refactored to take `DataStore<Preferences>` from the KMP factory.
-- **G6** — Web data pipeline (`WebFeedSource`, `WebRepository`, `WebTelegramClient`, `WebPostAdapter`, `WebCustomEmojiResolver`, `WebFeedScheduler`, `WebPost`, `TmePageParser`, `WebTextRenderer`) lives in commonMain. HTTP client via `expect defaultWebHttpClient` (OkHttp / Darwin). `WebDatabaseProvider` expect/actual.
-- **G7** — `IosAppGraph` + real iOS guest-mode UI in `MainViewController.kt` driven by the shared `WebFeedSource`. Coil-compose + coil-network-ktor3 moved to commonMain for image rendering on both targets.
-
-**Completed in Phase H so far:**
-- **H1** — `VideoPlayer` / `VideoPlayerPool` / `VideoPlayerView` expect/actual in commonMain. Android wraps ExoPlayer (two-sub-pool muted/audio split intact); iOS wraps AVPlayer for guest-mode CDN playback.
-- **H2** — Compottie drives every Lottie surface; per-glyph inline custom emoji. Airbnb `lottie-compose` dependency dropped.
-- **H3 + H4 (partial)** — `HortayBackend` expect/actual covers auth, countries, channels/users, link resolution. `MediaCache` and `CustomEmojiRepository` are expect/actual too (Android wraps the TDLib-bound concrete impls; iOS stubs everything to Idle / empty flows). `Platform.kt` consolidates clipboard, share, toaster, animator-duration-scale. `StickerOutlineStore` collapses to a `LocalStickerOutline: suspend (Int) -> Path?` lambda slot.
-  - Screens moved to commonMain: `AuthScreen`, `ChannelInfoSheet`, `HiddenChannelsScreen`, `UserProfileSheet`, `LinkActionsSheet`, `HortayUriHandler`, `LinkAwareScaffold`.
-  - Media chain moved: `MediaBinding`, `LocalMediaCache`, `TdMediaImage`, `MinithumbImage`, `TdAvatar` (with `LocalAvatarFileLoader` slot for the 160×160 file path), `MediaProgressIndicator`, `LottieStickerView` (okio FileSystem + GzipSource), `WebmStickerPlayer`, `StickerView`, `TdVideoPlayer`, `VideoPlayerControls`, `VideoNoteBubble`, `VideoQualityPicker`, `CustomEmojiInlineView`, `LocalCustomEmoji`, `LocalStickerOutline`.
-  - Timeline / post tree moved: `PostBody` (1.5k lines), `PostCard`, `PollBlock`, `ChannelHeaderBar`.
-  - Text family moved: `RichText`, `LinkAwareText`, `FormattedTextRenderer`, `LinkLongPress`.
-  - Data helpers moved: `TapNavigation` (`effectiveSkeletonGrace` via `systemAnimatorDurationScale` expect/actual), `NavStack` (atomicfu counter instead of `java.util.UUID`).
-  - **Current file split: 74 androidMain / 125 commonMain / 15 iosMain** (started Phase H at 111 / 87 / 9).
-
-**Still pending:**
-- **H3 (remainder)** — `CommentsScreen` (~830 lines, drags `CommentsRepository` surface), `MainScaffold` + dialogs + `NavOverlayRenderer` + `TabContentSwitcher`, `TimelineScreen` + `ChannelScreen` + ViewModels + `TimelineFeedColumn`, `SettingsScreen` + `AutoDownloadScreen` + `ChannelsScreen` + `NewPostsPill`. Each adds more methods to `HortayBackend` (posts feed, comments thread, settings stores).
-- **H4 (remainder)** — `MediaShareActions` (MediaStore + FileProvider — needs iOS PHPhotoLibrary equivalent), `FullScreenMediaViewer` + `MediaViewerHost` (depend on MediaShareActions + Toast), `PostActions` (sharing helpers), `Theme.kt` (status bar via `Activity` — needs `StatusBarController` expect), web-mode screens (`WebChannelScreen`, `WebChannelsScreen`, `WebModeScaffold`, `WebSearchScreen`, `AddChannelSheet`).
-- **H5** — iOS UI parity ship: replace `MainViewController`'s parallel renderer with the real `WebModeScaffold` tree from commonMain.
-- Floor for androidMain is ~30 files: `MainActivity` + `HortayApp` + `AppGraph` + ~25 TDLib-bound data files (TdClient, CountryRepository, ChannelActionsRepository, CommentsRepository, MediaCache.android, CustomEmojiRepository (the actual), PostsRepository, MessageMapper, MessageContentMapper, AutoDownloadStore, BookmarkStore, SettingsStore, StatsRepository, TelegramLinkResolver, ChatPresence, ChatFoldersRepository, TdLifecycleBridge, TdSender, TdErrorMapping, AuthErrorMessages, TimelineSnapshotStore, TranslationsStore, LocaleStore, NavStack already moved, MediaAutoDownloader, MigrationCoordinator, WebCustomEmojiBridge, report/*).
+**Irreducible androidMain (Phase II floor):** `MainActivity` + `HortayApp` + `AppGraph` + ~30 TDLib-bound data files (TdClient, PostsRepository, ChannelActionsRepository, CommentsRepository, MediaCache.android, CustomEmojiRepository (the actual), MessageMapper, MessageContentMapper, AutoDownloadStore, StatsRepository, TelegramLinkResolver, ChatPresence, ChatFoldersRepository, TdLifecycleBridge, TdSender, TdErrorMapping, AuthErrorMessages, TimelineSnapshotStore, TranslationsStore, LocaleStore, MediaAutoDownloader, MigrationCoordinator, WebCustomEmojiBridge, report/*) + platform actuals.

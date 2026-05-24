@@ -7,6 +7,8 @@ Maintainer notes:
 
 # Architecture
 
+> 🚧 **ACTIVE MIGRATION:** The project is migrating to industry standards: **Koin** (DI), **Navigation 3** (androidx.navigation3), and **BuildKonfig** (Config). Rules against these tools below are actively being phased out.
+
 Modules, load-bearing decisions, hard rules, and conventions. Pair with [README.md](README.md) for setup.
 
 ## Language policy
@@ -37,9 +39,9 @@ Single-process, single-Activity. `MainActivity` routes: `auth.Ready → MainScaf
 
 DI built in `HortayApp.onCreate` as `graph: AppGraph`, accessed via `(application as HortayApp).graph`. Heavy singletons (`MediaCache`, `CustomEmoji`, `ExoPlayerPool`, `ReadCursors`) injected via CompositionLocal in `MainActivity`.
 
-**Code distribution (current state, mid-migration):** 12 pure data files + SubscriptionsStore + DriverFactory (expect) + resources (strings + 94 drawables) live in `shared/src/commonMain/`. 165 files still in `shared/src/androidMain/kotlin/` — UI (60 use `R.string.*`), TDLib repositories (25), ExoPlayer (5), Lottie inline-emoji animator (6), Context-tied stores (24). Phase G migration moves the bulk to commonMain — see `.plans/phase-g-multiplatform-ui.md` for the per-step plan.
+**Code distribution (post-Phase I):** 49 files in `shared/src/androidMain/kotlin/`, 176 files in `shared/src/commonMain/kotlin/`, 20 files in `shared/src/iosMain/kotlin/` (down from 111 / 87 / 9 at the start of Phase H). Every UI screen — `MainScaffold`, `TabContentSwitcher`, `TimelineScreen`, `ChannelScreen`, `CommentsScreen`, `WebModeScaffold`, `SettingsScreen`, `AutoDownloadScreen`, `ReportFlowSheet`, `MediaShareActions` + `FullScreenMediaViewer`, `NavOverlayRenderer`, `MainScaffoldDialogs` — lives in commonMain. androidMain is now the irreducible core: `HortayApp` + `AppGraph` + TDLib-bound repositories (TdClient, PostsRepository, CommentsRepository, ChannelActionsRepository, MessageMapper, CustomEmojiRepository, StatsRepository, MigrationCoordinator, …) + platform actuals (Coil disk cache, status bar, language picker, ConnectivityManager data-saver probe). The platform-agnostic surface lives on `HortayBackend` (commonMain expect/actual) plus a small set of `Local*` CompositionLocal slots (`LocalMediaShareActions`, `LocalLanguagePicker`, `LocalGuestReportDelegate`, `LocalStickerOutline`, `LocalAvatarFileLoader`, `LocalStatusBarController`).
 
-**iOS UI (current state):** `shared/src/iosMain/kotlin/dev/lyo/hortay/MainViewController.kt` mounts a minimal SubscriptionsScreen with real DataStore persistence. `iosApp/iosApp.xcodeproj` builds + runs on Mac/Simulator. Phase G replaces the placeholder with the full WebModeScaffold once UI files reach commonMain.
+**iOS UI (post-Phase I):** `shared/src/iosMain/kotlin/dev/lyo/hortay/MainViewController.kt` mounts the same `WebModeScaffold` tree the Android guest-mode path renders. Feature parity: full PostCard chrome (avatars, formatted text, photo albums, animated custom emoji via Compottie, reactions, view count, forward chip, link previews), channel drill-down, comments overlay (with the guest-mode "Sign in" empty-state), bookmarks, settings, predictive back. The TDLib-bound paths short-circuit to no-ops via the stub `HortayBackend.ios.kt` — guest UI never reaches them. `iosApp/iosApp.xcodeproj` builds + runs on Mac/Simulator (Xcode 16+). Phase II will wire the real TDLib backend once `libtdjni` is cross-compiled for Apple.
 
 **Modularization trigger (for further splits within `:shared`).** Stay single-source-set inside `:shared` until any of: > 300 Kotlin files in `androidMain`, cold build > 60 s on dev hardware, or > 1 active contributor. Cut lines are already encoded by packages — `data/web/*` → `:data-web`, `ui/timeline/*` + `ui/main/*` → `:feature-timeline`, `ui/theme/*` + `ui/components/*` → `:core-ui`. Until then, enforce boundaries with `internal` visibility, not separate modules.
 
@@ -80,13 +82,13 @@ DI built in `HortayApp.onCreate` as `graph: AppGraph`, accessed via `(applicatio
 
 Each `❌` carries a **Revisit:** clause — the concrete condition that would justify reopening the decision. Without that condition, the answer is no.
 
-- ❌ Hilt / Dagger / Koin. DI is manual (`AppGraph`). **Revisit:** > 1 active contributor, or `AppGraph` > 60 properties, or multi-module split lands.
+- 🚧 **MIGRATION TO KOIN**: We are moving from manual `AppGraph` to Koin. Replace manual singleton passing with `koinInject()` and `koinViewModel()` where possible.
 - ❌ Firebase / Crashlytics / Sentry / analytics / phone-home. INTERNET is for TDLib + anonymous `t.me/s/` only. **Revisit:** never — privacy-as-feature.
 - ❌ Room. SQLDelight 2.3 owns `web.db`; TDLib owns its own. **Revisit:** never (no shared scope).
 - ❌ OkHttp / Retrofit / Ktor as a general HTTP client. Coil pulls `coil-network-okhttp` for images, OkHttp is declared directly only for the web-mode `t.me/s/` pipeline + custom-emoji JSON. **Revisit:** if a typed REST backend joins the stack (none planned).
 - ❌ FCM / push. TDLib `RegisterDevice` + `UpdateNotification`. **Revisit:** if TDLib push proves unreliable in field reports.
 - ❌ ViewBinding / Fragments. Compose-only, single-Activity. **Revisit:** never.
-- ❌ Compose Navigation typed routes. Current overlay-heavy nav (`NavStack` + polymorphic `NavEntry` sealed) covers ~6 destinations. **Revisit:** back-stack past ~8 destinations, or recurring need for type-safe args, or `androidx.navigation` ships overlay-destination primitives that subsume `NavStack`.
+- 🚧 **MIGRATION TO NAVIGATION 3**: We are migrating from the custom `NavStack` to `androidx.navigation3:navigation3-runtime`. The overlay logic, prefetch awaits, and anti-flicker grace periods must be preserved or adapted during the migration.
 - ✅ SQLDelight 2.3 for `web.db` only. TDLib mode runs without a DB.
 
 ### TDLib usage
@@ -128,8 +130,7 @@ Each `❌` carries a **Revisit:** clause — the concrete condition that would j
 - ❌ `x86_64` in release `abiFilters` — +24 MB libtdjni.so for zero users.
 - ❌ Bumping `versionCode` by hand. It's auto-derived from `git rev-list --count HEAD` in `androidApp/build.gradle.kts`.
 - ❌ `bundleRelease` without a fresh commit — same versionCode → Play returns 409. Workflow: commit → bundle.
-- ❌ Adding `buildConfigField` to `:shared`. The KMP library plugin (`com.android.kotlin.multiplatform.library`) doesn't support `buildFeatures.buildConfig`. New runtime constants go into `androidApp/build.gradle.kts` as `buildConfigField`, then `HortayApp.onCreate` mirrors them into `AppConfig` for the rest of the app to read.
-- ❌ Referencing `dev.lyo.hortay.BuildConfig` from `:shared`. Use `AppConfig.*` instead.
+- 🚧 **MIGRATION TO BUILDKONFIG**: We are adopting `com.codingfeline.buildkonfig` to replace the manual `AppConfig` bridge from `:androidApp` to `:shared`.
 - ❌ `com.android.application` plugin + `org.jetbrains.kotlin.multiplatform` in the same module. AGP 9 forbids it. App-shell stays separate from KMP library.
 
 ### Workspace
