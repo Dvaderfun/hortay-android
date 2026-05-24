@@ -6,7 +6,7 @@ Continuation of Phase H. Target: every UI screen + repository compiles on iOS, t
 
 ## Progress (session of 2026-05-23 → 2026-05-24)
 
-**Counts:** 51 androidMain / 170 commonMain / 17 iosMain
+**Counts:** 49 androidMain / 176 commonMain / 20 iosMain
 (started session at 61 / 150 / 17, started Phase H at 111 / 87 / 9).
 
 **Wave order revised bottom-up** because dependencies run leaf → root:
@@ -85,25 +85,44 @@ first, move leaves, then containers.
   `previewChatInvite`, `primeCommentsForOpen`. BackEventCompat →
   BackSwipeEdge; PredictiveBackHandler from
   `androidx.compose.ui.backhandler`; `System.nanoTime()` → atomicfu
-  `nextTapToken()` counter. androidApp adds direct
-  kotlinx-collections-immutable dep so the ReadCursors typealias
-  resolves at the MainActivity call site.
+  `nextTapToken()` counter (extracted to `ui/main/TapTokens.kt` so the
+  web scaffold can share it). androidApp adds direct
+  kotlinx-collections-immutable dep.
+- **Wave D wave 4 — WebModeScaffold + AddChannelSheet +
+  MigrationProposalSheet** (`309cf26`). The remaining three guest-mode
+  UI files land in commonMain. WebModeScaffold (660 lines) routes
+  `LocalGuestReportDelegate` (MainActivity adapts
+  `GuestReportDelegator.Outcome` at the provider site); `Locale.getDefault()`
+  → `currentLanguageTag`; `android.util.Log.w` → `PlatformLog.w`;
+  `kotlinx.coroutines.runBlocking { getString }` → suspending `getString`
+  inside the existing collector context. AddChannelSheet drops
+  `@SuppressLint` + `ClipEntry.clipData` (replaced with an expect/actual
+  `ClipEntry.plainText()` helper). MigrationProposalSheet takes a new
+  commonMain `MigrationFacade` (interface) with `MigrationProgress` DTO;
+  the Android `MigrationCoordinator` implements it.
+- **I-D — iOS UI parity ship** (`7a50320`). MainViewController's 583-line
+  parallel renderer is replaced with the real `WebModeScaffold` mount.
+  IosAppGraph grows `bookmarks`, `nav`, `linkDialogs`, `deepLinkRouter`,
+  `mediaCache`, `customEmoji`, `videoPlayerPool`, `userMessages`.
 
 ### Next session resume points
-1. **Wave D wave 4 — WebModeScaffold + AddChannelSheet +
-   MigrationProposalSheet**. WebModeScaffold consumes
-   `LocalGuestReportDelegate` (slot landed in Wave B) for the report
-   delegation path. MigrationProposalSheet needs
-   `MigrationCoordinator.progress` exposed via backend (or a
-   `MigrationCoordinatorFacade`). AddChannelSheet probably just needs
-   the existing web pipeline accessors. WebModeScaffold is the second-
-   biggest remaining file (~660 lines).
-2. **I-D — iOS UI parity ship** — replace `MainViewController`'s parallel
-   renderer with the real `WebModeScaffold` tree once that file moves.
-3. **I-E — production polish** — lint + detekt + baseline profile +
-   CHANGELOG + ARCHITECTURE refresh.
+1. **I-E — production polish**:
+   - `./gradlew :androidApp:lintRelease` — confirm clean.
+   - `./gradlew :shared:detekt` — clean.
+   - `./gradlew :androidApp:generateBaselineProfile` — regenerate
+     `baseline-prof.txt` / `startup-prof.txt` (now that ~120 files
+     moved package, the existing profiles reference dead symbols).
+   - CHANGELOG bullet: a single user-visible line — "Internal: codebase
+     now shares ~85% of files between Android and iOS; iOS guest mode
+     launches into the full WebModeScaffold experience."
+   - ARCHITECTURE.md refresh — *Module map* / *Code distribution* /
+     *iOS UI* paragraphs need the 49/176/20 split; add a row for the
+     `LocalAvatarFileLoader` / `LocalStickerOutline` / `LocalLanguagePicker`
+     / `LocalGuestReportDelegate` lambda slots under *Load-bearing*.
+2. **Phase II**: TDLib iOS port via cinterop, then the iOS authenticated
+   mode unlocks. Out of scope for Phase I.
 
-`Theme.kt` already lives in commonMain (verified — was moved in I-A).
+Theme.kt already lives in commonMain (verified — was moved in I-A).
 
 ---
 
