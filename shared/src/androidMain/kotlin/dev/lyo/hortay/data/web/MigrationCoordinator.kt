@@ -55,16 +55,16 @@ class MigrationCoordinator(
     private val channelActions: ChannelActionsRepository,
     private val authStage: StateFlow<AuthStage>,
     private val scope: CoroutineScope,
-) {
+) : MigrationFacade {
     private val _pendingProposal = MutableStateFlow<List<String>?>(null)
     /**
      * Non-null when a proposal is awaiting user response. List ordering matches
      * [SubscriptionsStore]'s insertion order (most-recently-added first).
      */
-    val pendingProposal: StateFlow<List<String>?> = _pendingProposal.asStateFlow()
+    override val pendingProposal: StateFlow<List<String>?> = _pendingProposal.asStateFlow()
 
-    private val _progress = MutableStateFlow<Progress?>(null)
-    val progress: StateFlow<Progress?> = _progress.asStateFlow()
+    private val _progress = MutableStateFlow<MigrationProgress?>(null)
+    override val progress: StateFlow<MigrationProgress?> = _progress.asStateFlow()
 
     private val mutex = Mutex()
     @Volatile private var bound = false
@@ -112,13 +112,13 @@ class MigrationCoordinator(
      * keep the sheet visible during the run (showing [progress]) and dismiss
      * it when this method returns.
      */
-    suspend fun confirm(usernames: List<String>): Unit = mutex.withLock {
+    override suspend fun confirm(usernames: List<String>): Unit = mutex.withLock {
         if (usernames.isEmpty()) {
             migrationStore.markProposalShown()
             _pendingProposal.value = null
             return@withLock
         }
-        _progress.value = Progress(total = usernames.size, processed = 0, lastUsername = null)
+        _progress.value = MigrationProgress(total = usernames.size, processed = 0, lastUsername = null)
         val migrated = mutableListOf<String>()
         // Track failures separately. Successful joins go through `addMigrated` so
         // they're never re-offered; a failure (FLOOD_WAIT, transient network,
@@ -141,7 +141,7 @@ class MigrationCoordinator(
             currentCoroutineContext().ensureActive()
             val cleaned = username.removePrefix("@").trim().lowercase()
             if (cleaned.isEmpty()) continue
-            _progress.value = Progress(total = usernames.size, processed = i, lastUsername = cleaned)
+            _progress.value = MigrationProgress(total = usernames.size, processed = i, lastUsername = cleaned)
             val chatId = try {
                 postsRepository.resolvePublicChat(cleaned)
             } catch (cancellation: kotlinx.coroutines.CancellationException) {
@@ -214,7 +214,7 @@ class MigrationCoordinator(
         } else {
             PlatformLog.i(TAG, "migration: ${migrated.size}/${usernames.size} succeeded, retryable failures left — proposal stays pending")
         }
-        _progress.value = Progress(total = usernames.size, processed = usernames.size, lastUsername = null)
+        _progress.value = MigrationProgress(total = usernames.size, processed = usernames.size, lastUsername = null)
         _pendingProposal.value = null
         // After an explicit completion screen, we hold [progress] for one more
         // moment so the UI can flash a "done" state before dismissing — caller
@@ -234,17 +234,11 @@ class MigrationCoordinator(
      * than this method — dismissing post-completion is the only canonical use
      * of `dismiss()` in the working state machine.
      */
-    suspend fun dismiss(): Unit = mutex.withLock {
+    override suspend fun dismiss(): Unit = mutex.withLock {
         migrationStore.markProposalShown()
         _pendingProposal.value = null
         _progress.value = null
     }
-
-    data class Progress(
-        val total: Int,
-        val processed: Int,
-        val lastUsername: String?,
-    )
 
     private companion object {
         const val TAG = "MigrationCoordinator"

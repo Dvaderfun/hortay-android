@@ -2,7 +2,6 @@
 
 package dev.lyo.hortay.ui.web
 
-import android.annotation.SuppressLint
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -101,7 +100,6 @@ import org.jetbrains.compose.resources.stringResource
 // user switches language will format with the old locale, but that's a
 // 1-frame edge case worth less than the readability cost of capturing every
 // format-string template as a `stringResource()` val up top.
-@SuppressLint("LocalContextGetResourceValueCall")
 @Composable
 fun AddChannelSheet(
     feedSource: WebFeedSource,
@@ -212,8 +210,7 @@ fun AddChannelSheet(
         // also gate on `input.isBlank()` so a stale clipboard never overwrites
         // text the user is actively editing across recompositions.
         val pasted = runCatching {
-            clipboard.getClipEntry()
-                ?.clipData?.getItemAt(0)?.text?.toString()
+            clipboard.getClipEntry()?.plainText()
         }.getOrNull()
         if (pasted != null && input.isBlank()) {
             val username = parseUsernameFromInput(pasted)
