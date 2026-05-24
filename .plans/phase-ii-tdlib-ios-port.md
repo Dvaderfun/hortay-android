@@ -270,20 +270,15 @@ longer supports authenticated mode — see II-A trade-off):
 
 ---
 
-## What we deliberately punt to Phase III
+## Deliberately out of scope (no future phase planned)
 
-- **Wear OS.** Decide before any module-split that would either help or
-  hurt it.
-- **WebAssembly / Desktop targets.** Almost free after Phase II
-  (everything in commonMain already targets iosMain + androidMain; Wasm
-  needs only a `wasmJsMain` source set + JS Ktor client and a Web-mode
-  `WebDatabaseProvider`).
-- **Compottie WebP animation.** Verify whether Compottie supports
-  animated WebP; if so, migrate WebM custom emojis from the static-thumb
-  fallback to Compottie's poster path on iOS.
+- **Wear OS.** Not pursued.
+- **WebAssembly / Desktop targets.** Not pursued.
+- **Compottie WebP animation.** Cosmetic; leave on the static-thumb
+  fallback unless field reports change the cost / benefit.
 - **TDLib's `tdjson_callback`-style API.** The default `td_receive`
-  poll-loop is fine for now; switching to the callback variant saves one
-  thread but needs careful thread-safety review.
+  poll-loop is fine; switching to the callback variant saves one
+  thread but needs careful thread-safety review for marginal gain.
 
 ---
 
@@ -356,10 +351,8 @@ longer supports authenticated mode — see II-A trade-off):
 
 ---
 
-## Out of scope, but worth flagging
+## Operational notes
 
-- **Wear OS / desktop / wasm parity.** Wait until Phase II ships before
-  even prototyping.
 - **TDLib version bumps mid-Phase-II.** Pin to the same SHA the Android
   app uses for the duration; bumping mid-port risks an iOS-only
   regression that's hard to diagnose.
