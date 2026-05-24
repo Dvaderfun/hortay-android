@@ -1,11 +1,19 @@
 package dev.lyo.hortay
 
+import dev.lyo.hortay.data.BookmarkStore
 import dev.lyo.hortay.data.ComposeResourcesStringResolver
+import dev.lyo.hortay.data.CustomEmojiRepository
+import dev.lyo.hortay.data.DeepLinkRouter
 import dev.lyo.hortay.data.HortayBackend
 import dev.lyo.hortay.data.IgnoredChannelsStore
+import dev.lyo.hortay.data.LinkDialogState
+import dev.lyo.hortay.data.MediaCache
+import dev.lyo.hortay.data.NavStack
 import dev.lyo.hortay.data.SettingsStore
 import dev.lyo.hortay.data.StringResolver
+import dev.lyo.hortay.data.UserMessageBus
 import dev.lyo.hortay.data.createPreferencesDataStore
+import dev.lyo.hortay.ui.media.VideoPlayerPool
 import dev.lyo.hortay.data.report.ReportExplainerStore
 import dev.lyo.hortay.data.report.ReportLogStore
 import dev.lyo.hortay.data.web.GuestModeStore
@@ -74,4 +82,33 @@ class IosAppGraph {
         reportLogStore = reportLogStore,
         reportExplainerStore = reportExplainerStore,
     )
+
+    /** Local-only bookmarks store (DataStore<Preferences> backed). */
+    val bookmarks: BookmarkStore =
+        BookmarkStore(createPreferencesDataStore(BookmarkStore.FILE_NAME))
+
+    /** Per-process navigation back-stack for the guest-mode overlay (WebChannel + Comments entries). */
+    val nav: NavStack = NavStack()
+
+    /** Single-slot dialog state for invite-link previews. iOS guest mode never produces invite previews, but WebModeScaffold reads the flow regardless. */
+    val linkDialogs: LinkDialogState = LinkDialogState()
+
+    /** Deep-link router. Inert on iOS until URL handoff from SwiftUI is wired up. */
+    val deepLinkRouter: DeepLinkRouter = DeepLinkRouter()
+
+    /**
+     * Stub MediaCache — guest mode streams every media payload via Coil /
+     * AVPlayer from `t.me/s/` CDN URLs, so every slot stays in `MediaState.Idle`
+     * forever and the renderer falls through to its own URL path.
+     */
+    val mediaCache: MediaCache = MediaCache()
+
+    /** Stub CustomEmojiRepository — guest mode uses [WebCustomEmojiResolver] instead. */
+    val customEmoji: CustomEmojiRepository = CustomEmojiRepository()
+
+    /** Stub video player pool — iOS guest mode plays via AVPlayer per-card without pooling. */
+    val videoPlayerPool: VideoPlayerPool = VideoPlayerPool()
+
+    /** Snackbar / error bus — currently only used by auth-mode surfaces. */
+    val userMessages: UserMessageBus = UserMessageBus()
 }
