@@ -42,7 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.lyo.hortay.data.web.MigrationCoordinator
+import dev.lyo.hortay.data.web.MigrationFacade
 import dev.lyo.hortay.ui.icons.Symbol
 import kotlinx.coroutines.launch
 import hortay.shared.generated.resources.Res
@@ -72,7 +72,7 @@ import org.jetbrains.compose.resources.stringResource
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MigrationProposalSheet(
-    coordinator: MigrationCoordinator,
+    coordinator: MigrationFacade,
     candidates: List<String>,
     onDismiss: () -> Unit,
 ) {

@@ -100,6 +100,19 @@ class MainActivity : ComponentActivity() {
                         dev.lyo.hortay.ui.media.AndroidMediaShareActions,
                     dev.lyo.hortay.ui.settings.LocalLanguagePicker provides
                         dev.lyo.hortay.ui.settings.AndroidLanguagePicker(this@MainActivity),
+                    dev.lyo.hortay.ui.report.LocalGuestReportDelegate provides
+                        { username, postId ->
+                            when (graph.guestReportDelegator.report(username, postId)) {
+                                dev.lyo.hortay.ui.report.GuestReportDelegator.Outcome.OpenedTelegram ->
+                                    dev.lyo.hortay.ui.report.GuestReportOutcome.OpenedTelegram
+                                dev.lyo.hortay.ui.report.GuestReportDelegator.Outcome.OpenedWeb ->
+                                    dev.lyo.hortay.ui.report.GuestReportOutcome.OpenedWeb
+                                dev.lyo.hortay.ui.report.GuestReportDelegator.Outcome.OpenedEmail ->
+                                    dev.lyo.hortay.ui.report.GuestReportOutcome.OpenedEmail
+                                dev.lyo.hortay.ui.report.GuestReportDelegator.Outcome.AllFailed ->
+                                    dev.lyo.hortay.ui.report.GuestReportOutcome.AllFailed
+                            }
+                        },
                 ) {
                     Surface(modifier = Modifier.fillMaxSize()) {
                         val auth by graph.tdClient.authStage.collectAsStateWithLifecycle()
@@ -137,7 +150,23 @@ class MainActivity : ComponentActivity() {
                             // LocalMediaViewer to open photo/video previews on tap, and
                             // PostCard's full media-rendering chain assumes the host is
                             // present. Without this wrap the first measure pass crashes.
-                            isGuest -> MediaViewerHost { WebModeScaffold(graph = graph) }
+                            isGuest -> MediaViewerHost {
+                                WebModeScaffold(
+                                    backend = graph.backend,
+                                    bookmarks = graph.bookmarkStore,
+                                    ignoredChannels = graph.ignoredChannels,
+                                    guestMode = graph.guestMode,
+                                    webSubscriptions = graph.webSubscriptions,
+                                    webFeedSource = graph.webFeedSource,
+                                    webRepository = graph.webRepository,
+                                    webClient = graph.webClient,
+                                    settingsStore = graph.settingsStore,
+                                    linkDialogs = graph.linkDialogs,
+                                    deepLinkRouter = graph.deepLinkRouter,
+                                    nav = graph.nav,
+                                    appScope = graph.appScope,
+                                )
+                            }
                             else -> AuthScreen(
                                 backend = graph.backend,
                                 guestMode = graph.guestMode,

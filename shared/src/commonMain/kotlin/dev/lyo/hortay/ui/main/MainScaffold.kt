@@ -39,7 +39,6 @@ import dev.lyo.hortay.nowMs
 import dev.lyo.hortay.ui.timeline.LocalReadCursors
 import dev.lyo.hortay.ui.users.LocalUserProfileOpener
 import dev.lyo.hortay.ui.users.UserProfileOpener
-import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import hortay.shared.generated.resources.Res
@@ -79,15 +78,6 @@ private const val CHANNEL_PUSH_PREFETCH_TIMEOUT_MS = 400L
  *  - [NavOverlayRenderer]  — top-2 entries of the polymorphic nav stack as overlay layers.
  *  - [MainScaffoldDialogs] — invite preview, report flow sheet, user profile sheet.
  */
-/**
- * Atomic per-process "tap token" counter — replaces the JVM `nextTapToken()`
- * the original Android-only scaffold used to mint unique ids for home-tap
- * bumps and report-flow sessions. Monotonic, lock-free, KMP-safe.
- */
-private val tapTokenCounter = atomic(1L)
-
-private fun nextTapToken(): Long = tapTokenCounter.incrementAndGet()
-
 @Composable
 fun MainScaffold(
     feed: dev.lyo.hortay.data.FeedSource,

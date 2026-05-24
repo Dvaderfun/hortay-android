@@ -1,6 +1,10 @@
+@file:OptIn(
+    androidx.compose.ui.ExperimentalComposeUiApi::class,
+    androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class,
+)
+
 package dev.lyo.hortay.ui.web
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -28,27 +32,45 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.backhandler.BackHandler
+import androidx.compose.ui.backhandler.PredictiveBackHandler
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.lyo.hortay.AppGraph
+import dev.lyo.hortay.PlatformLog
+import dev.lyo.hortay.currentLanguageTag
+import dev.lyo.hortay.data.BookmarkStore
 import dev.lyo.hortay.data.DeepLink
+import dev.lyo.hortay.data.DeepLinkRouter
+import dev.lyo.hortay.data.HortayBackend
+import dev.lyo.hortay.data.IgnoredChannelsStore
+import dev.lyo.hortay.data.LinkDialogState
 import dev.lyo.hortay.data.NavEntry
+import dev.lyo.hortay.data.NavStack
+import dev.lyo.hortay.data.SettingsStore
+import dev.lyo.hortay.data.web.GuestModeStore
+import dev.lyo.hortay.data.web.SubscriptionsStore
+import dev.lyo.hortay.data.web.WebFeedSource
 import dev.lyo.hortay.data.web.WebPostAdapter
+import dev.lyo.hortay.data.web.WebRepository
+import dev.lyo.hortay.data.web.WebTelegramClient
 import dev.lyo.hortay.ui.icons.Symbol
+import dev.lyo.hortay.ui.main.BackSwipeEdge
 import dev.lyo.hortay.ui.main.FloatingNavBar
 import dev.lyo.hortay.ui.main.LinkAwareScaffold
 import dev.lyo.hortay.ui.main.NavTab
-import dev.lyo.hortay.ui.settings.SettingsScreen
-import dev.lyo.hortay.ui.report.GuestReportDelegator
+import dev.lyo.hortay.ui.main.nextTapToken
+import dev.lyo.hortay.ui.report.GuestReportOutcome
+import dev.lyo.hortay.ui.report.LocalGuestReportDelegate
 import dev.lyo.hortay.ui.report.ReportInstructionDialog
+import dev.lyo.hortay.ui.settings.SettingsScreen
 import dev.lyo.hortay.ui.timeline.LocalReadCursors
 import dev.lyo.hortay.ui.timeline.TimelineScreen
 import androidx.compose.runtime.CompositionLocalProvider
 import dev.lyo.hortay.data.TimelinePost
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-import java.util.Locale
 import hortay.shared.generated.resources.Res
 import hortay.shared.generated.resources.link_hashtag_search
 import hortay.shared.generated.resources.link_hashtag_search_in_channel
@@ -56,6 +78,7 @@ import hortay.shared.generated.resources.web_add_channel
 import hortay.shared.generated.resources.web_comments_unavailable
 import hortay.shared.generated.resources.web_comments_unavailable_title
 import hortay.shared.generated.resources.web_deeplink_signin_required
+import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -76,7 +99,21 @@ import org.jetbrains.compose.resources.stringResource
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun WebModeScaffold(graph: AppGraph) {
+fun WebModeScaffold(
+    backend: HortayBackend,
+    bookmarks: BookmarkStore,
+    ignoredChannels: IgnoredChannelsStore,
+    guestMode: GuestModeStore,
+    webSubscriptions: SubscriptionsStore,
+    webFeedSource: WebFeedSource,
+    webRepository: WebRepository,
+    webClient: WebTelegramClient,
+    settingsStore: SettingsStore,
+    linkDialogs: LinkDialogState,
+    deepLinkRouter: DeepLinkRouter,
+    nav: NavStack,
+    appScope: CoroutineScope,
+) {
     var selectedTab by rememberSaveable { mutableStateOf(NavTab.Feed) }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     // [addSheetOpen] + [deepLinkPrefill] are `rememberSaveable` so a user
@@ -109,27 +146,31 @@ fun WebModeScaffold(graph: AppGraph) {
     // isGuest → WebModeScaffold).
     //
     // Same back-stack mechanics as MainScaffold — see [NavStack] KDoc.
-    val stack by graph.nav.stack.collectAsStateWithLifecycle()
+    val stack by nav.stack.collectAsStateWithLifecycle()
     val topEntry = stack.lastOrNull()
 
     // The active tab is NOT touched on push — under the nav-overlay the
     // user's originating tab keeps rendering, so a predictive-back swipe
     // reveals the right content underneath. Pop just removes the overlay.
     fun pushWebChannel(name: String) {
-        graph.nav.push(NavEntry.WebChannel(username = name.lowercase()))
+        nav.push(NavEntry.WebChannel(username = name.lowercase()))
     }
 
     fun popNav() {
-        graph.nav.pop()
+        nav.pop()
     }
 
     fun clearNav() {
-        graph.nav.clear()
+        nav.clear()
     }
 
     val scope = rememberCoroutineScope()
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val locale = remember { Locale.getDefault().language.lowercase() }
+    val locale = remember { currentLanguageTag().substringBefore('-').lowercase() }
+    // Guest-mode report delegation path. The CompositionLocal is wired by
+    // [MainActivity] / [MainViewController] — Android maps to
+    // `GuestReportDelegator`, iOS returns `GuestReportOutcome.AllFailed` so
+    // the user gets the instruction dialog right away.
+    val guestReport = LocalGuestReportDelegate.current
     val signInRequiredMsg = stringResource(Res.string.web_deeplink_signin_required)
     // Snackbar host lifted into the scaffold so deep-link rejection messages
     // ("sign in to open private channels") land regardless of which tab the
@@ -148,7 +189,7 @@ fun WebModeScaffold(graph: AppGraph) {
     // user clearly tapped a Telegram link.
     val systemUriHandler = LocalUriHandler.current
     LaunchedEffect(Unit) {
-        graph.deepLinkRouter.events.collect { link ->
+        deepLinkRouter.events.collect { link ->
             // Per-link runCatching so a snackbar suspend cancellation or an unexpected
             // throw in one handler doesn't permanently silence the collector for the
             // rest of the process — matches the failure isolation MainScaffold uses.
@@ -172,24 +213,20 @@ fun WebModeScaffold(graph: AppGraph) {
                         // was inferred (from `#tag@channel` text-entity suffix or
                         // PostBody's scoped LocalHashtagTap), generic otherwise.
                         val msg = if (link.channelHandle != null) {
-                            kotlinx.coroutines.runBlocking {
-                                org.jetbrains.compose.resources.getString(
-                                    Res.string.link_hashtag_search_in_channel,
-                                    link.tag,
-                                    "@${link.channelHandle}",
-                                )
-                            }
+                            getString(
+                                Res.string.link_hashtag_search_in_channel,
+                                link.tag,
+                                "@${link.channelHandle}",
+                            )
                         } else {
-                            kotlinx.coroutines.runBlocking {
-                                org.jetbrains.compose.resources.getString(Res.string.link_hashtag_search, link.tag)
-                            }
+                            getString(Res.string.link_hashtag_search, link.tag)
                         }
                         snackbarHostState.showSnackbar(msg)
                     }
                 }
             } catch (t: Throwable) {
                 if (t is kotlin.coroutines.cancellation.CancellationException) throw t
-                android.util.Log.w("WebModeScaffold", "deep-link dispatch failed for $link", t)
+                PlatformLog.w("WebModeScaffold", "deep-link dispatch failed for $link", t)
             }
         }
     }
@@ -200,8 +237,8 @@ fun WebModeScaffold(graph: AppGraph) {
     val backCommitSpec = MaterialTheme.motionScheme.fastEffectsSpec<Float>()
     val backRewindSpec = MaterialTheme.motionScheme.fastEffectsSpec<Float>()
     val navBackProgress = remember { androidx.compose.animation.core.Animatable(0f) }
-    var navBackEdge by remember { mutableIntStateOf(androidx.activity.BackEventCompat.EDGE_LEFT) }
-    androidx.activity.compose.PredictiveBackHandler(enabled = topEntry != null) { progress ->
+    var navBackEdge by remember { mutableIntStateOf(BackSwipeEdge.Left) }
+    PredictiveBackHandler(enabled = topEntry != null) { progress ->
         try {
             progress.collect { event ->
                 navBackEdge = event.swipeEdge
@@ -224,14 +261,14 @@ fun WebModeScaffold(graph: AppGraph) {
     // See MainScaffold.kt for the holder-vs-PersistentMap rationale — guest
     // mode applies the same diff-apply pattern over its own cursor flow.
     val cursorHolder =
-        dev.lyo.hortay.ui.timeline.rememberCursorHolder(graph.webFeedSource.chatReadCursors)
-    val feedOrder by graph.settingsStore.feedOrder.collectAsStateWithLifecycle(
+        dev.lyo.hortay.ui.timeline.rememberCursorHolder(webFeedSource.chatReadCursors)
+    val feedOrder by settingsStore.feedOrder.collectAsStateWithLifecycle(
         initialValue = dev.lyo.hortay.data.FeedOrder.OldestUnreadFirst,
     )
-    val snapScroll by graph.settingsStore.snapScroll.collectAsStateWithLifecycle(
+    val snapScroll by settingsStore.snapScroll.collectAsStateWithLifecycle(
         initialValue = false,
     )
-    val inlineVideoAutoplay by graph.settingsStore.inlineVideoAutoplay.collectAsStateWithLifecycle(
+    val inlineVideoAutoplay by settingsStore.inlineVideoAutoplay.collectAsStateWithLifecycle(
         initialValue = true,
     )
     // Guest-mode dwell-ack wrapper. Groups the viewport batch by channel
@@ -240,17 +277,17 @@ fun WebModeScaffold(graph: AppGraph) {
     // Result mirrors TDLib's "lastReadInboxMessageId moved up to message X":
     // the channel_read_cursor row gets MAX-clamped to the freshest seen post.
     //
-    // `remember`-wrapped on graph.webRepository so the lambda instance is stable
+    // `remember`-wrapped on webRepository so the lambda instance is stable
     // across WebModeScaffold recompositions. TimelineScreen uses this as a key for
     // `interactions = remember(...)` / `ackedRead = remember(markAsRead)`; a fresh
     // closure per recompose would invalidate those blocks and trigger redundant
     // markChannelRead writes on every dwell-batch evaluation.
-    val webMarkAsRead: suspend (List<TimelinePost>) -> Unit = remember(graph.webRepository) {
+    val webMarkAsRead: suspend (List<TimelinePost>) -> Unit = remember(webRepository) {
         { batch ->
             batch.groupBy { it.senderHandle?.removePrefix("@")?.lowercase() ?: "" }
                 .forEach { (username, group) ->
                     if (username.isNotEmpty()) {
-                        graph.webRepository.markChannelRead(username, group.maxOf { it.id })
+                        webRepository.markChannelRead(username, group.maxOf { it.id })
                     }
                 }
         }
@@ -262,7 +299,7 @@ fun WebModeScaffold(graph: AppGraph) {
     // O(N) per tap is fine — N caps at the user's subscription set (≤200 in
     // practice), and the lambda only runs on a deliberate channel-name tap.
     val resolveUsername: (Long) -> String? = { chatId ->
-        graph.webFeedSource.channels.value.firstOrNull {
+        webFeedSource.channels.value.firstOrNull {
             WebPostAdapter.stableChatId(it.info.username) == chatId
         }?.info?.username
     }
@@ -284,8 +321,8 @@ fun WebModeScaffold(graph: AppGraph) {
             body = commentsDisabledBody,
         )
     }
-    val onGuestPostClick: (TimelinePost) -> Unit = remember(graph) {
-        { post -> graph.nav.push(NavEntry.Comments(anchor = post)) }
+    val onGuestPostClick: (TimelinePost) -> Unit = remember(nav) {
+        { post -> nav.push(NavEntry.Comments(anchor = post)) }
     }
     // Feed → channel-name tap routes through the same WebChannelScreen overlay
     // that the Channels tab uses. resolveUsername returns null for channels not
@@ -300,10 +337,10 @@ fun WebModeScaffold(graph: AppGraph) {
         }
     }
     LinkAwareScaffold(
-        backend = graph.backend,
-        router = graph.deepLinkRouter,
-        linkDialogs = graph.linkDialogs,
-        scope = graph.appScope,
+        backend = backend,
+        router = deepLinkRouter,
+        linkDialogs = linkDialogs,
+        scope = appScope,
     ) {
     CompositionLocalProvider(
         LocalReadCursors provides cursorHolder,
@@ -336,7 +373,7 @@ fun WebModeScaffold(graph: AppGraph) {
                     onSelect = { tab ->
                         val reselectingActiveFeed =
                             tab == NavTab.Feed && tab == selectedTab
-                        if (reselectingActiveFeed) homeTapTrigger = System.nanoTime()
+                        if (reselectingActiveFeed) homeTapTrigger = nextTapToken()
                         selectedTab = tab
                     },
                 )
@@ -372,7 +409,7 @@ fun WebModeScaffold(graph: AppGraph) {
                 // so the extended FAB stayed expanded with the "Add channel" label even
                 // after subscriptions existed. derivedStateOf scopes recomposition to
                 // the boolean: only an actual any/none flip propagates further.
-                val channels by graph.webFeedSource.channels.collectAsStateWithLifecycle()
+                val channels by webFeedSource.channels.collectAsStateWithLifecycle()
                 val hasChannels = channels.any { it.isSubscribed }
                 // No manual padding here — Scaffold positions the FAB above the
                 // bottomBar automatically. An earlier 88dp bottom padding stacked
@@ -427,30 +464,30 @@ fun WebModeScaffold(graph: AppGraph) {
                         // Overlay pattern (mirror MainScaffold): TimelineScreen is
                         // ALWAYS mounted in the Feed tab; WebChannelScreen renders
                         // as a nav-stack overlay outside this tab branch (the top-2
-                        // entries of [graph.nav.stack] drawn below this Box block).
+                        // entries of [nav.stack] drawn below this Box block).
                         // Keeping the feed mounted preserves scroll position across
                         // channel drills without the SaveableStateProvider serialise/
                         // restore cycle that would otherwise mis-anchor the user
                         // when the underlying post list mutates while they're away.
                         tabStateHolder.SaveableStateProvider(key = "web-feed:__all__") {
                             TimelineScreen(
-                                feed = graph.webFeedSource,
-                                bookmarks = graph.bookmarkStore,
+                                feed = webFeedSource,
+                                bookmarks = bookmarks,
                                 contentPadding = padding,
                                 showOnlyBookmarked = false,
                                 onChannelOpen = onFeedChannelOpen,
                                 onOpenComments = onGuestPostClick,
                                 homeTapTrigger = homeTapTrigger,
-                                onBrandTap = { homeTapTrigger = System.nanoTime() },
+                                onBrandTap = { homeTapTrigger = nextTapToken() },
                                 onSearchClick = { searchOpen = true },
                                 topBarBadge = { GuestModeBadge() },
                                 onReportClick = { post ->
-                                    val outcome = graph.guestReportDelegator.report(
-                                        channelUsername = post.senderHandle?.removePrefix("@"),
-                                        postId = if (post.id != 0L) post.id else null,
+                                    val outcome = guestReport(
+                                        post.senderHandle?.removePrefix("@"),
+                                        if (post.id != 0L) post.id else null,
                                     )
-                                    if (outcome == GuestReportDelegator.Outcome.OpenedTelegram ||
-                                        outcome == GuestReportDelegator.Outcome.OpenedWeb) {
+                                    if (outcome == GuestReportOutcome.OpenedTelegram ||
+                                        outcome == GuestReportOutcome.OpenedWeb) {
                                         showReportInstruction = true
                                     }
                                 },
@@ -472,9 +509,9 @@ fun WebModeScaffold(graph: AppGraph) {
                     }
 
                     NavTab.Channels -> WebChannelsScreen(
-                        webFeedSource = graph.webFeedSource,
-                        ignoredChannels = graph.ignoredChannels,
-                        subscriptions = graph.webSubscriptions,
+                        webFeedSource = webFeedSource,
+                        ignoredChannels = ignoredChannels,
+                        subscriptions = webSubscriptions,
                         contentPadding = padding,
                         onChannelClick = { username ->
                             pushWebChannel(username)
@@ -483,19 +520,19 @@ fun WebModeScaffold(graph: AppGraph) {
                     )
 
                     NavTab.Saved -> TimelineScreen(
-                        feed = graph.webFeedSource,
-                        bookmarks = graph.bookmarkStore,
+                        feed = webFeedSource,
+                        bookmarks = bookmarks,
                         contentPadding = padding,
                         showOnlyBookmarked = true,
                         onChannelOpen = onFeedChannelOpen,
                         onOpenComments = onGuestPostClick,
                         onReportClick = { post ->
-                            val outcome = graph.guestReportDelegator.report(
-                                channelUsername = post.senderHandle?.removePrefix("@"),
-                                postId = if (post.id != 0L) post.id else null,
+                            val outcome = guestReport(
+                                post.senderHandle?.removePrefix("@"),
+                                if (post.id != 0L) post.id else null,
                             )
-                            if (outcome == GuestReportDelegator.Outcome.OpenedTelegram ||
-                                outcome == GuestReportDelegator.Outcome.OpenedWeb) {
+                            if (outcome == GuestReportOutcome.OpenedTelegram ||
+                                outcome == GuestReportOutcome.OpenedWeb) {
                                 showReportInstruction = true
                             }
                         },
@@ -506,16 +543,16 @@ fun WebModeScaffold(graph: AppGraph) {
                     )
 
                     NavTab.Profile -> SettingsScreen(
-                        settings = graph.settingsStore,
+                        settings = settingsStore,
                         stats = null,
                         contentPadding = padding,
                         onLogout = null,
-                        onSignIn = { scope.launch { graph.guestMode.setGuest(false) } },
+                        onSignIn = { scope.launch { guestMode.setGuest(false) } },
                         // Combined wipe-and-refetch so the user sees fresh
                         // content immediately, not an empty feed waiting for
                         // the next tier-2 sweep. Subscriptions survive.
-                        onClearWebCache = { graph.webFeedSource.clearCacheAndRefresh() },
-                        ignoredChannels = graph.ignoredChannels,
+                        onClearWebCache = { webFeedSource.clearCacheAndRefresh() },
+                        ignoredChannels = ignoredChannels,
                         // Guest-mode resolver: walk the in-memory channels
                         // list for a row whose username hashes to the given
                         // chatId. Cheap — typical subscription set is < 200,
@@ -523,7 +560,7 @@ fun WebModeScaffold(graph: AppGraph) {
                         // entry, and the StateFlow is already a snapshot the
                         // composable holds.
                         webChannelByChatId = { chatId ->
-                            graph.webFeedSource.channels.value
+                            webFeedSource.channels.value
                                 .firstOrNull {
                                     dev.lyo.hortay.data.web.WebPostAdapter.stableChatId(
                                         it.info.username,
@@ -568,7 +605,7 @@ fun WebModeScaffold(graph: AppGraph) {
                                         Modifier.graphicsLayer {
                                             val p = navBackProgress.value.coerceIn(0f, 2f)
                                             val signed = when (navBackEdge) {
-                                                androidx.activity.BackEventCompat.EDGE_RIGHT -> -p
+                                                BackSwipeEdge.Right -> -p
                                                 else -> p
                                             }
                                             translationX = signed * size.width * 0.25f
@@ -585,9 +622,9 @@ fun WebModeScaffold(graph: AppGraph) {
                             when (entry) {
                                 is NavEntry.WebChannel -> WebChannelScreen(
                                     username = entry.username,
-                                    bookmarks = graph.bookmarkStore,
-                                    webRepository = graph.webRepository,
-                                    webFeedSource = graph.webFeedSource,
+                                    bookmarks = bookmarks,
+                                    webRepository = webRepository,
+                                    webFeedSource = webFeedSource,
                                     contentPadding = padding,
                                     onBack = ::popNav,
                                     onPostClick = onGuestPostClick,
@@ -621,9 +658,9 @@ fun WebModeScaffold(graph: AppGraph) {
 
     if (addSheetOpen) {
         AddChannelSheet(
-            feedSource = graph.webFeedSource,
-            repository = graph.webRepository,
-            client = graph.webClient,
+            feedSource = webFeedSource,
+            repository = webRepository,
+            client = webClient,
             locale = locale,
             // One-shot: clear the prefill on dismiss so a manual reopen lands
             // back on the clipboard auto-paste path instead of looping the user
@@ -632,7 +669,7 @@ fun WebModeScaffold(graph: AppGraph) {
                 addSheetOpen = false
                 deepLinkPrefill = null
             },
-            onSignIn = { scope.launch { graph.guestMode.setGuest(false) } },
+            onSignIn = { scope.launch { guestMode.setGuest(false) } },
             prefilledUsername = deepLinkPrefill,
         )
     }
@@ -644,8 +681,8 @@ fun WebModeScaffold(graph: AppGraph) {
     // collide with results.
     if (searchOpen) {
         WebSearchScreen(
-            repository = graph.webRepository,
-            bookmarks = graph.bookmarkStore,
+            repository = webRepository,
+            bookmarks = bookmarks,
             onDismiss = { searchOpen = false },
         )
     }
