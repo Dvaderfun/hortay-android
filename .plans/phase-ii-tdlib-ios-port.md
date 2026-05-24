@@ -39,45 +39,56 @@ Concretely:
 
 ## Execution plan
 
-### II-A — Native TDLib build for Apple platforms (~3-5 days, Mac required)
+### II-A — Native TDLib build for `ios-arm64` (~2-3 days, Mac required)
 
-Cross-compile TDLib for three slices and bundle into a single
-`libtdlight.xcframework`:
+Cross-compile TDLib for **one slice only**:
 
 | Slice | Triple | Why |
 |---|---|---|
 | `ios-arm64` | `arm64-apple-ios` | iPhone device (App Store distribution) |
-| `ios-arm64-simulator` | `arm64-apple-ios-simulator` | Apple Silicon Mac simulator |
-| `ios-x86_64-simulator` | `x86_64-apple-ios-simulator` | Intel Mac simulator (legacy, keep for CI) |
+
+**No simulator slices.** Decision called out explicitly: iOS development
+runs on real hardware. Drops `ios-arm64-simulator` + `ios-x86_64-simulator`,
+which cuts the build time by ~3× and removes 80% of the static-OpenSSL
+work. Trade-off: every dev cycle requires a physical device + Xcode
+deployment. Acceptable because the Phase I CMP commonMain validation gate
+(`./gradlew :shared:compileKotlinIosSimulatorArm64`) still works from
+Windows — it only requires the Kotlin/Native compile, not a linked TDLib.
 
 Build script lives at `scripts/tdlib-builder/build-tdlib-apple.sh`. Mirrors the
 existing Android `build-tdlib-parallel.sh` shape:
 
 1. Clone TDLib at the SHA pinned in `scripts/tdlib-version.txt` (same pin as
    Android — keeps the protocol version in lockstep).
-2. Cross-compile OpenSSL for each slice (TDLib needs static OpenSSL ≥ 3.x).
+2. Cross-compile OpenSSL for `arm64-apple-ios` once (TDLib needs static
+   OpenSSL ≥ 3.x).
 3. Run TDLib's CMake with `CMAKE_TOOLCHAIN_FILE` pointing at Apple's
    `ios.toolchain.cmake` (vendored from `leetal/ios-cmake` — battle-tested,
-   used by tdlight-java and tdlib-rs).
+   used by tdlight-java and tdlib-rs). Set `-DPLATFORM=OS64` for the
+   device-only target.
 4. Build target = `tdjson_static` (NOT `tdjni` — iOS uses the JSON interface,
    not the Java JNI bridge).
-5. `xcodebuild -create-xcframework` zips the three slices into
-   `libtdlib/build/apple/libtdlight.xcframework`.
+5. `xcodebuild -create-xcframework -library libtdjson.a -headers …` writes
+   the single-slice `libtdlight.xcframework`.
 
 Output:
 ```
 libtdlib/build/apple/libtdlight.xcframework/
   ios-arm64/libtdjson.a
-  ios-arm64-simulator/libtdjson.a
-  ios-x86_64-simulator/libtdjson.a
   Headers/td/telegram/td_json_client.h
   Info.plist
 ```
 
 **Verification gate:**
-- `lipo -info libtdjson.a` returns the expected arch for each slice.
+- `lipo -info libtdjson.a` returns `Non-fat file: libtdjson.a is architecture: arm64`.
 - `nm -gj libtdjson.a | grep td_create_client_id` resolves the exported
   symbols.
+
+**Simulator note:** Phase I left the existing iOS `MainViewController.kt` +
+`IosAppGraph` running fine on `iosSimulatorArm64` via the stub backend.
+That path keeps working — the simulator target compiles against the
+Phase-I `HortayBackend.ios.kt` stub forever (or until somebody adds a
+simulator slice). Authenticated mode is device-only.
 
 **Why Mac required:** Apple's toolchain only links against iOS SDKs hosted in
 Xcode.app. The existing Docker-on-Linux Android build cannot produce iOS
@@ -85,32 +96,40 @@ binaries.
 
 ### II-B — Cinterop binding for `tdjson` (~1 day)
 
-`shared/src/iosMain/cinterop/tdjson.def`:
+`shared/src/iosArm64Main/cinterop/tdjson.def` (note: arm64-only, NOT shared
+with the simulator source sets):
 
 ```
 package = dev.lyo.hortay.tdlib.native
 headers = td/telegram/td_json_client.h
 staticLibraries = libtdjson.a
 libraryPaths.ios_arm64 = libtdlib/build/apple/libtdlight.xcframework/ios-arm64
-libraryPaths.ios_arm64_simulator = libtdlib/build/apple/libtdlight.xcframework/ios-arm64-simulator
-libraryPaths.ios_x86_64_simulator = libtdlib/build/apple/libtdlight.xcframework/ios-x86_64-simulator
 linkerOpts = -framework Foundation -lc++ -lssl -lcrypto
 ```
 
-`shared/build.gradle.kts` declares the cinterop for each iOS target:
+`shared/build.gradle.kts` declares the cinterop on `iosArm64` only:
 
 ```kotlin
 kotlin {
     iosArm64 { compilations.getByName("main").cinterops { create("tdjson") } }
-    iosSimulatorArm64 { compilations.getByName("main").cinterops { create("tdjson") } }
+    // iosSimulatorArm64: no cinterop — keeps the Phase I stub backend path
+    // working from the simulator.
 }
 ```
 
-After this lands, `import dev.lyo.hortay.tdlib.native.td_create_client_id` /
-`td_send` / `td_receive` / `td_execute` works from any iosMain file.
+This forces a deliberate source-set split: `TdClient.ios.kt` lives in
+`iosArm64Main` (device-only, real TDLib), while the simulator continues to
+build against the no-op `HortayBackend.ios.kt` stub in `iosMain`. The
+Phase I `IosAppGraph` works as-is on simulator; on device it instantiates
+the real `TdClient` via the same `expect class` boundary.
 
-**Verification gate:** `:shared:compileKotlinIosSimulatorArm64` resolves the
+After this lands, `import dev.lyo.hortay.tdlib.native.td_create_client_id` /
+`td_send` / `td_receive` / `td_execute` works from any `iosArm64Main` file.
+
+**Verification gate:** `:shared:compileKotlinIosArm64` (on Mac) resolves the
 five `td_*` function signatures with zero unresolved references.
+`:shared:compileKotlinIosSimulatorArm64` keeps compiling against the stub
+from Windows.
 
 ### II-C — `TdApiNative` code generation (~3-5 days)
 
@@ -208,7 +227,8 @@ commonMain** — because the porting work is identical in shape to the
 existing Phase H "lift this android class to commonMain" pattern.
 Probably 2 weeks on its own.
 
-**Verification gate:** end-to-end run on iPhone 15 simulator:
+**Verification gate:** end-to-end run on a physical iPhone (simulator no
+longer supports authenticated mode — see II-A trade-off):
 1. Mount the app, see AuthScreen.
 2. Enter a real Telegram phone number, receive SMS, type code.
 3. Land on the authenticated feed.
@@ -269,6 +289,12 @@ Probably 2 weeks on its own.
 
 ## Critical decisions ahead of execution
 
+0. **`ios-arm64` only.** No simulator slice. Authenticated mode is
+   physical-device-only; the simulator continues to build against the
+   Phase I stub. Cuts II-A build time by ~3× and removes 80% of the
+   static-OpenSSL work. Trade-off accepted: every dev cycle requires a
+   physical device deploy.
+
 1. **JSON vs raw C++ FFI.** Choose `tdjson` (JSON-based, language-agnostic)
    over `tdjni` (Java-only) for the iOS surface. JSON parses through
    kotlinx.serialization — fast enough, and we avoid hand-writing 600 cinterop
@@ -297,12 +323,16 @@ Probably 2 weeks on its own.
 
 ## Verification gates (rolling)
 
-- After II-A: `lipo -info` shows three slices.
-- After II-B: `:shared:compileKotlinIosSimulatorArm64` resolves
-  `td_create_client_id` / `td_send` / `td_receive`.
-- After II-C: `:shared:compileKotlinIosSimulatorArm64` compiles the
-  ~30 000-line generated file.
-- After II-D: iOS Simulator signs in, the feed populates with the same
+- After II-A: `lipo -info libtdjson.a` reports `arm64` (single slice).
+- After II-B: `:shared:compileKotlinIosArm64` (Mac) resolves
+  `td_create_client_id` / `td_send` / `td_receive`. The Windows-friendly
+  `:shared:compileKotlinIosSimulatorArm64` gate keeps working against the
+  Phase I stub.
+- After II-C: `:shared:compileKotlinIosArm64` compiles the ~30 000-line
+  generated `TdApiNative.kt`. The simulator target compiles it against
+  the stub `TdClient` (the file itself is in `iosMain`, so both targets
+  parse it).
+- After II-D: physical iPhone signs in, the feed populates with the same
   post set the Android app shows for the same account.
 - After II-E: deep links from a browser open into the iOS app's
   channel screen.
