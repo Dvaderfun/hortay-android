@@ -72,3 +72,6 @@ keystore.properties
 
 # --- Compose previews / generated reports ---
 reports/
+
+# --- Plans (local-only, contain credentials) ---
+.plans/
