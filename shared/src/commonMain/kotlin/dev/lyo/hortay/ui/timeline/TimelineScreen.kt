@@ -23,9 +23,8 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.lifecycle.viewmodel.viewModelFactory
-import androidx.lifecycle.viewmodel.initializer
+import org.koin.compose.viewmodel.koinViewModel
+import org.koin.core.parameter.parametersOf
 import dev.lyo.hortay.data.BookmarkStore
 import dev.lyo.hortay.data.HortayBackend
 import dev.lyo.hortay.data.isUnplayableVideo
@@ -234,22 +233,19 @@ fun TimelineScreen(
         androidx.compose.runtime.mutableStateOf<List<FeedItem>>(emptyList())
     }
 
-    // viewModel() keys the cached instance by VM class only; the `factory`
-    // parameter is consulted *just* on first creation. With both MainScaffold
-    // (feed = postsRepository) and WebModeScaffold (feed = webFeedSource)
-    // mounting TimelineScreen in the same Activity-scoped ViewModelStore, the
-    // mode the user enters first wins — every subsequent switch reuses that
-    // cached VM and silently observes the wrong feed (web posts ingested but
-    // VM watches PostsRepository.posts, or vice versa). User-visible: "added a
-    // channel in web mode, no posts appear" and "after sign-in I still see
-    // anon posts". Distinct-key per feed class lets both VMs coexist; the
-    // routing (MainActivity) already shows only one tree at a time, so they
-    // never collide visually.
-    val vm: TimelineViewModel = viewModel(
+    // Two TimelineViewModel instances coexist in the same ViewModelStore:
+    // MainScaffold mounts the screen with feed = PostsRepository (auth mode),
+    // WebModeScaffold mounts it with feed = WebFeedSource (guest mode). Each
+    // mode needs its own VM so a mode flip doesn't silently observe the
+    // wrong feed (the symptom before the distinct-key contract: "added a
+    // channel in web mode, no posts appear" / "after sign-in I still see
+    // anon posts"). The `feed::class.simpleName` key gives both VMs
+    // independent slots inside one ViewModelStore. The koinViewModel
+    // factory in `viewModelModule` accepts `feed` as a runtime parameter so
+    // both modes pull from the same `viewModel { (feed) -> ... }` binding.
+    val vm: TimelineViewModel = koinViewModel(
         key = feed::class.simpleName ?: "TimelineFeed",
-        factory = remember(feed, bookmarks) {
-            viewModelFactory { initializer { TimelineViewModel(feed, bookmarks) } }
-        },
+        parameters = { parametersOf(feed) },
     )
     val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
     val folders = backend?.folders

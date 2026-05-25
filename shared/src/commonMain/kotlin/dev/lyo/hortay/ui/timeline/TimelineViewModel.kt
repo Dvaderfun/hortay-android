@@ -136,9 +136,10 @@ class TimelineViewModel(
     /**
      * Per-route cold-start scroll anchor for [TimelineScreen]'s LazyColumn.
      * Captured the first time the screen renders a [TimelineUiState.Ready] for
-     * the route, then held constant so re-mounts (deep nav, where
-     * [dev.lyo.hortay.ui.main.NavOverlayRenderer]'s `takeLast(2)` window
-     * evicts the feed) land the user back where they came from.
+     * the route, then held constant so re-mounts (deep nav, where nav3's
+     * `SinglePaneSceneStrategy` evicts the underlying feed from its
+     * AnimatedContent slot once the transition settles) land the user back
+     * where they came from.
      *
      * Stored as a [dev.lyo.hortay.ui.timeline.FeedItem] key, NOT a row index.
      * Indices are positional and silently rot under any ingest: a channel

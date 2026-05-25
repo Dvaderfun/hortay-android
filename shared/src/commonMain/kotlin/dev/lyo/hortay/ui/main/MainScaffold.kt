@@ -5,7 +5,6 @@
 
 package dev.lyo.hortay.ui.main
 
-import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -17,13 +16,15 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
-import androidx.compose.ui.backhandler.PredictiveBackHandler
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlin.coroutines.cancellation.CancellationException
+import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
+import androidx.navigation3.runtime.entryProvider
+import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
+import androidx.navigation3.ui.NavDisplay
 import dev.lyo.hortay.data.HortayBackend
-import dev.lyo.hortay.data.NavEntry
 import dev.lyo.hortay.data.NavStack
+import dev.lyo.hortay.data.NavTarget
 import dev.lyo.hortay.data.BookmarkStore
 import dev.lyo.hortay.data.ComposeResourcesStringResolver
 import dev.lyo.hortay.data.DeepLinkRouter
@@ -36,6 +37,8 @@ import dev.lyo.hortay.data.UserMessageBus
 import dev.lyo.hortay.data.report.ReportTarget
 import dev.lyo.hortay.data.web.GuestModeStore
 import dev.lyo.hortay.nowMs
+import dev.lyo.hortay.ui.comments.CommentsScreen
+import dev.lyo.hortay.ui.timeline.ChannelScreen
 import dev.lyo.hortay.ui.timeline.LocalReadCursors
 import dev.lyo.hortay.ui.users.LocalUserProfileOpener
 import dev.lyo.hortay.ui.users.UserProfileOpener
@@ -45,17 +48,8 @@ import hortay.shared.generated.resources.Res
 import hortay.shared.generated.resources.link_not_found
 
 /**
- * Predictive-back progress contract shared with [dev.lyo.hortay.ui.comments.CommentsScreen]'s
- * graphicsLayer:
- *  - 0f .. 1f = gesture peek (translate ~10%, scale to 0.9, alpha to 0.7)
- *  - 1f .. EXIT_PROGRESS = commit exit (translate to full width, scale to 0.85, alpha to 0)
- * Going past 1f on commit keeps the overlay visually "leaving" instead of freezing at peek.
- */
-private const val EXIT_PROGRESS = 2f
-
-/**
  * How long a channel-open tap is allowed to wait for
- * [PostsRepository.loadChannelHistory] before pushing [NavEntry.Channel]
+ * [PostsRepository.loadChannelHistory] before pushing [NavTarget.Channel]
  * anyway. See the KDoc on `pushChannel` for the rationale on awaiting the
  * prefetch instead of pushing in parallel.
  *
@@ -75,7 +69,7 @@ private const val CHANNEL_PUSH_PREFETCH_TIMEOUT_MS = 400L
  * Sub-composables split out (all in this package):
  *  - [DeepLinkDispatcher]  — collects [AppGraph.deepLinkRouter] events and routes to nav pushes.
  *  - [TabContentSwitcher]  — Feed / Channels / Saved / Profile AnimatedContent crossfade.
- *  - [NavOverlayRenderer]  — top-2 entries of the polymorphic nav stack as overlay layers.
+ *  - `NavDisplay` (nav3) — renders the top scene of [NavStack] as the overlay layer; AnimatedContent peeks the layer underneath during predictive-back.
  *  - [MainScaffoldDialogs] — invite preview, report flow sheet, user profile sheet.
  */
 @Composable
@@ -110,17 +104,18 @@ fun MainScaffold(
     // recoveries within a session preserve in-screen state — only the top-level
     // route resets.
     //
-    // Unified polymorphic nav-stack on [AppGraph.nav]. Each push is a new layer
-    // (no dedup on repeated chatIds) — permits unlimited nesting in the
-    // Telegram-Android pattern: channel → comments → channel → comments → …
+    // Unified polymorphic nav-stack on the Koin-singleton [NavStack]. Each
+    // push is a new layer (no dedup on repeated chatIds) — permits unlimited
+    // nesting in the Telegram-Android pattern: channel → comments → channel →
+    // comments → …
     //
     // Top entry receives back gestures + predictive back. Each entry has its
-    // own stable [NavEntry.entryId] (UUID), used as the key for the per-entry
+    // own stable [NavTarget.entryId], used as the key for the per-entry
     // [SaveableStateProvider] and `viewModel(key)` so each push is an isolated
     // screen instance with its own scroll position and ViewModel — pushing the
     // same channel twice produces two independent screens.
     var selectedTab by remember { mutableStateOf(NavTab.Feed) }
-    val stack by nav.stack.collectAsStateWithLifecycle()
+    val stack = nav.entries
     val topEntry = stack.lastOrNull()
 
     val scope = rememberCoroutineScope()
@@ -134,7 +129,7 @@ fun MainScaffold(
     //
     // Await-prefetch contract for channel-opens. The push waits for the
     // deep history load to settle (up to [CHANNEL_PUSH_PREFETCH_TIMEOUT_MS])
-    // before mounting [NavEntry.Channel]. On warm re-entry the cooldown
+    // before mounting [NavTarget.Channel]. On warm re-entry the cooldown
     // short-circuit inside [PostsRepository.loadChannelHistory] returns
     // immediately, so the tap → push transition is still effectively
     // instant. On cold first entry — the case where
@@ -169,7 +164,7 @@ fun MainScaffold(
             kotlinx.coroutines.withTimeoutOrNull(CHANNEL_PUSH_PREFETCH_TIMEOUT_MS) {
                 backend.loadChannelHistory(chatId)
             }
-            nav.push(NavEntry.Channel(chatId = chatId, scrollToMessageId = scrollTo))
+            nav.push(NavTarget.Channel(chatId = chatId, scrollToMessageId = scrollTo))
         }
         Unit
     }
@@ -180,7 +175,7 @@ fun MainScaffold(
     // loading overlay.
     val pushComments: (TimelinePost) -> Unit = { post ->
         backend.primeCommentsForOpen(post)
-        nav.push(NavEntry.Comments(anchor = post))
+        nav.push(NavTarget.Comments(anchor = post))
     }
     val popNav: () -> Unit = { nav.pop() }
 
@@ -236,12 +231,13 @@ fun MainScaffold(
      * resolve. Hortay's product scope is broadcast channels only, so the right
      * answer for groups is the snackbar — same as the deep-link path.
      *
-     * Smart back-stack shortcut: when the destination matches the [NavEntry.Channel]
+     * Smart back-stack shortcut: when the destination matches the [NavTarget.Channel]
      * directly below the current top and no scroll target is requested, this acts
      * as a pop instead of a push. The user is asking to return to a channel that
      * is already one swipe-back away — stacking a duplicate would force a
-     * double-back to exit AND remount the original (the `stack.takeLast(2)` window
-     * in [NavOverlayRenderer] would evict it). Pop preserves both the existing
+     * double-back to exit AND remount the original (nav3's
+     * `SinglePaneSceneStrategy` would re-create the scene with a fresh
+     * ViewModelStore for the duplicate). Pop preserves both the existing
      * entry's scroll / ViewModel and natural back semantics. Two surfaces hit
      * this uniformly: tap-channel-chip / tap-author-header inside a Comments
      * overlay anchored at a post of its own channel, and tap-forward-source
@@ -264,15 +260,15 @@ fun MainScaffold(
         scope.launch {
             when (val resolved = backend.resolveChatKind(chatId)) {
                 is PublicHandleResult.Channel -> {
-                    val below = nav.stack.value.dropLast(1).lastOrNull()
+                    val below = nav.entries.dropLast(1).lastOrNull()
                     val matchesBelow = scrollTo == null &&
-                        below is NavEntry.Channel &&
+                        below is NavTarget.Channel &&
                         below.chatId == resolved.chatId
                     if (matchesBelow) nav.pop()
                     else pushChannel(resolved.chatId, scrollTo)
                 }
                 is PublicHandleResult.User -> {
-                    if (nav.top is NavEntry.Comments) nav.pop()
+                    if (nav.top is NavTarget.Comments) nav.pop()
                     userProfileOpener.open(resolved.userId)
                 }
                 is PublicHandleResult.Unsupported -> {
@@ -309,46 +305,20 @@ fun MainScaffold(
         backend.reportDialogs.open(ReportTarget(chatId, messageId, nextTapToken()))
     }
 
-    // Single predictive-back handler for the top nav-entry. Translates,
-    // scales, fades the visible top layer under the user's finger; edge
-    // (LEFT vs RIGHT) is forwarded because users can bind back to either
-    // edge — a hard-coded translateX direction would invert the motion on
-    // right-handed setups. Motion springs captured here in @Composable scope
-    // (`progress.collect` is a plain coroutine; `MaterialTheme` reads require
-    // composable context) — same M3E `fastEffectsSpec` the tab AnimatedContent
-    // rides, so the predictive-back commit / rewind shares physics with the
-    // rest of the chrome instead of riding a one-off duration-tween.
-    val backCommitSpec = MaterialTheme.motionScheme.fastEffectsSpec<Float>()
-    val backRewindSpec = MaterialTheme.motionScheme.fastEffectsSpec<Float>()
-    val navBackProgress = remember { Animatable(0f) }
-    var navBackEdge by remember { mutableIntStateOf(BackSwipeEdge.Left) }
-    PredictiveBackHandler(enabled = topEntry != null) { progress ->
-        try {
-            progress.collect { event ->
-                navBackEdge = event.swipeEdge
-                // System emits at pointer-move rate (60–120 Hz). Epsilon-skip
-                // sub-pixel deltas so we don't pay an Animatable snapshot write
-                // (and the resulting graphicsLayer re-evaluation in the top
-                // entry's content) for invisible motion. 0.005f ≈ half a pixel
-                // on a 1080px-wide screen at translation 0.1 — below perceptual
-                // threshold.
-                val next = event.progress
-                if (kotlin.math.abs(next - navBackProgress.value) >= 0.005f) {
-                    navBackProgress.snapTo(next)
-                }
-            }
-            // Commit: extend past peek (1f) to full exit (2f) so the top
-            // layer continues translating off-screen and fades to zero alpha
-            // before we drop it from composition. Without this leg the
-            // overlay would freeze at peek (~70% visible) for the duration
-            // of the commit animation and then snap away — janky on flagship.
-            navBackProgress.animateTo(EXIT_PROGRESS, backCommitSpec)
-            popNav()
-            navBackProgress.snapTo(0f)
-        } catch (_: CancellationException) {
-            navBackProgress.animateTo(0f, backRewindSpec)
-        }
-    }
+    // Predictive-back: nav3's [NavDisplay] installs its own
+    // `NavigationBackHandler` internally, but only enables it when the current
+    // [Scene.previousEntries] is non-empty — at stack depth 1 (top is the only
+    // entry, previousEntries empty), nav3's handler is disabled. We catch that
+    // edge with a plain [BackHandler] so the user always returns to the
+    // underlying tab when they back out of the only overlay layer. nav3 owns
+    // depth 2+, with its default predictive-back transitions matching Material
+    // standard — the bespoke graphicsLayer formula
+    // (translate 25 % / scale 0.95 / alpha 0.1, EXIT_PROGRESS 2f overshoot)
+    // is retired in favour of nav3's `predictivePopTransitionSpec`. The
+    // Material defaults preserve "below layer visible during peek" via
+    // AnimatedContent's previous-scene render; if pixel-exact UX is needed
+    // we customise `predictivePopTransitionSpec` on the [NavDisplay] call.
+    BackHandler(enabled = topEntry != null && stack.size <= 1) { nav.pop() }
     // Stack empty + not on Feed: return to Feed tab. Plain BackHandler — no
     // overlay to animate at this point.
     BackHandler(enabled = topEntry == null && selectedTab != NavTab.Feed) {
@@ -356,18 +326,18 @@ fun MainScaffold(
     }
 
     // SaveableStateHolders must live in MainScaffold's @Composable body, NOT inside
-    // the Scaffold content lambda. The Scaffold body owns the tab AnimatedContent;
-    // the nav-overlay sits OUTSIDE that lambda (above the tab chrome and
-    // FloatingNavBar). Declaring the holder inside the Scaffold lambda would put it
-    // out of scope for the overlay's SaveableStateProvider call. One declaration at
-    // this level lets both call-sites capture the same reference.
+    // the Scaffold content lambda — declared at this level so the tab
+    // AnimatedContent slot captures the same instance across recompositions.
     //
-    // [navStateHolder] keys per-NavEntry by its stable UUID `entryId`. Each push
-    // — channel or comments — gets its own SaveableStateProvider scope, so
-    // pushing the same channel twice (legitimate in unlimited-nesting flows)
-    // produces two independent screens with their own scroll positions.
+    // Per-NavTarget saveable state is owned by nav3's
+    // [rememberSaveableStateHolderNavEntryDecorator] (installed on [NavDisplay]
+    // below), keyed off each entry's stable `entryId` via
+    // `clazzContentKey = { it.entryId }` in the entryProvider. Pushing the
+    // same channel twice — legitimate in unlimited-nesting flows — produces
+    // two independent screens with their own scroll positions because the
+    // contentKey is fresh per push. Per-NavTarget ViewModelStore isolation
+    // is handled by [rememberViewModelStoreNavEntryDecorator].
     val tabStateHolder = rememberSaveableStateHolder()
-    val navStateHolder = rememberSaveableStateHolder()
 
     // Live cursor holder collected once, mutated in place via diff-apply so
     // per-key Compose snapshot subscribers (PostCard, ↓N counter, boundary
@@ -547,27 +517,147 @@ fun MainScaffold(
                         tdlibMarkAsRead = tdlibMarkAsRead,
                     )
 
-                    NavOverlayRenderer(
-                        visibleEntries = stack.takeLast(2),
-                        navStateHolder = navStateHolder,
-                        navBackProgress = navBackProgress.value,
-                        navBackEdge = navBackEdge,
-                        backend = backend,
-                        bookmarks = bookmarks,
-                        ignoredChannels = ignoredChannels,
-                        userMessages = userMessages,
-                        startupPhase = startupPhase,
-                        padding = padding,
-                        feedOrder = feedOrder,
-                        scope = scope,
-                        onPopNav = popNav,
-                        onPushChannel = pushChannel,
-                        onPushComments = pushComments,
-                        onSafelyOpenChannel = safelyOpenChannel,
-                        onOpenReport = openReport,
-                        onPostReportClick = onPostReportClick,
-                        canReportPost = canReportPost,
-                    )
+                    // nav3's NavDisplay renders the top scene and animates between
+                    // scenes on push/pop, including the predictive-back peek of
+                    // the previous scene underneath. Decorators (in order):
+                    //  1. SaveableStateHolderNavEntryDecorator — per-entry
+                    //     SaveableStateProvider scope, keyed off `entryId`.
+                    //  2. ViewModelStoreNavEntryDecorator — per-entry
+                    //     ViewModelStoreOwner, cleared when the entry pops. The
+                    //     decorator replaces the pre-nav3 hand-rolled
+                    //     `NavEntryHost`; `koinViewModel` reads
+                    //     `LocalViewModelStoreOwner` so the per-channel VM
+                    //     isolation contract carries through unchanged.
+                    //
+                    // Empty-stack guard: nav3 requires `backStack.isNotEmpty()`.
+                    // The overlay only renders when there's something to show.
+                    if (stack.isNotEmpty()) {
+                        NavDisplay(
+                            backStack = nav.entries,
+                            modifier = Modifier.fillMaxSize(),
+                            onBack = { popNav() },
+                            entryDecorators = listOf(
+                                rememberSaveableStateHolderNavEntryDecorator(),
+                                rememberViewModelStoreNavEntryDecorator(),
+                            ),
+                            entryProvider = entryProvider {
+                                entry<NavTarget.Channel>(
+                                    clazzContentKey = { it.entryId },
+                                ) { target ->
+                                    ChannelScreen(
+                                        chatId = target.chatId,
+                                        backend = backend,
+                                        bookmarks = bookmarks,
+                                        ignoredChannels = ignoredChannels,
+                                        contentPadding = padding,
+                                        onBack = popNav,
+                                        onChannelOpen = { cid, scrollTo ->
+                                            safelyOpenChannel(cid, scrollTo)
+                                        },
+                                        onOpenComments = { post -> pushComments(post) },
+                                        scrollToMessage = target.scrollToMessageId
+                                            ?.let { target.chatId to it },
+                                        onScrollHandled = {},
+                                        onScrollMissed = {
+                                            userMessages.post(
+                                                res.getString(Res.string.link_not_found),
+                                                UserMessageBus.Severity.Info,
+                                            )
+                                        },
+                                        onReportClick = onPostReportClick,
+                                        canReport = canReportPost,
+                                        onReportChannel = {
+                                            openReport(target.chatId, null)
+                                        },
+                                        feedOrder = feedOrder,
+                                        startupPhase = startupPhase,
+                                    )
+                                }
+                                entry<NavTarget.Comments>(
+                                    clazzContentKey = { it.entryId },
+                                ) { target ->
+                                    CommentsScreen(
+                                        post = target.anchor,
+                                        backend = backend,
+                                        onDismiss = popNav,
+                                        // Per-handler rationale preserved from the
+                                        // pre-nav3 inline renderer; behaviour
+                                        // unchanged.
+                                        onChannelClick = { p ->
+                                            safelyOpenChannel(p.chatId, null)
+                                        },
+                                        onAuthorChatClick = { id ->
+                                            safelyOpenChannel(id, null)
+                                        },
+                                        onQuotedSourceClick = { post ->
+                                            post.reply?.let { r ->
+                                                safelyOpenChannel(
+                                                    r.replyToChatId,
+                                                    r.replyToMessageId,
+                                                )
+                                            }
+                                        },
+                                        onReactionToggle = { chatId, messageId, snapshot, kind, wasChosen ->
+                                            val isAnchor = chatId == target.anchor.chatId
+                                            val nowChosen = !wasChosen
+                                            if (isAnchor) {
+                                                backend.applyOptimisticReaction(
+                                                    chatId, messageId, kind, nowChosen,
+                                                )
+                                            } else {
+                                                backend.applyCommentOptimisticReaction(
+                                                    chatId, messageId, snapshot, kind, nowChosen,
+                                                )
+                                            }
+                                            scope.launch {
+                                                val ok = backend.toggleReaction(
+                                                    chatId = chatId,
+                                                    messageId = messageId,
+                                                    kind = kind,
+                                                    isChosen = wasChosen,
+                                                )
+                                                if (!ok) {
+                                                    if (isAnchor) {
+                                                        backend.applyOptimisticReaction(
+                                                            chatId, messageId, kind, wasChosen,
+                                                        )
+                                                    } else {
+                                                        backend.clearCommentOptimisticReaction(
+                                                            chatId, messageId,
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        onPollVote = { chatId, messageId, indices ->
+                                            backend.applyOptimisticPollAnswer(
+                                                chatId, messageId, indices,
+                                            )
+                                            scope.launch {
+                                                val ok = backend.setPollAnswer(
+                                                    chatId, messageId, indices,
+                                                )
+                                                backend.clearPollPending(
+                                                    chatId, messageId, revert = !ok,
+                                                )
+                                            }
+                                        },
+                                        // nav3 owns the predictive-back transform
+                                        // via AnimatedContent on the surrounding
+                                        // Scene; the screen's own backProgress
+                                        // stays at the default 0f.
+                                    )
+                                }
+                                // Defensive: WebChannel never reaches MainScaffold
+                                // (MainActivity routes guest mode to WebModeScaffold).
+                                // Render nothing rather than crash via the default
+                                // throwing fallback if the routing rule changes.
+                                entry<NavTarget.WebChannel>(
+                                    clazzContentKey = { it.entryId },
+                                ) { _ -> Unit }
+                            },
+                        )
+                    }
 
                     ConnectionBanner(
                         status = connection,

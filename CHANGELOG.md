@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Architecture
+- Navigation substrate migrated to `androidx.navigation3` (KMP) + `org.jetbrains.androidx.navigation3:navigation3-ui` + `androidx.lifecycle:lifecycle-viewmodel-navigation3`; the bespoke `NavStack` overlay renderer is gone, replaced by `NavDisplay` with built-in per-entry SaveableStateHolder + ViewModelStoreOwner decorators.
+
 ## [0.6.0] — 2026-05-19
 
 ### Added

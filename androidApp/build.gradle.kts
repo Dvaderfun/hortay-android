@@ -194,6 +194,14 @@ dependencies {
     implementation(libs.ktor.client.core)
     implementation(libs.kotlinx.collections.immutable)
 
+    // Koin — HortayApp calls startKoin { … }. `:shared` declares Koin as
+    // `implementation` (so it doesn't leak to library consumers), so the
+    // application module needs its own classpath entries. koin-compose is
+    // used by MainActivity's setContent block to koinInject() singletons.
+    implementation(libs.koin.core)
+    implementation(libs.koin.android)
+    implementation(libs.koin.compose)
+
     debugImplementation(libs.compose.ui.tooling)
     debugImplementation(libs.compose.ui.tooling.preview)
     debugImplementation(libs.leakcanary.android)

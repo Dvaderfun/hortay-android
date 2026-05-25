@@ -55,9 +55,8 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.lifecycle.viewmodel.initializer
-import androidx.lifecycle.viewmodel.viewModelFactory
+import org.koin.compose.viewmodel.koinViewModel
+import org.koin.core.parameter.parametersOf
 import dev.lyo.hortay.data.BookmarkStore
 import dev.lyo.hortay.data.DownloadPriority
 import dev.lyo.hortay.data.FeedOrder
@@ -138,20 +137,12 @@ fun ChannelScreen(
     startupPhase: StateFlow<StartupCoordinator.Phase>? = null,
 ) {
     // Per-channel VM keyed by chatId — each channel gets its own instance.
-    val vm: ChannelViewModel = viewModel(
+    // koinViewModel reads LocalViewModelStoreOwner (nav3's
+    // rememberViewModelStoreNavEntryDecorator scopes it per-entry), so
+    // per-channel VMs are released when the channel pops off the nav stack.
+    val vm: ChannelViewModel = koinViewModel(
         key = "channel:$chatId",
-        factory = remember(backend, bookmarks, chatId, scrollToMessage) {
-            viewModelFactory {
-                initializer {
-                    ChannelViewModel(
-                        backend = backend,
-                        bookmarks = bookmarks,
-                        chatId = chatId,
-                        scrollToMessageId = scrollToMessage?.second,
-                    )
-                }
-            }
-        },
+        parameters = { parametersOf(chatId, scrollToMessage?.second) },
     )
 
     val data by vm.data.collectAsStateWithLifecycle()

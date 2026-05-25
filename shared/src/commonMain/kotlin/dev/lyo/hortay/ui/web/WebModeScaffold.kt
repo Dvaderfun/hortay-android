@@ -23,8 +23,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -33,11 +31,14 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
-import androidx.compose.ui.backhandler.PredictiveBackHandler
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
+import androidx.navigation3.runtime.entryProvider
+import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
+import androidx.navigation3.ui.NavDisplay
 import dev.lyo.hortay.PlatformLog
 import dev.lyo.hortay.currentLanguageTag
 import dev.lyo.hortay.data.BookmarkStore
@@ -46,7 +47,7 @@ import dev.lyo.hortay.data.DeepLinkRouter
 import dev.lyo.hortay.data.HortayBackend
 import dev.lyo.hortay.data.IgnoredChannelsStore
 import dev.lyo.hortay.data.LinkDialogState
-import dev.lyo.hortay.data.NavEntry
+import dev.lyo.hortay.data.NavTarget
 import dev.lyo.hortay.data.NavStack
 import dev.lyo.hortay.data.SettingsStore
 import dev.lyo.hortay.data.web.GuestModeStore
@@ -138,22 +139,22 @@ fun WebModeScaffold(
     var homeTapTrigger by rememberSaveable { mutableStateOf(0L) }
 
     // Channel back-stack — guest-mode counterpart to MainScaffold's TDLib stack.
-    // Single polymorphic nav-stack on [AppGraph.nav]. Guest mode only ever
-    // pushes [NavEntry.WebChannel]; the auth-mode variants (Channel, Comments)
-    // are owned by [dev.lyo.hortay.ui.main.MainScaffold] and never appear here
-    // because the two scaffolds never compose simultaneously
+    // Single polymorphic nav-stack on the Koin-singleton [NavStack]. Guest mode
+    // only ever pushes [NavTarget.WebChannel]; the auth-mode variants (Channel,
+    // Comments) are owned by [dev.lyo.hortay.ui.main.MainScaffold] and never
+    // appear here because the two scaffolds never compose simultaneously
     // ([dev.lyo.hortay.MainActivity] routes auth.Ready → MainScaffold,
     // isGuest → WebModeScaffold).
     //
     // Same back-stack mechanics as MainScaffold — see [NavStack] KDoc.
-    val stack by nav.stack.collectAsStateWithLifecycle()
+    val stack = nav.entries
     val topEntry = stack.lastOrNull()
 
     // The active tab is NOT touched on push — under the nav-overlay the
     // user's originating tab keeps rendering, so a predictive-back swipe
     // reveals the right content underneath. Pop just removes the overlay.
     fun pushWebChannel(name: String) {
-        nav.push(NavEntry.WebChannel(username = name.lowercase()))
+        nav.push(NavTarget.WebChannel(username = name.lowercase()))
     }
 
     fun popNav() {
@@ -231,29 +232,12 @@ fun WebModeScaffold(
         }
     }
 
-    // Predictive back for the top nav-entry. Mirrors MainScaffold's
-    // navBackProgress — same M3E fastEffectsSpec, same epsilon-skip,
-    // same EXIT_PROGRESS extension on commit.
-    val backCommitSpec = MaterialTheme.motionScheme.fastEffectsSpec<Float>()
-    val backRewindSpec = MaterialTheme.motionScheme.fastEffectsSpec<Float>()
-    val navBackProgress = remember { androidx.compose.animation.core.Animatable(0f) }
-    var navBackEdge by remember { mutableIntStateOf(BackSwipeEdge.Left) }
-    PredictiveBackHandler(enabled = topEntry != null) { progress ->
-        try {
-            progress.collect { event ->
-                navBackEdge = event.swipeEdge
-                val next = event.progress
-                if (kotlin.math.abs(next - navBackProgress.value) >= 0.005f) {
-                    navBackProgress.snapTo(next)
-                }
-            }
-            navBackProgress.animateTo(2f, backCommitSpec)
-            popNav()
-            navBackProgress.snapTo(0f)
-        } catch (_: kotlinx.coroutines.CancellationException) {
-            navBackProgress.animateTo(0f, backRewindSpec)
-        }
-    }
+    // Predictive back: nav3's [NavDisplay] (mounted below) owns predictive-back
+    // at stack depth 2+ via its internal NavigationBackHandler. At depth 1 nav3
+    // disables its handler (Scene.previousEntries is empty), so we add a plain
+    // [BackHandler] catching the final pop back to the underlying tab. Mirror
+    // of MainScaffold's gate.
+    BackHandler(enabled = topEntry != null && stack.size <= 1) { nav.pop() }
     BackHandler(enabled = topEntry == null && selectedTab != NavTab.Feed) {
         selectedTab = NavTab.Feed
     }
@@ -306,7 +290,7 @@ fun WebModeScaffold(
     // Post-tap in guest mode opens the same post-detail surface TDLib mode
     // uses — [CommentsScreen] with the frozen anchor pinned at the top — but
     // with an empty-state hero in place of the thread body explaining why
-    // replies aren't reachable here. Reuses the auth-mode [NavEntry.Comments]
+    // replies aren't reachable here. Reuses the auth-mode [NavTarget.Comments]
     // entry: same nav-stack mechanics (predictive back, saveable state holder),
     // same screen, just a [CommentsDisabledOverride] supplied below so the
     // screen short-circuits its repository wiring. Previous behaviour was a
@@ -322,7 +306,7 @@ fun WebModeScaffold(
         )
     }
     val onGuestPostClick: (TimelinePost) -> Unit = remember(nav) {
-        { post -> nav.push(NavEntry.Comments(anchor = post)) }
+        { post -> nav.push(NavTarget.Comments(anchor = post)) }
     }
     // Feed → channel-name tap routes through the same WebChannelScreen overlay
     // that the Channels tab uses. resolveUsername returns null for channels not
@@ -578,80 +562,60 @@ fun WebModeScaffold(
                 }
             }
 
-            // Top-2 nav-stack entries rendered as stacked layers above the
-            // always-mounted feed. Single forEach so each entry stays in a
-            // stable composition position — after pop, the entry that was at
-            // index 0 stays at index 0 (now `isTop = true`), preserving its
-            // remember-group identity. Mirror of MainScaffold's overlay logic.
-            val visibleEntries = stack.takeLast(2)
-            val navStateHolder = rememberSaveableStateHolder()
-            visibleEntries.forEachIndexed { idx, entry ->
-                val isTop = idx == visibleEntries.lastIndex
-                // Guest mode pushes WebChannel for channel drills and Comments
-                // for post-detail; the auth-mode Channel variant never reaches
-                // this scaffold (MainScaffold owns it). A defensive `else`
-                // skip keeps the code total over [NavEntry] so a future variant
-                // doesn't silently overlay-render here.
-                if (entry !is NavEntry.WebChannel && entry !is NavEntry.Comments) {
-                    return@forEachIndexed
-                }
-                key(entry.entryId) {
-                    navStateHolder.SaveableStateProvider(key = entry.entryId) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .then(
-                                    if (isTop) {
-                                        Modifier.graphicsLayer {
-                                            val p = navBackProgress.value.coerceIn(0f, 2f)
-                                            val signed = when (navBackEdge) {
-                                                BackSwipeEdge.Right -> -p
-                                                else -> p
-                                            }
-                                            translationX = signed * size.width * 0.25f
-                                            val s = 1f - p.coerceAtMost(1f) * 0.05f
-                                            scaleX = s; scaleY = s
-                                            alpha = (1f - p.coerceAtMost(1f) * 0.9f)
-                                                .coerceAtLeast(0f)
-                                        }
-                                    } else {
-                                        Modifier
-                                    },
-                                ),
-                        ) {
-                            when (entry) {
-                                is NavEntry.WebChannel -> WebChannelScreen(
-                                    username = entry.username,
-                                    bookmarks = bookmarks,
-                                    webRepository = webRepository,
-                                    webFeedSource = webFeedSource,
-                                    contentPadding = padding,
-                                    onBack = ::popNav,
-                                    onPostClick = onGuestPostClick,
-                                    feedOrder = feedOrder,
-                                )
-                                is NavEntry.Comments -> dev.lyo.hortay.ui.comments.CommentsScreen(
-                                    post = entry.anchor,
-                                    // Guest mode has no TDLib session → no backend
-                                    // to live-sync the anchor or thread against.
-                                    // The screen renders the frozen NavEntry
-                                    // snapshot and shows [webCommentsOverride] as
-                                    // the empty-state hero in place of the thread
-                                    // body.
-                                    backend = null,
-                                    onDismiss = ::popNav,
-                                    disabledOverride = webCommentsOverride,
-                                    // Predictive-back transform is owned by the
-                                    // outer Box.graphicsLayer above (same recipe
-                                    // WebChannelScreen rides), so the screen's
-                                    // own backProgress stays at 0f to avoid
-                                    // double-transform.
-                                )
-                                else -> Unit
-                            }
+            // nav3 NavDisplay renders the top scene and animates between scenes
+            // on push/pop, including predictive-back peek of the previous scene
+            // underneath. Per-entry SaveableStateProvider + ViewModelStoreOwner
+            // are wired through the decorator chain — same contract MainScaffold
+            // rides. Empty-stack guard: nav3 requires non-empty backStack.
+            if (stack.isNotEmpty()) {
+                NavDisplay(
+                    backStack = nav.entries,
+                    modifier = Modifier.fillMaxSize(),
+                    onBack = { popNav() },
+                    entryDecorators = listOf(
+                        rememberSaveableStateHolderNavEntryDecorator(),
+                        rememberViewModelStoreNavEntryDecorator(),
+                    ),
+                    entryProvider = entryProvider {
+                        entry<NavTarget.WebChannel>(
+                            clazzContentKey = { it.entryId },
+                        ) { target ->
+                            WebChannelScreen(
+                                username = target.username,
+                                bookmarks = bookmarks,
+                                webRepository = webRepository,
+                                webFeedSource = webFeedSource,
+                                contentPadding = padding,
+                                onBack = ::popNav,
+                                onPostClick = onGuestPostClick,
+                                feedOrder = feedOrder,
+                            )
                         }
-                    }
-                }
+                        entry<NavTarget.Comments>(
+                            clazzContentKey = { it.entryId },
+                        ) { target ->
+                            // Guest mode has no TDLib session → no backend
+                            // to live-sync the anchor or thread against.
+                            // The screen renders the frozen NavTarget
+                            // snapshot and shows [webCommentsOverride] as
+                            // the empty-state hero in place of the thread
+                            // body.
+                            dev.lyo.hortay.ui.comments.CommentsScreen(
+                                post = target.anchor,
+                                backend = null,
+                                onDismiss = ::popNav,
+                                disabledOverride = webCommentsOverride,
+                            )
+                        }
+                        // Defensive: NavTarget.Channel never reaches this
+                        // scaffold (MainActivity routes auth mode to
+                        // MainScaffold). Render nothing rather than crash via
+                        // the throwing default fallback if routing changes.
+                        entry<NavTarget.Channel>(
+                            clazzContentKey = { it.entryId },
+                        ) { _ -> Unit }
+                    },
+                )
             }
         }
     }

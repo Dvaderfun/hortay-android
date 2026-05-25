@@ -312,8 +312,8 @@ class MessageContentMapperWebPreviewTest {
 
     /** No-op string resolver — none of the cases under test touch the resolver. */
     private object EmptyStringResolver : StringResolver {
-        override fun getString(id: Int): String = ""
-        override fun getString(id: Int, vararg args: Any?): String = ""
-        override fun getQuantityString(id: Int, count: Int, vararg args: Any?): String = ""
+        override fun getString(res: org.jetbrains.compose.resources.StringResource): String = ""
+        override fun getString(res: org.jetbrains.compose.resources.StringResource, vararg args: Any): String = ""
+        override fun getQuantityString(res: org.jetbrains.compose.resources.PluralStringResource, count: Int, vararg args: Any): String = ""
     }
 }
