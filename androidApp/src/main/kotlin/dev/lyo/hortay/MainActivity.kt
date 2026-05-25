@@ -14,9 +14,29 @@ import androidx.compose.ui.Modifier
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.lyo.hortay.data.AuthStage
+import dev.lyo.hortay.data.BookmarkStore
+import dev.lyo.hortay.data.CustomEmojiRepository
+import dev.lyo.hortay.data.DeepLinkRouter
 import dev.lyo.hortay.data.DownloadPriority
+import dev.lyo.hortay.data.HortayBackend
+import dev.lyo.hortay.data.IgnoredChannelsStore
+import dev.lyo.hortay.data.LinkDialogState
 import dev.lyo.hortay.data.LocaleStore
+import dev.lyo.hortay.data.MediaCache
+import dev.lyo.hortay.data.NavStack
+import dev.lyo.hortay.data.SettingsStore
+import dev.lyo.hortay.data.StartupCoordinator
+import dev.lyo.hortay.data.TdClient
 import dev.lyo.hortay.data.TdMedia
+import dev.lyo.hortay.data.TelegramLinkResolver
+import dev.lyo.hortay.data.UserMessageBus
+import dev.lyo.hortay.data.posts.PostsRepository
+import dev.lyo.hortay.data.web.GuestModeStore
+import dev.lyo.hortay.data.web.MigrationCoordinator
+import dev.lyo.hortay.data.web.SubscriptionsStore
+import dev.lyo.hortay.data.web.WebFeedSource
+import dev.lyo.hortay.data.web.WebRepository
+import dev.lyo.hortay.data.web.WebTelegramClient
 import dev.lyo.hortay.ui.auth.AuthScreen
 import dev.lyo.hortay.ui.main.MainScaffold
 import dev.lyo.hortay.ui.media.LocalAvatarFileLoader
@@ -26,16 +46,33 @@ import dev.lyo.hortay.ui.media.LocalStickerOutline
 import dev.lyo.hortay.ui.media.LocalVideoPlayerPool
 import dev.lyo.hortay.ui.media.LocalWebHttpClient
 import dev.lyo.hortay.ui.media.MediaViewerHost
+import dev.lyo.hortay.ui.media.StickerOutlineStore
 import dev.lyo.hortay.ui.media.TdMediaImage
+import dev.lyo.hortay.ui.media.VideoPlayerPool
+import dev.lyo.hortay.ui.report.GuestReportDelegator
+import dev.lyo.hortay.ui.report.GuestReportOutcome
+import dev.lyo.hortay.ui.report.LocalGuestReportDelegate
 import dev.lyo.hortay.ui.theme.HortayTheme
 import dev.lyo.hortay.ui.theme.LocalStatusBarController
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import dev.lyo.hortay.ui.web.MigrationProposalSheet
 import dev.lyo.hortay.ui.web.WebModeScaffold
+import io.ktor.client.HttpClient
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import org.koin.android.ext.android.inject
+import org.koin.compose.koinInject
 
 class MainActivity : ComponentActivity() {
+
+    // Non-Composable injections — used in onCreate / onNewIntent before
+    // setContent runs. Koin's `org.koin.android.ext.android.inject` is the
+    // lifecycle-aware delegate for Activity/Fragment.
+    private val appScope: CoroutineScope by inject()
+    private val linkResolver: TelegramLinkResolver by inject()
+    private val deepLinkRouter: DeepLinkRouter by inject()
+    private val guestReportDelegator: GuestReportDelegator by inject()
 
     // API 26-32 path for the in-app language picker. AppCompatDelegate.setApplicationLocales
     // is a no-op without an AppCompatActivity in the process (it dispatches through an
@@ -51,19 +88,46 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        val graph = (application as HortayApp).graph
         // Cold-launch deep link: resolve + buffer into the router before MainScaffold's
         // collector subscribes. Resolution is async (TDLib GetInternalLinkType is an
         // offline JNI call but still a coroutine boundary) — appScope.launch wins the
         // race in practice because the Channel buffers the resulting event regardless
         // of subscriber arrival ordering. Warm launches arrive via [onNewIntent] below.
         intent?.data?.let { uri ->
-            graph.appScope.launch {
-                graph.linkResolver.resolve(uri)?.let { graph.deepLinkRouter.submit(it) }
+            appScope.launch {
+                linkResolver.resolve(uri)?.let { deepLinkRouter.submit(it) }
             }
         }
 
         setContent {
+            // Resolve every shared singleton through Koin at the top of setContent.
+            // Inner composables keep their explicit params (Compose best practice —
+            // explicit data flow, easier to preview / test in isolation).
+            val tdClient = koinInject<TdClient>()
+            val backend = koinInject<HortayBackend>()
+            val postsRepository = koinInject<PostsRepository>()
+            val bookmarks = koinInject<BookmarkStore>()
+            val ignoredChannels = koinInject<IgnoredChannelsStore>()
+            val guestMode = koinInject<GuestModeStore>()
+            val userMessages = koinInject<UserMessageBus>()
+            val linkDialogs = koinInject<LinkDialogState>()
+            val deepLinkRouterCompose = koinInject<DeepLinkRouter>()
+            val startupCoordinator = koinInject<StartupCoordinator>()
+            val nav = koinInject<NavStack>()
+            val appScopeCompose = koinInject<CoroutineScope>()
+            val mediaCache = koinInject<MediaCache>()
+            val customEmoji = koinInject<CustomEmojiRepository>()
+            val stickerOutline = koinInject<StickerOutlineStore>()
+            val videoPlayerPool = koinInject<VideoPlayerPool>()
+            val webHttpClient = koinInject<HttpClient>()
+            val webSubscriptions = koinInject<SubscriptionsStore>()
+            val webFeedSource = koinInject<WebFeedSource>()
+            val webRepository = koinInject<WebRepository>()
+            val webClient = koinInject<WebTelegramClient>()
+            val settingsStore = koinInject<SettingsStore>()
+            val migrationCoordinator = koinInject<MigrationCoordinator>()
+            val guestReportDelegatorCompose = koinInject<GuestReportDelegator>()
+
             val view = LocalView.current
             val window = this.window
             val statusBar: (Boolean) -> Unit = { light ->
@@ -74,11 +138,11 @@ class MainActivity : ComponentActivity() {
             CompositionLocalProvider(LocalStatusBarController provides statusBar) {
             HortayTheme {
                 CompositionLocalProvider(
-                    LocalMediaCache provides graph.mediaCache,
-                    LocalCustomEmoji provides graph.customEmoji,
-                    LocalStickerOutline provides { id -> graph.stickerOutline.load(id) },
-                    LocalVideoPlayerPool provides graph.videoPlayerPool,
-                    LocalWebHttpClient provides graph.webHttpClient,
+                    LocalMediaCache provides mediaCache,
+                    LocalCustomEmoji provides customEmoji,
+                    LocalStickerOutline provides { id -> stickerOutline.load(id) },
+                    LocalVideoPlayerPool provides videoPlayerPool,
+                    LocalWebHttpClient provides webHttpClient,
                     LocalAvatarFileLoader provides { fileId, cd, modifier ->
                         TdMediaImage(
                             media = TdMedia(
@@ -100,23 +164,23 @@ class MainActivity : ComponentActivity() {
                         dev.lyo.hortay.ui.media.AndroidMediaShareActions,
                     dev.lyo.hortay.ui.settings.LocalLanguagePicker provides
                         dev.lyo.hortay.ui.settings.AndroidLanguagePicker(this@MainActivity),
-                    dev.lyo.hortay.ui.report.LocalGuestReportDelegate provides
+                    LocalGuestReportDelegate provides
                         { username, postId ->
-                            when (graph.guestReportDelegator.report(username, postId)) {
-                                dev.lyo.hortay.ui.report.GuestReportDelegator.Outcome.OpenedTelegram ->
-                                    dev.lyo.hortay.ui.report.GuestReportOutcome.OpenedTelegram
-                                dev.lyo.hortay.ui.report.GuestReportDelegator.Outcome.OpenedWeb ->
-                                    dev.lyo.hortay.ui.report.GuestReportOutcome.OpenedWeb
-                                dev.lyo.hortay.ui.report.GuestReportDelegator.Outcome.OpenedEmail ->
-                                    dev.lyo.hortay.ui.report.GuestReportOutcome.OpenedEmail
-                                dev.lyo.hortay.ui.report.GuestReportDelegator.Outcome.AllFailed ->
-                                    dev.lyo.hortay.ui.report.GuestReportOutcome.AllFailed
+                            when (guestReportDelegatorCompose.report(username, postId)) {
+                                GuestReportDelegator.Outcome.OpenedTelegram ->
+                                    GuestReportOutcome.OpenedTelegram
+                                GuestReportDelegator.Outcome.OpenedWeb ->
+                                    GuestReportOutcome.OpenedWeb
+                                GuestReportDelegator.Outcome.OpenedEmail ->
+                                    GuestReportOutcome.OpenedEmail
+                                GuestReportDelegator.Outcome.AllFailed ->
+                                    GuestReportOutcome.AllFailed
                             }
                         },
                 ) {
                     Surface(modifier = Modifier.fillMaxSize()) {
-                        val auth by graph.tdClient.authStage.collectAsStateWithLifecycle()
-                        val isGuest by graph.guestMode.isGuest.collectAsStateWithLifecycle(
+                        val auth by tdClient.authStage.collectAsStateWithLifecycle()
+                        val isGuest by guestMode.isGuest.collectAsStateWithLifecycle(
                             initialValue = false,
                         )
                         // Routing precedence:
@@ -132,18 +196,18 @@ class MainActivity : ComponentActivity() {
                         when {
                             auth == AuthStage.Ready -> MediaViewerHost {
                                 MainScaffold(
-                                    feed = graph.postsRepository,
-                                    backend = graph.backend,
-                                    bookmarks = graph.bookmarkStore,
-                                    ignoredChannels = graph.ignoredChannels,
-                                    guestMode = graph.guestMode,
-                                    userMessages = graph.userMessages,
-                                    linkDialogs = graph.linkDialogs,
-                                    deepLinkRouter = graph.deepLinkRouter,
-                                    startupPhase = graph.startupCoordinator.phase,
-                                    nav = graph.nav,
-                                    appScope = graph.appScope,
-                                    chatReadCursors = graph.postsRepository.chatReadCursors,
+                                    feed = postsRepository,
+                                    backend = backend,
+                                    bookmarks = bookmarks,
+                                    ignoredChannels = ignoredChannels,
+                                    guestMode = guestMode,
+                                    userMessages = userMessages,
+                                    linkDialogs = linkDialogs,
+                                    deepLinkRouter = deepLinkRouterCompose,
+                                    startupPhase = startupCoordinator.phase,
+                                    nav = nav,
+                                    appScope = appScopeCompose,
+                                    chatReadCursors = postsRepository.chatReadCursors,
                                 )
                             }
                             // Guest mode also needs MediaViewerHost: TimelineScreen reads
@@ -152,25 +216,25 @@ class MainActivity : ComponentActivity() {
                             // present. Without this wrap the first measure pass crashes.
                             isGuest -> MediaViewerHost {
                                 WebModeScaffold(
-                                    backend = graph.backend,
-                                    bookmarks = graph.bookmarkStore,
-                                    ignoredChannels = graph.ignoredChannels,
-                                    guestMode = graph.guestMode,
-                                    webSubscriptions = graph.webSubscriptions,
-                                    webFeedSource = graph.webFeedSource,
-                                    webRepository = graph.webRepository,
-                                    webClient = graph.webClient,
-                                    settingsStore = graph.settingsStore,
-                                    linkDialogs = graph.linkDialogs,
-                                    deepLinkRouter = graph.deepLinkRouter,
-                                    nav = graph.nav,
-                                    appScope = graph.appScope,
+                                    backend = backend,
+                                    bookmarks = bookmarks,
+                                    ignoredChannels = ignoredChannels,
+                                    guestMode = guestMode,
+                                    webSubscriptions = webSubscriptions,
+                                    webFeedSource = webFeedSource,
+                                    webRepository = webRepository,
+                                    webClient = webClient,
+                                    settingsStore = settingsStore,
+                                    linkDialogs = linkDialogs,
+                                    deepLinkRouter = deepLinkRouterCompose,
+                                    nav = nav,
+                                    appScope = appScopeCompose,
                                 )
                             }
                             else -> AuthScreen(
-                                backend = graph.backend,
-                                guestMode = graph.guestMode,
-                                scope = graph.appScope,
+                                backend = backend,
+                                guestMode = guestMode,
+                                scope = appScopeCompose,
                                 stage = auth,
                             )
                         }
@@ -181,11 +245,11 @@ class MainActivity : ComponentActivity() {
                         // the coordinator persists "shown" so it doesn't reappear next
                         // session.
                         if (auth == AuthStage.Ready) {
-                            val proposal by graph.migrationCoordinator.pendingProposal
+                            val proposal by migrationCoordinator.pendingProposal
                                 .collectAsStateWithLifecycle()
                             proposal?.let { candidates ->
                                 MigrationProposalSheet(
-                                    coordinator = graph.migrationCoordinator,
+                                    coordinator = migrationCoordinator,
                                     candidates = candidates,
                                     onDismiss = { /* coordinator clears pendingProposal */ },
                                 )
@@ -203,10 +267,9 @@ class MainActivity : ComponentActivity() {
         // singleTop / re-entry path: a fresh tg:// or https://t.me URL arriving while the
         // activity is already alive. The router's Channel.BUFFERED queue holds rapid-fire
         // links during a transition until MainScaffold's collector drains them in order.
-        val graph = (application as HortayApp).graph
         intent.data?.let { uri ->
-            graph.appScope.launch {
-                graph.linkResolver.resolve(uri)?.let { graph.deepLinkRouter.submit(it) }
+            appScope.launch {
+                linkResolver.resolve(uri)?.let { deepLinkRouter.submit(it) }
             }
         }
     }

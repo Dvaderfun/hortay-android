@@ -56,7 +56,7 @@ import org.jetbrains.compose.resources.stringResource
  * from Settings → "Hidden channels (N)" row. Two affordances per row:
  *
  *   - Tap the row → no-op (no drill destination; we'd otherwise need to push
- *     a NavEntry.Channel through a host scaffold that this screen doesn't own
+ *     a NavTarget.Channel through a host scaffold that this screen doesn't own
  *     a handle to. The Unhide button is the single intentional action here).
  *   - Trailing "eye" button → flips the channel out of the ignore set; the
  *     row fades on the next [IgnoredChannelsStore.ignored] emit.

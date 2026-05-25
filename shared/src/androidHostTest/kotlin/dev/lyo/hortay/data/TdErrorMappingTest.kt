@@ -1,6 +1,7 @@
 package dev.lyo.hortay.data
 
-import dev.lyo.hortay.R
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.op_vote_in_poll
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.flow.SharingStarted
@@ -29,7 +30,7 @@ class TdErrorMappingTest {
     @Test
     fun `code 406 classifies as Silent`() {
         val (kind, _) = TdClient.TdException(406, "ANYTHING")
-            .toUserFacing(FakeStrings, R.string.op_vote_in_poll)
+            .toUserFacing(FakeStrings, Res.string.op_vote_in_poll)
         assertEquals(TdErrorKind.Silent, kind)
     }
 
@@ -45,7 +46,7 @@ class TdErrorMappingTest {
         TdClient.TdException(406, "no-op").surfaceTo(
             bus = bus,
             res = FakeStrings,
-            operationRes = R.string.op_vote_in_poll,
+            operationRes = Res.string.op_vote_in_poll,
             connection = ConnectionStatus.Ready,
         )
         advanceUntilIdle()
@@ -61,7 +62,7 @@ class TdErrorMappingTest {
         TdClient.TdException(500, "boom").surfaceTo(
             bus = bus,
             res = FakeStrings,
-            operationRes = R.string.op_vote_in_poll,
+            operationRes = Res.string.op_vote_in_poll,
             connection = ConnectionStatus.Ready,
         )
         advanceUntilIdle()
@@ -73,7 +74,7 @@ class TdErrorMappingTest {
     @Test
     fun `code 500 does not silence — classified as ServerError`() {
         val (kind, msg) = TdClient.TdException(500, "Internal server error")
-            .toUserFacing(FakeStrings, R.string.op_vote_in_poll)
+            .toUserFacing(FakeStrings, Res.string.op_vote_in_poll)
         assertEquals(TdErrorKind.ServerError, kind)
         assertTrue(msg.isNotEmpty(), "non-Silent kinds must surface a user-facing message")
     }

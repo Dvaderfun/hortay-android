@@ -11,11 +11,28 @@ import coil3.memory.MemoryCache
 import coil3.request.crossfade
 import dev.lyo.hortay.app.BuildConfig
 import dev.lyo.hortay.data.LocaleStore
+import dev.lyo.hortay.di.coreModule
+import dev.lyo.hortay.di.platformModule
+import dev.lyo.hortay.di.storesModule
+import dev.lyo.hortay.di.tdlibModule
+import dev.lyo.hortay.di.uiBridgeModule
+import dev.lyo.hortay.di.viewModelModule
+import dev.lyo.hortay.di.webModule
+import dev.lyo.hortay.data.posts.PostsRepository
+import dev.lyo.hortay.data.web.WebRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
+import org.koin.android.ext.android.inject
+import org.koin.android.ext.koin.androidContext
+import org.koin.android.ext.koin.androidLogger
+import org.koin.core.context.startKoin
+import org.koin.core.logger.Level
+import org.koin.mp.KoinPlatform
 
 class HortayApp : Application(), SingletonImageLoader.Factory {
 
-    lateinit var graph: AppGraph
-        private set
+    private val appScope: CoroutineScope by inject()
+    private val webRepository: WebRepository by inject()
 
     override fun attachBaseContext(base: Context) {
         super.attachBaseContext(LocaleStore.wrap(base))
@@ -23,9 +40,11 @@ class HortayApp : Application(), SingletonImageLoader.Factory {
 
     override fun onCreate() {
         super.onCreate()
-        // PlatformContextHolder must init BEFORE AppGraph — the KMP
+        // PlatformContextHolder must init BEFORE Koin starts — the KMP
         // createPreferencesDataStore factory reads its app context to
-        // resolve filesDir for the .preferences_pb on-disk file.
+        // resolve filesDir for the .preferences_pb on-disk file. Stores
+        // module instantiates DataStores at startKoin time (eager
+        // singletons depend on them).
         dev.lyo.hortay.data.PlatformContextHolder.init(this)
         AppConfig.telegramApiId = BuildConfig.TELEGRAM_API_ID
         AppConfig.telegramApiHash = BuildConfig.TELEGRAM_API_HASH
@@ -34,7 +53,32 @@ class HortayApp : Application(), SingletonImageLoader.Factory {
         AppConfig.debug = BuildConfig.DEBUG
         AppConfig.versionName = BuildConfig.VERSION_NAME
         AppConfig.versionCode = BuildConfig.VERSION_CODE
-        graph = AppGraph(this)
+        startKoin {
+            androidLogger(if (BuildConfig.DEBUG) Level.INFO else Level.ERROR)
+            androidContext(this@HortayApp)
+            modules(
+                coreModule,
+                storesModule,
+                webModule,
+                tdlibModule,
+                uiBridgeModule,
+                viewModelModule,
+                platformModule(),
+            )
+        }
+        // Force eager singletons to materialise + side-effect-bind (tdClient,
+        // lifecycleBridge, autoDownloader, webFeedScheduler, webCustomEmojiBridge,
+        // migrationCoordinator, logoutCleanup). Koin guarantees createdAtStart
+        // bindings instantiate in module-declaration order.
+        KoinPlatform.getKoin().get<PostsRepository>()
+
+        // Pre-warm the web DB on a background thread. SQLDelight's
+        // AndroidSqliteDriver lazy-opens its SupportSQLiteOpenHelper on first
+        // query — without this touch the schema creation, WAL switch and
+        // PRAGMA setup would all run synchronously inside the first
+        // observeFeed() collector on the main thread. A no-op SELECT here
+        // moves the one-time ~50-100 ms cost off the critical path.
+        appScope.launch { webRepository.subscribedUsernames() }
     }
 
     override fun newImageLoader(context: PlatformContext): ImageLoader = ImageLoader.Builder(context)

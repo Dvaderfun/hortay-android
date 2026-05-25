@@ -4,6 +4,14 @@ End state of Phase I: iOS guest mode reaches feature parity with Android guest m
 (same `WebModeScaffold` tree, same `PostCard`, same predictive back, same deep-link
 nudges). The stub `HortayBackend.ios.kt` short-circuits every TDLib-bound call.
 
+End state of the Nav3 migration (between Phase I.5 and Phase II): the nav substrate
+is `androidx.navigation3` (KMP) + JetBrains `navigation3-ui` (`NavDisplay`,
+`SceneStrategy`) + `androidx.lifecycle:lifecycle-viewmodel-navigation3` (per-entry
+`ViewModelStoreOwner` decorator). `NavStack` survives as the Koin-singleton wrapper
+around a `SnapshotStateList<NavTarget>`. Phase II inherits this — every `entry<T>`
+content block in `MainScaffold` / `WebModeScaffold` works the same way on iOS once
+the TDLib-bound paths are wired.
+
 **Phase II target:** flip `HortayBackend.ios.kt` from stub to a real TDLib-backed
 implementation so iOS users can sign in with their Telegram account and read
 their full subscribed feed, same as Android. After Phase II the iOS app and the
@@ -84,8 +92,8 @@ libtdlib/build/apple/libtdlight.xcframework/
 - `nm -gj libtdjson.a | grep td_create_client_id` resolves the exported
   symbols.
 
-**Simulator note:** Phase I left the existing iOS `MainViewController.kt` +
-`IosAppGraph` running fine on `iosSimulatorArm64` via the stub backend.
+**Simulator note:** Phase I.5 left iOS `MainViewController.kt` mounting the
+Koin-resolved `WebModeScaffold` on `iosSimulatorArm64` via `tdlibStubModule`.
 That path keeps working — the simulator target compiles against the
 Phase-I `HortayBackend.ios.kt` stub forever (or until somebody adds a
 simulator slice). Authenticated mode is device-only.
@@ -120,8 +128,13 @@ kotlin {
 This forces a deliberate source-set split: `TdClient.ios.kt` lives in
 `iosArm64Main` (device-only, real TDLib), while the simulator continues to
 build against the no-op `HortayBackend.ios.kt` stub in `iosMain`. The
-Phase I `IosAppGraph` works as-is on simulator; on device it instantiates
-the real `TdClient` via the same `expect class` boundary.
+Phase I.5 `tdlibStubModule` (`shared/src/iosMain/.../di/TdlibStubModule.kt`)
+works as-is on simulator; on device, `initKoin()` swaps it for a real
+`tdlibModule` (or a new `iosArm64Main` `tdlibIosModule`) that instantiates
+the real `TdClient` via the same `expect class` boundary. The swap is
+literally one line in `InitKoin.kt` — the rest of the Koin graph
+(coreModule, storesModule, webModule, viewModelModule, uiBridgeModule,
+platformModule) is unchanged.
 
 After this lands, `import dev.lyo.hortay.tdlib.native.td_create_client_id` /
 `td_send` / `td_receive` / `td_execute` works from any `iosArm64Main` file.
@@ -242,12 +255,14 @@ longer supports authenticated mode — see II-A trade-off):
 
 - Push notifications: iOS uses APNS, not FCM. TDLib's
   `RegisterDevice(DeviceTokenApplePush)` handles this; we need to plumb
-  the APNS token from the SwiftUI host into `IosAppGraph`.
+  the APNS token from the SwiftUI host into a Koin-resolved `TdClient`
+  (export a small `registerApnsToken(token: String)` helper from Kotlin
+  that calls `KoinPlatform.getKoin().get<TdClient>().registerDevice(...)`).
 - Universal links: `tg://` schemes don't work the same way on iOS.
   Wire `Universal Links` in `iosApp/iosApp.entitlements`,
   `apple-app-site-association` hosted at `t.me/`, and handle the
-  `NSUserActivity` callback in `iOSApp.swift` → forward to
-  `IosAppGraph.deepLinkRouter`.
+  `NSUserActivity` callback in `iOSApp.swift` → forward to a Kotlin
+  helper that pulls `koin.get<DeepLinkRouter>()` and submits the parsed link.
 - Background fetch: TDLib's `SetOption("online", false)` + `SetNetworkType`
   match Android's `TdLifecycleBridge`. iOS only — the bridge needs an
   iosMain actual that observes `UIApplication.didEnterBackgroundNotification`.

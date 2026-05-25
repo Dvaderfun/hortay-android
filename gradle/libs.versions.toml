@@ -49,6 +49,36 @@ okhttp = "4.12.0"
 ktor = "3.5.0"
 okio = "3.10.2"
 sqldelight = "2.3.2"
+# Koin 4.x — KMP DI. Requires Kotlin 2.0+, CMP 1.7+. We're on Kotlin 2.3.10 +
+# CMP 1.12, both well past the floor. KMP compose-viewmodel reads
+# LocalViewModelStoreOwner, so the existing per-NavTarget ViewModelStoreOwner
+# contract carries forward unchanged via nav3's
+# rememberViewModelStoreNavEntryDecorator.
+koin = "4.2.1"
+# Navigation 3 — JetBrains KMP port of Jetpack Navigation3 1.1.1, shipped with
+# CMP 1.12.0-alpha01. NavKey + NavBackStack + NavDisplay + Scene/SceneStrategy
+# work on every CMP target (android, ios, desktop, wasmJs). Replaces the
+# bespoke `NavStack` substrate; the Koin-singleton NavStack wrapper survives
+# because rememberNavBackStack is composition-scoped and would not outlive the
+# MainScaffold ↔ WebModeScaffold swap on guest-mode toggles.
+navigation3 = "1.1.1"
+# Companion lib for cross-platform predictive-back coordination. `NavDisplay`
+# pairs with it under the hood; we keep our existing
+# `androidx.compose.ui.backhandler.PredictiveBackHandler` for the host-driven
+# overlay peek transform, so this lib is pulled transitively but not consumed
+# directly by app code at the moment.
+navigationEvent = "1.1.0"
+# androidx.lifecycle 2.11.0-beta02 — needed solely for
+# `lifecycle-viewmodel-navigation3`, which provides
+# `rememberViewModelStoreNavEntryDecorator()` (per-NavEntry ViewModelStore
+# isolation that replaces Hortay's hand-rolled `NavEntryHost`). The KMP
+# variants (iosarm64, iossimulatorarm64) are published under raw `androidx.*`
+# at Google Maven; JetBrains does NOT re-publish this artifact (same shape
+# as androidx.navigation3:navigation3-runtime). The rest of androidx.lifecycle
+# in this project still rides 2.9.0; Gradle's transitive resolution bumps
+# everything through to 2.11.0-betaN anyway via the nav3-ui pull, so the
+# version skew is paper-only.
+lifecycleNav3 = "2.11.0-beta02"
 junit5 = "5.11.4"
 junitPlatform = "1.11.4"
 kotlinxCoroutinesTest = "1.10.1"
@@ -172,6 +202,38 @@ androidx-test-uiautomator = { group = "androidx.test.uiautomator", name = "uiaut
 # Detekt Compose rules — loaded into the detekt classpath via `detektPlugins(...)`
 # in shared/build.gradle.kts. Not an `implementation` dep — it never reaches the APK.
 detekt-rules-compose = { group = "io.nlopez.compose.rules", name = "detekt", version.ref = "detektRulesCompose" }
+
+# Koin — KMP DI. `koin-core` is platform-agnostic; `koin-android` adds the
+# Application-bound startKoin { androidContext(this) } DSL; `koin-compose`
+# provides KMP koinInject() / KoinContext { … }; `koin-compose-viewmodel`
+# provides KMP koinViewModel() reading LocalViewModelStoreOwner. `koin-test`
+# enables verify() on module graphs (CI gate).
+koin-core = { group = "io.insert-koin", name = "koin-core", version.ref = "koin" }
+koin-android = { group = "io.insert-koin", name = "koin-android", version.ref = "koin" }
+koin-compose = { group = "io.insert-koin", name = "koin-compose", version.ref = "koin" }
+koin-compose-viewmodel = { group = "io.insert-koin", name = "koin-compose-viewmodel", version.ref = "koin" }
+
+# Navigation 3. Two groups:
+#  - `androidx.navigation3:navigation3-runtime` — Jetpack 1.1.1 directly. KMP
+#    variants (iosarm64, iossimulatorarm64) ARE published here, despite the
+#    androidx group name; the JetBrains repo does NOT re-publish the runtime.
+#  - `org.jetbrains.androidx.navigation3:navigation3-ui` — JetBrains KMP port of
+#    NavDisplay + Scene/SceneStrategy + built-in decorator helpers
+#    (rememberSavedStateNavEntryDecorator, rememberViewModelStoreNavEntryDecorator,
+#    rememberSceneSetupNavEntryDecorator).
+# `navigationevent-compose` (also JetBrains-republished) is the KMP back-event
+# substrate paired with nav3. Hortay keeps the existing CMP
+# `PredictiveBackHandler` for the host-driven overlay peek transform — see
+# ARCHITECTURE.md rule on nav3.
+navigation3-runtime = { module = "androidx.navigation3:navigation3-runtime", version.ref = "navigation3" }
+jetbrains-navigation3-ui = { module = "org.jetbrains.androidx.navigation3:navigation3-ui", version.ref = "navigation3" }
+jetbrains-navigationevent-compose = { module = "org.jetbrains.androidx.navigationevent:navigationevent-compose", version.ref = "navigationEvent" }
+# Per-NavEntry ViewModelStore decorator. Without this we'd have to hand-roll
+# the equivalent — nav3-runtime ships only `rememberSaveableStateHolderNavEntryDecorator`;
+# the VM decorator lives in this companion artifact (raw `androidx.lifecycle`
+# group at Google Maven; KMP iosarm64 + iossimulatorarm64 variants published
+# natively, no JetBrains fork needed).
+lifecycle-viewmodel-navigation3 = { module = "androidx.lifecycle:lifecycle-viewmodel-navigation3", version.ref = "lifecycleNav3" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

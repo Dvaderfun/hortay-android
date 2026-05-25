@@ -116,6 +116,31 @@ kotlin {
             // so the shared theme's PressedSelectedShape interpolation works
             // identically on Android and iOS.
             implementation(libs.androidx.graphics.shapes)
+
+            // Koin (KMP DI). `koin-core` for module DSL + container; `koin-compose`
+            // for KoinContext + koinInject; `koin-compose-viewmodel` for KMP
+            // koinViewModel() that reads LocalViewModelStoreOwner so the existing
+            // per-NavTarget ViewModelStoreOwner contract carries through unchanged
+            // via nav3's rememberViewModelStoreNavEntryDecorator.
+            implementation(libs.koin.core)
+            implementation(libs.koin.compose)
+            implementation(libs.koin.compose.viewmodel)
+
+            // Navigation 3. `navigation3-runtime` (raw androidx, KMP-published)
+            // ships NavKey + NavBackStack + NavEntry + NavEntryDecorator;
+            // JetBrains `navigation3-ui` ships NavDisplay + Scene/SceneStrategy +
+            // SinglePaneSceneStrategy default. `lifecycle-viewmodel-navigation3`
+            // ships `rememberViewModelStoreNavEntryDecorator` for per-entry
+            // ViewModelStoreOwner isolation (replaces Hortay's hand-rolled
+            // pre-nav3 NavEntryHost). MainScaffold / WebModeScaffold mount
+            // `NavDisplay(backStack = nav.entries, …)` with these decorators
+            // and the default `SinglePaneSceneStrategy`; the previous layer
+            // peek during predictive-back comes for free via NavDisplay's
+            // AnimatedContent rendering the previous scene under the top.
+            implementation(libs.navigation3.runtime)
+            implementation(libs.jetbrains.navigation3.ui)
+            implementation(libs.jetbrains.navigationevent.compose)
+            implementation(libs.lifecycle.viewmodel.navigation3)
         }
 
         androidMain.dependencies {
@@ -156,6 +181,12 @@ kotlin {
             implementation(project(":libtdlib"))
 
             implementation(libs.androidx.profileinstaller)
+
+            // koin-android adds the Application-bound startKoin {
+            // androidContext(this); androidLogger(...) } DSL. AndroidX-specific
+            // bindings live here; the KMP koin-core + koin-compose stay in
+            // commonMain.
+            implementation(libs.koin.android)
         }
 
         val androidHostTest by getting {

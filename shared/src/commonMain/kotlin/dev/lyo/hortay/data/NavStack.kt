@@ -1,12 +1,10 @@
 package dev.lyo.hortay.data
 
 import androidx.compose.runtime.Immutable
-import kotlinx.collections.immutable.PersistentList
-import kotlinx.collections.immutable.persistentListOf
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.snapshots.SnapshotStateList
+import androidx.navigation3.runtime.NavKey
 import kotlinx.atomicfu.atomic
 
 /**
@@ -21,22 +19,24 @@ import kotlinx.atomicfu.atomic
  * nesting: channel → comments → channel → comments → … (the Telegram-Android
  * pattern, where every drill is its own back-stack entry).
  *
- * `entryId` is a stable per-instance UUID used as the key for
- * [androidx.compose.runtime.saveable.SaveableStateProvider] and `viewModel(key)`
- * so each entry has an isolated saveable state bag and a dedicated ViewModel —
- * pushing the same channel twice produces two distinct screens with their own
- * scroll positions and view-models. This also fixes the per-chatId
- * ViewModelStore leak (previously, [androidx.lifecycle.viewmodel.compose.viewModel]
- * keyed on "channel:$chatId" accumulated VMs for the whole Activity lifetime).
+ * `entryId` is a stable per-instance id used as the contentKey for the per-entry
+ * `SaveableStateProvider` and `viewModel(key)` so each entry has an isolated
+ * saveable state bag and a dedicated ViewModel — pushing the same channel
+ * twice produces two distinct screens with their own scroll positions and
+ * view-models. Without the explicit id, nav3 would key host-entry identity off
+ * `NavKey.equals/hashCode` and collapse two `Channel(123L)` pushes into one.
  *
- * Lifetime: held by [dev.lyo.hortay.AppGraph]; cleared on logout via the
- * graph's `runLogoutCleanup`. Not saveable across process death — same
- * boundary [LinkDialogState] and [dev.lyo.hortay.data.report.ReportDialogState]
- * draw: a killed process represents user abandonment of the drill path, not
- * pending intent.
+ * Lifetime: held as a Koin singleton via [dev.lyo.hortay.di.coreModule];
+ * cleared on logout by [dev.lyo.hortay.data.LogoutCleanup]. Not saveable across
+ * process death — same boundary [LinkDialogState] and
+ * [dev.lyo.hortay.data.report.ReportDialogState] draw: a killed process
+ * represents user abandonment of the drill path, not pending intent.
+ *
+ * Implements [NavKey] (Navigation 3 marker interface) so each variant can be
+ * pushed directly onto `nav3`'s [androidx.navigation3.runtime.NavBackStack].
  */
 @Immutable
-sealed interface NavEntry {
+sealed interface NavTarget : NavKey {
 
     val entryId: String
 
@@ -59,7 +59,7 @@ sealed interface NavEntry {
         val chatId: Long,
         val scrollToMessageId: Long? = null,
         override val entryId: String = nextNavEntryId(),
-    ) : NavEntry
+    ) : NavTarget
 
     /**
      * Comments thread anchored at the given feed post. The anchor carries
@@ -70,7 +70,7 @@ sealed interface NavEntry {
     data class Comments(
         val anchor: TimelinePost,
         override val entryId: String = nextNavEntryId(),
-    ) : NavEntry
+    ) : NavTarget
 
     /**
      * Guest-mode single-channel drill. Identified by t.me/s/ handle rather
@@ -84,41 +84,60 @@ sealed interface NavEntry {
     data class WebChannel(
         val username: String,
         override val entryId: String = nextNavEntryId(),
-    ) : NavEntry
+    ) : NavTarget
 }
 
 private val navEntrySeq = atomic(0L)
 
 /**
- * Process-monotonic id for a freshly-pushed [NavEntry]. Replaces the
+ * Process-monotonic id for a freshly-pushed [NavTarget]. Replaces the
  * previous `UUID.randomUUID()` — KMP doesn't ship `java.util.UUID`, and a
  * counter is enough here (entries are scoped to a single app instance,
  * never serialised across processes).
  */
 private fun nextNavEntryId(): String = "nav-${navEntrySeq.incrementAndGet()}"
 
+/**
+ * Koin-singleton wrapper around Navigation 3's
+ * [androidx.navigation3.runtime.NavBackStack] (a `SnapshotStateList<NavKey>`).
+ *
+ * Why a singleton and not `rememberNavBackStack`:
+ *  1. [dev.lyo.hortay.data.DeepLinkRouter] submits before Compose mounts
+ *     ([dev.lyo.hortay.MainActivity.onCreate]) — composition-scoped state
+ *     wouldn't exist yet.
+ *  2. The same instance survives the MainScaffold ↔ WebModeScaffold swap on
+ *     guest-mode toggles mid-session.
+ *  3. Cleared on logout via [LogoutCleanup] (DI singleton).
+ *
+ * The backing [entries] list is the actual `NavBackStack` — pass it directly
+ * to `NavDisplay(backStack = nav.entries, …)`. Mutations go through this
+ * class's [push] / [pop] / [clear] so the eager-singleton contract (Koin
+ * `createdAtStart`) ordering is preserved.
+ */
 class NavStack {
 
-    private val _stack = MutableStateFlow<PersistentList<NavEntry>>(persistentListOf())
+    val entries: SnapshotStateList<NavTarget> = mutableStateListOf()
 
-    val stack: StateFlow<PersistentList<NavEntry>> = _stack.asStateFlow()
+    val top: NavTarget? get() = entries.lastOrNull()
 
-    val top: NavEntry? get() = _stack.value.lastOrNull()
+    /**
+     * Compose-observable top-of-stack — reads cause recomposition when the
+     * top entry changes. Used by `MainScaffold` for the predictive-back
+     * handler's `enabled` flag.
+     */
+    fun topAsState() = derivedStateOf { entries.lastOrNull() }
 
-    fun push(entry: NavEntry) {
-        _stack.update { it.add(entry) }
+    fun push(entry: NavTarget) {
+        entries.add(entry)
     }
 
     /** Pop the top entry. Returns it, or null if the stack is already empty. */
-    fun pop(): NavEntry? {
-        val current = _stack.value
-        if (current.isEmpty()) return null
-        val top = current.last()
-        _stack.value = current.removeAt(current.lastIndex)
-        return top
+    fun pop(): NavTarget? {
+        if (entries.isEmpty()) return null
+        return entries.removeAt(entries.lastIndex)
     }
 
     fun clear() {
-        _stack.value = persistentListOf()
+        entries.clear()
     }
 }
