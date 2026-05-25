@@ -1,0 +1,29 @@
+# Kotlin/Native cinterop binding for TDLib's tdjson C interface.
+#
+# Five entry points: td_create_client_id, td_send, td_receive, td_execute,
+# td_set_log_message_callback. The first four are the entire surface area —
+# everything else flows through them as JSON.
+#
+# Library/header paths live in shared/build.gradle.kts (compilerOpts +
+# extraOpts blocks on the cinterop registration) — keeping them in Gradle
+# makes them absolute against rootProject and survives any source-set
+# relocation. The static archive + headers come from libtdlib/build/apple/
+# (produced by scripts/build-tdlib-apple.sh).
+
+package = dev.lyo.hortay.tdlib.native
+
+headers = td/telegram/td_json_client.h
+
+staticLibraries = libtdjson_static.a
+
+# Frameworks linked by tdjson_static internally: Foundation/CFNetwork for
+# NSURLSession + reachability; Security for SecureTransport/Keychain (MTProto
+# session storage); libc++ for the C++ runtime; libz for MTProto transport
+# compression. OpenSSL is statically archived inside libtdjson.a already
+# (CMake `target_link_libraries(tdjson_static PRIVATE ssl crypto)`).
+linkerOpts.ios_arm64 = \
+    -framework Foundation \
+    -framework CFNetwork \
+    -framework Security \
+    -lc++ \
+    -lz

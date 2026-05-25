@@ -34,3 +34,10 @@ include(":androidApp")
 include(":shared")
 include(":libtdlib")
 include(":baselineprofile")
+
+// Tooling subproject — JVM Kotlin codegen that parses TDLib's td_api.tl schema
+// and emits the iosArm64Main TdApi.kt mirror of the upstream Java TdApi shape.
+// Phase II-C; invoked manually via `./gradlew :tdapi-gen:generate`. Not on the
+// production build path — Android still uses the Docker-generated Java TdApi.
+include(":tdapi-gen")
+project(":tdapi-gen").projectDir = file("scripts/tdapi-gen")

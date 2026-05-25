@@ -41,9 +41,12 @@ kotlin {
     // iOS targets. Kotlin/Native compilation requires macOS + Xcode 16+; Gradle
     // configures the targets fine on any host (tasks appear in :shared:tasks),
     // but `compileKotlinIosArm64` / `linkDebugFrameworkIosArm64` only run on Mac.
-    // TDLib is Android-only for v1 — iosMain provides a stub TdClient so the iOS
-    // app boots straight into WebModeScaffold (guest-mode). Full TDLib iOS port
-    // is a separate track (cinterop + cross-compiled libtdjni.xcframework).
+    //
+    // Phase II split: iosArm64 (device) wires the real TDLib via cinterop;
+    // iosSimulatorArm64 keeps the Phase I stub backend so simulator builds keep
+    // working on any Mac without rebuilding TDLib for simulator slices.
+    // The trade-off (device-only authenticated mode) is called out in
+    // .plans/phase-ii-tdlib-ios-port.md → "II-A — Native TDLib build".
     listOf(
         iosArm64(),
         iosSimulatorArm64(),
@@ -54,6 +57,22 @@ kotlin {
             // symbols. CMP's recommended default for iOS apps that don't expose
             // the framework to third-party Swift packages.
             isStatic = true
+        }
+    }
+
+    // Wire the tdjson cinterop on iosArm64 only (the simulator slice keeps the
+    // Phase I stub backend — no cross-compiled TDLib needed there). The .def
+    // file lives under shared/src/iosArm64Main/cinterop/tdjson.def; library +
+    // header paths are resolved here via rootProject so they remain absolute
+    // and survive source-set relocations.
+    iosArm64 {
+        compilations.getByName("main").cinterops.create("tdjson") {
+            defFile = project.file("src/iosArm64Main/cinterop/tdjson.def")
+            packageName = "dev.lyo.hortay.tdlib.native"
+            val tdlibAppleDir = rootProject.layout.projectDirectory
+                .dir("libtdlib/build/apple/libtdlight.xcframework/ios-arm64")
+            includeDirs(tdlibAppleDir.dir("Headers"))
+            extraOpts("-libraryPath", tdlibAppleDir.asFile.absolutePath)
         }
     }
 
