@@ -4,7 +4,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import org.drinkless.tdlib.TdApi
+import dev.lyo.hortay.tdlib.TdApi
 
 /**
  * Single source of truth for the family of TDLib presence + read-state signals:
@@ -183,7 +183,7 @@ internal object ChatPresence {
             td.send(
                 TdApi.ViewMessages(
                     chatId,
-                    messageIds.toLongArray(),
+                    messageIds.toTypedArray(),
                     source,
                     forceRead,
                 ),

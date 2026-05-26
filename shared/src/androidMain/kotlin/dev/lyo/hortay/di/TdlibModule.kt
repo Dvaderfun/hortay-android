@@ -1,5 +1,6 @@
 package dev.lyo.hortay.di
 
+import dev.lyo.hortay.data.AndroidTdSenderAdapter
 import dev.lyo.hortay.data.AutoDownloadStore
 import dev.lyo.hortay.data.ChannelActionsRepository
 import dev.lyo.hortay.data.ChatFoldersRepository
@@ -75,11 +76,10 @@ val tdlibModule = module {
     single(createdAtStart = true) {
         TdClient.create(androidContext(), get<SettingsStore>()).also { it.start() }
     }
-    // TdClient implements TdSender — separate single that aliases the same
-    // instance so `get<TdSender>()` works for repos that take the interface
-    // (the Phase-II seam). Aliasing single avoids the post-definition `bind`
-    // DSL whose import path differs between Koin minor versions.
-    single<TdSender> { get<TdClient>() }
+    // Adapter bridges TdClient (Java TdApi, JNI) → TdSender (Kotlin TdApi,
+    // commonMain). Repositories injected with TdSender live in commonMain and
+    // are shared across Android + iOS.
+    single<TdSender> { AndroidTdSenderAdapter(get<TdClient>(), get<CoroutineScope>()) }
 
     single(createdAtStart = true) {
         TdLifecycleBridge(

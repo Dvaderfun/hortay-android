@@ -2,6 +2,7 @@
 
 package dev.lyo.hortay.tdlib
 
+import dev.lyo.hortay.data.TdRpcException
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -58,7 +59,15 @@ class TypedTdClient(scope: CoroutineScope) {
     private val pending = HashMap<String, CompletableDeferred<TdApi.Object>>()
     private val pendingMutex = Mutex()
 
-    private val _updates = MutableSharedFlow<TdApi.Object>(extraBufferCapacity = 64)
+    // replay=1 keeps the most-recent update visible to late subscribers — Koin
+    // creates this client (createdAtStart) and the IosTdAuthStateMachine
+    // collector binds asynchronously, so the very first authorisation update
+    // (especially the synthetic WaitPhoneNumber from the simulator stub) could
+    // otherwise outrun the subscription. The extraBufferCapacity of 64 leaves
+    // headroom for the cold-start burst on device builds (TDLib emits hundreds
+    // of UpdateNewChat / UpdateChatLastMessage / UpdateUser within seconds of
+    // logging in).
+    private val _updates = MutableSharedFlow<TdApi.Object>(replay = 1, extraBufferCapacity = 64)
 
     /** Decoded updates from TDLib that did NOT carry an `@extra` correlation. */
     val updates: SharedFlow<TdApi.Object> = _updates.asSharedFlow()
@@ -73,13 +82,18 @@ class TypedTdClient(scope: CoroutineScope) {
                 val decoded = try {
                     json.decodeFromJsonElement<TdApi.Object>(element)
                 } catch (t: Throwable) {
-                    // Unknown @type or malformed payload — surface but don't crash.
+                    val type = obj["@type"]?.jsonPrimitive?.contentOrNull
+                    dev.lyo.hortay.PlatformLog.w("TypedTdClient", "Failed to decode @type=$type: ${t.message}")
                     return@collect
                 }
 
                 if (extra != null) {
                     val deferred = pendingMutex.withLock { pending.remove(extra) }
-                    deferred?.complete(decoded) ?: _updates.emit(decoded)
+                    if (deferred != null) {
+                        deferred.complete(decoded)
+                    } else {
+                        _updates.emit(decoded)
+                    }
                 } else {
                     _updates.emit(decoded)
                 }
@@ -95,6 +109,11 @@ class TypedTdClient(scope: CoroutineScope) {
      * Cancellation propagates: if the calling coroutine cancels mid-flight,
      * the pending slot is removed so a late response is dropped silently
      * (not delivered to a dead waiter, not leaked into [updates]).
+     *
+     * Errors: TDLib answers any failed call with a `TdApi.Error` carrying the
+     * MTProto numeric code + SCREAMING_SNAKE token. We translate that to a
+     * [TdRpcException] thrown from this call site, mirroring the Android
+     * `TdClient.TdException` contract so commonMain code can catch one type.
      */
     @Suppress("UNCHECKED_CAST")
     suspend fun <R : TdApi.Object> send(query: TdApi.Function<R>): R {
@@ -111,7 +130,11 @@ class TypedTdClient(scope: CoroutineScope) {
         raw.send(json.encodeToString(JsonObject.serializer(), withExtra))
 
         return try {
-            deferred.await() as R
+            val response = deferred.await()
+            if (response is TdApi.Error) {
+                throw TdRpcException(response.code, response.message)
+            }
+            response as R
         } finally {
             pendingMutex.withLock { pending.remove(extra) }
         }

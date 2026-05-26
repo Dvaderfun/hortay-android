@@ -3,7 +3,6 @@
 package dev.lyo.hortay.tdlib
 
 import dev.lyo.hortay.tdlib.native.td_create_client_id
-import dev.lyo.hortay.tdlib.native.td_execute
 import dev.lyo.hortay.tdlib.native.td_receive
 import dev.lyo.hortay.tdlib.native.td_send
 import kotlinx.cinterop.ExperimentalForeignApi
@@ -19,25 +18,19 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
- * Thin Kotlin wrapper around TDLib's `td_json_client.h` C interface, accessed
- * via the iosArm64 cinterop binding declared in `tdjson.def`.
+ * iosArm64 actual: thin Kotlin wrapper around TDLib's `td_json_client.h` C
+ * interface, accessed via the cinterop binding declared in `tdjson.def`.
  *
- * This is **Phase II-D scaffold** — it speaks raw JSON (kotlinx.serialization
- * not wired yet) and exists to prove the cinterop pipeline works end-to-end:
- * the Konan compiler picks up the `.def`, links against `libtdjson.a`, and
- * the resulting Kotlin/Native binary can call into the static TDLib archive.
- *
- * Phase II-C will replace the [String] queries / updates with kotlinx.serialization-
- * encoded `TdApi.*` types. The dispatching shape (one client id, one receive
- * pump, request/response correlation via `@extra`) is identical to the
- * Android `TdClient.kt` — Phase II-D1 lifts the orchestration logic into
- * commonMain so both platforms share the same repository code.
+ * Dispatching shape (one client id, one receive pump, request/response
+ * correlation via `@extra`) is identical to the Android `TdClient.kt`. The
+ * `expect class` seam in `iosMain` lets `TypedTdClient` + everything above
+ * stay in iosMain; only this cinterop-bound bottom layer is target-specific.
  *
  * Thread-safety: TDLib's tdjson is callable from any thread, but each client
- * id has a single receiver. We pump on Dispatchers.IO and fan updates out via
- * a SharedFlow that downstream collectors observe.
+ * id has a single receiver. We pump on Dispatchers.Default and fan updates
+ * out via a SharedFlow that downstream collectors observe.
  */
-class TdJsonClient(scope: CoroutineScope) {
+actual class TdJsonClient actual constructor(scope: CoroutineScope) {
 
     /** Stable TDLib-assigned client id. Reused for every td_send/td_receive call. */
     val clientId: Int = td_create_client_id()
@@ -48,9 +41,9 @@ class TdJsonClient(scope: CoroutineScope) {
     /**
      * Hot stream of raw JSON updates from TDLib (broadcast). Collectors get
      * every update emitted after subscription; subscribe before the first
-     * authentication query lands or use [updatesReplay] for at-most-N replay.
+     * authentication query lands.
      */
-    val updates: SharedFlow<String> = _updates.asSharedFlow()
+    actual val updates: SharedFlow<String> = _updates.asSharedFlow()
 
     init {
         // Sender pump — funnels outbound queries to td_send. Single-coroutine
@@ -68,11 +61,13 @@ class TdJsonClient(scope: CoroutineScope) {
             }
         }
 
+        // Wake TDLib: the new multi-client API (td_create_client_id) doesn't
+        // emit updates until the first td_send. A harmless getOption kicks
+        // the instance alive and triggers updateAuthorizationState.
+        td_send(clientId, """{"@type":"getOption","name":"version","@extra":"wake"}""")
+
         // Receiver pump — blocks in td_receive for up to 1s per tick, then
-        // republishes any update into the SharedFlow. The 1s timeout is the
-        // sweet spot used by TDLib's official Android/Java sample: short
-        // enough to keep the coroutine cancellation latency tolerable, long
-        // enough that we don't burn CPU on tight polling.
+        // republishes any update into the SharedFlow.
         scope.launch(Dispatchers.Default) {
             while (isActive) {
                 val raw = td_receive(POLL_TIMEOUT_S)?.toKStringFromUtf8() ?: continue
@@ -82,20 +77,12 @@ class TdJsonClient(scope: CoroutineScope) {
     }
 
     /** Enqueue a JSON-encoded request. Non-blocking. Pair via `@extra` for replies. */
-    fun send(json: String) {
+    actual fun send(json: String) {
         outbox.trySend(json)
     }
 
     companion object {
         /** Seconds per td_receive poll tick — see receiver-pump KDoc above. */
         const val POLL_TIMEOUT_S: Double = 1.0
-
-        /**
-         * Synchronous TDLib request (no client id, no auth). Used for
-         * `getTextEntities`, `parseTextEntities`, `getLogTags`, etc. — pure
-         * helpers that don't touch network or persistence. Safe to call from
-         * any thread including the main thread.
-         */
-        fun execute(json: String): String? = td_execute(json)?.toKStringFromUtf8()
     }
 }

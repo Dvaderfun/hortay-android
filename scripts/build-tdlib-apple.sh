@@ -218,25 +218,70 @@ if [ ! -f "$TD_IOS_BUILD/libtdjson_static.a" ] && [ ! -f "$TD_IOS_BUILD/libtdjso
     popd >/dev/null
 fi
 
-# Locate produced static archive. TDLib's output filename has changed across
-# versions — try the two known names.
-TDJSON_STATIC=""
+# Locate the thin wrapper archive CMake produced. TDLib's `tdjson_static`
+# target is a 5K wrapper that holds only `td_json_client.cpp.o` +
+# `td_log.cpp.o` and EXPORTS the C entry points (td_create_client_id, td_send,
+# …). The actual TDLib implementation (`td::Client`, `td::ClientJson`,
+# tdcore/tdactor/tdnet/tde2e/tdclient internals) lives in sibling archives —
+# CMake's static-library output does NOT bundle transitive dependencies by
+# default. Filename has changed across TDLib versions; check both.
+THIN_WRAPPER=""
 for candidate in "$TD_IOS_BUILD/libtdjson_static.a" "$TD_IOS_BUILD/libtdjson.a"; do
     if [ -f "$candidate" ]; then
-        TDJSON_STATIC="$candidate"
+        THIN_WRAPPER="$candidate"
         break
     fi
 done
-[ -n "$TDJSON_STATIC" ] || die "libtdjson_static.a not found under $TD_IOS_BUILD"
+[ -n "$THIN_WRAPPER" ] || die "libtdjson_static.a not found under $TD_IOS_BUILD"
+
+# Bundle every transitively-required static archive into a single fat
+# `libtdjson_static.a` via `libtool -static`. Without this step the cinterop
+# link succeeds (it only sees the C entry points) but `xcodebuild` then fails
+# at the iosApp link step with "Undefined symbols: td::Client::Client()…" for
+# every TDLib C++ class the wrapper references internally.
+#
+# We collect:
+#   - The wrapper itself (kept FIRST so its `td_*` exports stay primary).
+#   - All `.a` files produced under $TD_IOS_BUILD (tdcore, tdactor, tdnet,
+#     tde2e, tdclient, tdutils, tdsqlite, tddb, tdmtproto, tdapi, tl, etc.).
+#   - OpenSSL static archives (libssl.a + libcrypto.a) — TDLib's `tdnet`
+#     calls into OpenSSL directly.
+log "Bundling transitive static archives into a fat libtdjson_static.a"
+BUNDLE_INPUTS=("$THIN_WRAPPER")
+while IFS= read -r -d '' lib; do
+    # Skip the wrapper itself (already first in BUNDLE_INPUTS).
+    if [ "$lib" != "$THIN_WRAPPER" ]; then
+        BUNDLE_INPUTS+=("$lib")
+    fi
+done < <(find "$TD_IOS_BUILD" -name '*.a' -print0)
+BUNDLE_INPUTS+=("$OPENSSL_INSTALL/lib/libssl.a" "$OPENSSL_INSTALL/lib/libcrypto.a")
+log "  ${#BUNDLE_INPUTS[@]} input archives → fat libtdjson_static.a"
+
+FAT_ARCHIVE="$TD_IOS_BUILD/libtdjson_static.fat.a"
+rm -f "$FAT_ARCHIVE"
+libtool -static -no_warning_for_no_symbols -o "$FAT_ARCHIVE" "${BUNDLE_INPUTS[@]}"
+# Replace the thin wrapper with the fat archive so downstream lipo/nm/
+# xcframework steps see the bundled version.
+mv "$FAT_ARCHIVE" "$THIN_WRAPPER"
+
+TDJSON_STATIC="$THIN_WRAPPER"
+log "Fat archive: $(du -h "$TDJSON_STATIC" | cut -f1) at $TDJSON_STATIC"
 
 # Verify architecture.
 ARCH_INFO="$(lipo -info "$TDJSON_STATIC" 2>&1)"
 echo "$ARCH_INFO" | grep -q "arm64" || die "expected arm64 in $TDJSON_STATIC, got: $ARCH_INFO"
 log "$ARCH_INFO"
 
-# Verify exported symbols.
+# Verify exported symbols. Note: cannot use `nm | grep -q` here — `set -o
+# pipefail` propagates `nm`'s SIGPIPE (when grep matches early and closes
+# stdin) as a non-zero pipeline exit even though the symbol IS present. The
+# thin pre-bundle archive had ~30 symbols, small enough that grep consumed
+# everything before nm finished writing; the bundled fat archive has ~200k
+# symbols, so grep -q short-circuits and SIGPIPEs nm. Capture nm's output
+# into a variable instead.
+SYMS="$(nm -gj "$TDJSON_STATIC" 2>/dev/null)"
 for sym in td_create_client_id td_send td_receive td_execute; do
-    nm -gj "$TDJSON_STATIC" 2>/dev/null | grep -q "_$sym\$" || \
+    printf '%s\n' "$SYMS" | grep -Fx "_$sym" >/dev/null || \
         die "symbol $sym missing from $TDJSON_STATIC"
 done
 log "All five td_* exports resolved (td_create_client_id, td_send, td_receive, td_execute)"

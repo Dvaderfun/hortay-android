@@ -10,13 +10,16 @@ import org.koin.core.context.startKoin
  * Idempotent in practice — `MainViewController` calls it through a `lazy`
  * delegate so multiple ComposeUIViewController re-mounts share the same
  * container.
+ *
+ * Single [tdlibIosModule] for both device + simulator — the cinterop seam
+ * lives one level down in [dev.lyo.hortay.tdlib.TdJsonClient]'s expect/actual.
  */
 fun initKoin(): KoinApplication = startKoin {
     modules(
         coreModule,
         storesModule,
         webModule,
-        tdlibStubModule,
+        tdlibIosModule,
         uiBridgeModule,
         viewModelModule,
         platformModule(),

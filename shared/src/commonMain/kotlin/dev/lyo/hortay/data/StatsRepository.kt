@@ -1,6 +1,6 @@
 package dev.lyo.hortay.data
 
-import org.drinkless.tdlib.TdApi
+import dev.lyo.hortay.tdlib.TdApi
 
 /**
  * Surface TDLib's network + storage statistics for the Settings UI. Standard transparency
@@ -65,9 +65,9 @@ class StatsRepository(private val td: TdSender) : StatsFacade {
                 /* ttl */ 0,
                 /* count */ 0,
                 /* immunityDelay */ 0,
-                /* fileTypes */ null,
-                /* chatIds */ null,
-                /* excludeChatIds */ null,
+                /* fileTypes */ arrayOf(),
+                /* chatIds */ arrayOf(),
+                /* excludeChatIds */ arrayOf(),
                 /* returnDeletedFileStatistics */ false,
                 /* chatLimit */ 0,
             ),

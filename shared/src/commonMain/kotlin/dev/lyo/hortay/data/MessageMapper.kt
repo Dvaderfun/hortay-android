@@ -1,6 +1,6 @@
 package dev.lyo.hortay.data
 
-import org.drinkless.tdlib.TdApi
+import dev.lyo.hortay.tdlib.TdApi
 import hortay.shared.generated.resources.Res
 import hortay.shared.generated.resources.channel_default_name
 import hortay.shared.generated.resources.user_default_name

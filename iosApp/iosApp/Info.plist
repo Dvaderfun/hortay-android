@@ -18,6 +18,15 @@
     <string>0.6.0</string>
     <key>CFBundleVersion</key>
     <string>1</string>
+    <!--
+        Telegram API credentials, from https://my.telegram.org.
+        Mirrors Android's local.properties workflow — DO NOT commit real values.
+        Read at startup by IosAppConfigBootstrap.kt into AppConfig.
+    -->
+    <key>TelegramApiId</key>
+    <string>$(TELEGRAM_API_ID)</string>
+    <key>TelegramApiHash</key>
+    <string>$(TELEGRAM_API_HASH)</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
     <key>UIApplicationSceneManifest</key>

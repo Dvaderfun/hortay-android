@@ -1,6 +1,6 @@
 package dev.lyo.hortay.data
 
-import android.util.Log
+import dev.lyo.hortay.PlatformLog
 import kotlinx.coroutines.CancellationException
 
 /**
@@ -12,7 +12,7 @@ import kotlinx.coroutines.CancellationException
 internal fun <T> Result<T>.warnUnlessCancelled(tag: String, label: String = ""): Result<T> {
     val e = exceptionOrNull() ?: return this
     if (e is CancellationException) throw e
-    Log.w(tag, if (label.isEmpty()) "failed" else "$label failed", e)
+    PlatformLog.w(tag, if (label.isEmpty()) "failed" else "$label failed", e)
     return this
 }
 

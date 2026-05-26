@@ -1,147 +1,150 @@
 package dev.lyo.hortay.data
 
+import dev.lyo.hortay.data.posts.PostsRepository
 import dev.lyo.hortay.data.posts.PublicHandleResult
 import dev.lyo.hortay.data.report.ReportDialogState
 import dev.lyo.hortay.data.report.ReportExplainerStore
 import dev.lyo.hortay.data.report.ReportFlowController
 import dev.lyo.hortay.data.report.ReportLogStore
-import dev.lyo.hortay.data.report.ReportOption
-import dev.lyo.hortay.data.report.ReportState
-import dev.lyo.hortay.data.report.ReportStep
+import dev.lyo.hortay.data.report.ReportRepository
 import kotlinx.collections.immutable.PersistentList
-import kotlinx.collections.immutable.persistentListOf
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 
-/**
- * iOS actual for [HortayBackend]. Guest-mode-only stub — every method either
- * returns an empty flow or no-ops. Phase II will replace this with a real impl
- * once TDLib is cross-compiled for Apple platforms (cinterop bindings for the
- * ~200 `TdApi.*` types + native libtdjni.xcframework).
- *
- * Until then the iOS app only ever surfaces guest-mode UI ([WebModeScaffold]),
- * which doesn't touch any of these methods. The stub exists purely so screens
- * that take a `HortayBackend` compile on both targets.
- */
 actual class HortayBackend(
-    actual val settingsStore: SettingsStore,
+    private val auth: IosTdAuthStateMachine,
+    private val countriesRepo: CountryRepository,
+    private val channelActions: ChannelActionsRepository,
+    private val postsRepo: PostsRepository,
+    private val commentsRepo: CommentsRepository,
+    actual val folders: FoldersFacade?,
+    private val reportRepo: ReportRepository,
+    actual val reportDialogs: ReportDialogState,
     actual val reportLogStore: ReportLogStore,
     actual val reportExplainerStore: ReportExplainerStore,
+    actual val settingsStore: SettingsStore,
+    actual val stats: StatsFacade?,
+    private val backendScope: CoroutineScope,
 ) {
-    actual val stats: StatsFacade? = null
     actual val autoDownload: AutoDownloadFacade? = null
-    actual val authStage: StateFlow<AuthStage> = MutableStateFlow<AuthStage>(AuthStage.WaitPhone).asStateFlow()
-    actual val authError: StateFlow<String?> = MutableStateFlow<String?>(null).asStateFlow()
-    actual val countries: StateFlow<List<Country>> = MutableStateFlow<List<Country>>(emptyList()).asStateFlow()
-    actual val detectedCountryIso: StateFlow<String?> = MutableStateFlow<String?>(null).asStateFlow()
+    actual val translations: TranslationsFacade? = null
 
-    actual fun loadCountries() {}
-    actual suspend fun submitPhone(phoneE164: String) {}
-    actual suspend fun submitCode(code: String) {}
-    actual suspend fun submitPassword(password: String) {}
-    actual suspend fun resendCode() {}
-    actual suspend fun cancelAuth() {}
-    actual suspend fun requestPasswordRecovery() {}
-    actual suspend fun recoverPassword(code: String) {}
-    actual fun clearAuthError() {}
+    // ---- Auth -------------------------------------------------------------
+    actual val authStage: StateFlow<AuthStage> get() = auth.authStage
+    actual val authError: StateFlow<String?> get() = auth.authError
+    actual val countries: StateFlow<List<Country>> get() = countriesRepo.countries
+    actual val detectedCountryIso: StateFlow<String?> get() = countriesRepo.detectedIso
 
-    actual suspend fun channelInfo(chatId: Long): ChannelInfo? = null
-    actual suspend fun setMuted(chatId: Long, muted: Boolean) {}
-    actual suspend fun joinChat(chatId: Long) {}
-    actual suspend fun leaveChat(chatId: Long) {}
-    actual suspend fun joinByInvite(inviteLink: String): Long? = null
-    actual suspend fun userProfile(userId: Long): UserProfile? = null
+    actual fun loadCountries() = countriesRepo.load()
+    actual suspend fun submitPhone(phoneE164: String) = auth.submitPhone(phoneE164)
+    actual suspend fun submitCode(code: String) = auth.submitCode(code)
+    actual suspend fun submitPassword(password: String) = auth.submitPassword(password)
+    actual suspend fun resendCode() = auth.resendCode()
+    actual suspend fun cancelAuth() = auth.cancelAuth()
+    actual suspend fun requestPasswordRecovery() = auth.requestPasswordRecovery()
+    actual suspend fun recoverPassword(code: String) = auth.recoverPassword(code)
+    actual fun clearAuthError() = auth.clearAuthError()
+
+    // ---- Channels / users -------------------------------------------------
+    actual suspend fun channelInfo(chatId: Long): ChannelInfo? =
+        channelActions.channelInfo(chatId)
+    actual suspend fun setMuted(chatId: Long, muted: Boolean) =
+        channelActions.setMuted(chatId, muted)
+    actual suspend fun joinChat(chatId: Long) = channelActions.joinChat(chatId)
+    actual suspend fun leaveChat(chatId: Long) = channelActions.leaveChat(chatId)
+    actual suspend fun joinByInvite(inviteLink: String): Long? = channelActions.joinByInvite(inviteLink)
+    actual suspend fun userProfile(userId: Long): UserProfile? =
+        channelActions.userProfile(userId)
+
+    // ---- Links (no TelegramLinkResolver on iOS yet) -----------------------
     actual suspend fun resolveLink(uri: String): DeepLink? = null
 
-    actual val feedPosts: StateFlow<PersistentList<TimelinePost>> =
-        MutableStateFlow(persistentListOf<TimelinePost>()).asStateFlow()
-    actual val newArrivals: SharedFlow<TimelinePost> =
-        MutableSharedFlow<TimelinePost>().asSharedFlow()
-    actual val archivedChatIds: StateFlow<Set<Long>> =
-        MutableStateFlow(emptySet<Long>()).asStateFlow()
-    actual val folders: FoldersFacade? = null
+    // ---- Feed -------------------------------------------------------------
+    actual val feedPosts: StateFlow<PersistentList<TimelinePost>> get() = postsRepo.posts
+    actual val newArrivals: SharedFlow<TimelinePost> get() = postsRepo.newArrivals
+    actual val archivedChatIds: StateFlow<Set<Long>> get() = postsRepo.archivedChatIds
 
-    actual suspend fun refreshFeed() {}
-    actual suspend fun loadOlder(chatId: Long): Int = 0
-    actual suspend fun loadHistoryAround(chatId: Long, anchorMessageId: Long): Boolean = false
-    actual suspend fun openChat(chatId: Long) {}
-    actual suspend fun closeChat(chatId: Long) {}
-    actual suspend fun viewMessages(chatId: Long, messageIds: List<Long>) {}
-    actual suspend fun loadChannelHistory(chatId: Long): Result<Unit> = Result.success(Unit)
-    actual fun hasWarmChannelHistory(chatId: Long): Boolean = false
+    actual suspend fun refreshFeed() = postsRepo.refresh()
+    actual suspend fun loadOlder(chatId: Long): Int = postsRepo.loadOlder(chatId)
+    actual suspend fun loadHistoryAround(chatId: Long, anchorMessageId: Long): Boolean =
+        postsRepo.loadHistoryAround(chatId, anchorMessageId)
+    actual suspend fun openChat(chatId: Long) = postsRepo.openChat(chatId)
+    actual suspend fun closeChat(chatId: Long) = postsRepo.closeChat(chatId)
+    actual suspend fun viewMessages(chatId: Long, messageIds: List<Long>) =
+        postsRepo.viewMessages(chatId, messageIds)
+    actual suspend fun loadChannelHistory(chatId: Long): Result<Unit> =
+        postsRepo.loadChannelHistory(chatId)
+    actual fun hasWarmChannelHistory(chatId: Long): Boolean =
+        postsRepo.hasWarmChannelHistory(chatId)
 
-    actual suspend fun chatTitle(chatId: Long): String? = null
-    actual suspend fun channelSubscribers(chatId: Long): Int? = null
-    actual fun channelSubscribersCached(chatId: Long): Int? = null
-    actual suspend fun chatAvatar(chatId: Long): Pair<Int?, ByteArray?>? = null
+    actual suspend fun chatTitle(chatId: Long): String? = postsRepo.chatTitle(chatId)
+    actual suspend fun channelSubscribers(chatId: Long): Int? =
+        postsRepo.channelSubscribers(chatId)
+    actual fun channelSubscribersCached(chatId: Long): Int? =
+        postsRepo.channelSubscribersCached(chatId)
+    actual suspend fun chatAvatar(chatId: Long): Pair<Int?, ByteArray?>? =
+        postsRepo.chatAvatar(chatId)
 
-    actual suspend fun searchInChannel(chatId: Long, query: String): List<TimelinePost> = emptyList()
+    actual suspend fun searchInChannel(chatId: Long, query: String): List<TimelinePost> =
+        postsRepo.searchInChannel(chatId, query)
 
+    // ---- Reactions / polls ------------------------------------------------
     actual fun applyOptimisticReaction(
-        chatId: Long,
-        messageId: Long,
-        kind: ReactionKind,
-        nowChosen: Boolean,
-    ) {
-    }
+        chatId: Long, messageId: Long, kind: ReactionKind, nowChosen: Boolean,
+    ) = postsRepo.applyOptimisticReaction(chatId, messageId, kind, nowChosen)
 
-    actual fun applyOptimisticPollAnswer(chatId: Long, messageId: Long, chosenIndices: IntArray) {}
-    actual fun clearPollPending(chatId: Long, messageId: Long, revert: Boolean) {}
+    actual fun applyOptimisticPollAnswer(chatId: Long, messageId: Long, chosenIndices: IntArray) =
+        postsRepo.applyOptimisticPollAnswer(chatId, messageId, chosenIndices)
+
+    actual fun clearPollPending(chatId: Long, messageId: Long, revert: Boolean) =
+        postsRepo.clearPollPending(chatId, messageId, revert)
 
     actual suspend fun toggleReaction(
-        chatId: Long,
-        messageId: Long,
-        kind: ReactionKind,
-        isChosen: Boolean,
-    ): Boolean = false
+        chatId: Long, messageId: Long, kind: ReactionKind, isChosen: Boolean,
+    ): Boolean = channelActions.toggleReaction(chatId, messageId, kind, isChosen)
 
-    actual suspend fun setPollAnswer(chatId: Long, messageId: Long, optionIds: IntArray): Boolean = false
+    actual suspend fun setPollAnswer(chatId: Long, messageId: Long, optionIds: IntArray): Boolean =
+        channelActions.setPollAnswer(chatId, messageId, optionIds)
 
+    // ---- Public handle / chat kind ----------------------------------------
     actual suspend fun resolvePublicHandle(handle: String): PublicHandleResult =
-        PublicHandleResult.NotFound
-
+        postsRepo.resolvePublicHandle(handle)
     actual suspend fun resolveChatKind(chatId: Long): PublicHandleResult =
-        PublicHandleResult.NotFound
+        postsRepo.resolveChatKind(chatId)
 
+    // ---- Comments ---------------------------------------------------------
     actual fun observeThread(chatId: Long, candidateMessageIds: List<Long>): Flow<ThreadState> =
-        flowOf(ThreadState.Loading)
-
-    actual suspend fun viewThreadMessages(threadChatId: Long, messageIds: List<Long>) {}
-    actual suspend fun prefetchThread(chatId: Long, candidateMessageIds: List<Long>) {}
+        commentsRepo.observeThread(chatId, candidateMessageIds)
+    actual suspend fun viewThreadMessages(threadChatId: Long, messageIds: List<Long>) =
+        commentsRepo.viewMessages(threadChatId, messageIds)
+    actual suspend fun prefetchThread(chatId: Long, candidateMessageIds: List<Long>) =
+        commentsRepo.prefetchThread(chatId, candidateMessageIds)
     actual fun applyCommentOptimisticReaction(
-        threadChatId: Long,
-        messageId: Long,
-        current: Reactions,
-        kind: ReactionKind,
-        nowChosen: Boolean,
-    ) {
-    }
-    actual fun clearCommentOptimisticReaction(threadChatId: Long, messageId: Long) {}
-    actual suspend fun canonicalShareUrl(post: TimelinePost): String? = null
+        threadChatId: Long, messageId: Long, current: Reactions, kind: ReactionKind, nowChosen: Boolean,
+    ) = commentsRepo.applyOptimisticReaction(threadChatId, messageId, current, kind, nowChosen)
+    actual fun clearCommentOptimisticReaction(threadChatId: Long, messageId: Long) =
+        commentsRepo.clearOptimisticReaction(threadChatId, messageId)
 
-    actual val isAuthenticated: StateFlow<Boolean> = MutableStateFlow(false).asStateFlow()
-    actual suspend fun logOut() {}
-    actual val connection: StateFlow<ConnectionStatus> =
-        MutableStateFlow<ConnectionStatus>(ConnectionStatus.Connecting).asStateFlow()
-    actual val floodWaitUntilMs: StateFlow<Long> = MutableStateFlow(0L).asStateFlow()
-    actual suspend fun previewChatInvite(inviteLink: String): ChatInvitePreview? = null
-    actual fun primeCommentsForOpen(post: TimelinePost) {}
+    actual suspend fun canonicalShareUrl(post: TimelinePost): String? =
+        postsRepo.canonicalShareUrl(post)
 
-    actual val reportController: ReportFlowController = NoopReportController
-    actual val reportDialogs: ReportDialogState = ReportDialogState()
-    actual val translations: TranslationsFacade? = null
-}
+    // ---- Session ----------------------------------------------------------
+    actual val isAuthenticated: StateFlow<Boolean> = auth.authStage
+        .map { it == AuthStage.Ready }
+        .stateIn(backendScope, SharingStarted.Eagerly, auth.authStage.value == AuthStage.Ready)
 
-/** No-op stub so guest-mode iOS compiles. Never invoked in practice. */
-private object NoopReportController : ReportFlowController {
-    private val noResultStep = ReportStep(ReportState.Error("not supported"))
-    override suspend fun start(chatId: Long, messageId: Long?): ReportStep = noResultStep
-    override suspend fun selectOption(chatId: Long, messageId: Long?, option: ReportOption): ReportStep = noResultStep
-    override suspend fun submitText(chatId: Long, messageId: Long?, optionId: ByteArray, text: String): ReportStep = noResultStep
+    actual suspend fun logOut() = auth.logOut()
+    actual val connection: StateFlow<ConnectionStatus> get() = auth.connection
+    actual val floodWaitUntilMs: StateFlow<Long> get() = auth.floodWaitUntilMs
+
+    actual suspend fun previewChatInvite(inviteLink: String): ChatInvitePreview? =
+        channelActions.previewChatInvite(inviteLink)
+    actual fun primeCommentsForOpen(post: TimelinePost) = commentsRepo.primeCommentsForOpen(post)
+
+    actual val reportController: ReportFlowController get() = reportRepo
 }

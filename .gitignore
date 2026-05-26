@@ -81,3 +81,6 @@ reports/
 # out of git, regen step is part of the toolchain bootstrap. See
 # scripts/build-tdlib-apple.sh + scripts/tdapi-gen/.
 shared/src/commonMain/kotlin/dev/lyo/hortay/tdlib/TdApi.kt
+
+# iOS local secrets (mirrors local.properties for Android)
+iosApp/Local.xcconfig

@@ -53,7 +53,7 @@ class TdClient private constructor(
     private val apiId: Int,
     private val apiHash: String,
     private val settings: SettingsStore,
-) : TdSender {
+) {
 
     private val strings: StringResolver = ComposeResourcesStringResolver()
 
@@ -129,7 +129,7 @@ class TdClient private constructor(
     // entire login burst.
     private val incoming = Channel<TdApi.Update>(Channel.UNLIMITED)
     private val _updates = MutableSharedFlow<TdApi.Update>(extraBufferCapacity = 64)
-    override val updates: SharedFlow<TdApi.Update> = _updates.asSharedFlow()
+    val updates: SharedFlow<TdApi.Update> = _updates.asSharedFlow()
 
     init {
         scope.launch {
@@ -465,7 +465,7 @@ class TdClient private constructor(
      *     propagates correctly — the callback from TDLib will still fire eventually
      *     but `cont.resume` becomes a no-op once the cont completed via cancel.
      */
-    override suspend fun <T : TdApi.Object> send(query: TdApi.Function<T>): T {
+    suspend fun <T : TdApi.Object> send(query: TdApi.Function<T>): T {
         awaitFloodGate()
         return try {
             withTimeout(SEND_TIMEOUT_MS) {
@@ -638,7 +638,7 @@ class TdClient private constructor(
         }
     }
 
-    class TdException(val code: Int, message: String) : RuntimeException("[$code] $message")
+    class TdException(code: Int, message: String) : TdRpcException(code, "[$code] $message")
 
     companion object {
         // TDLib log levels: 0 = fatal, 1 = error, 2 = warning, 5 = verbose. Debug builds
@@ -679,11 +679,7 @@ class TdClient private constructor(
             TdApi.FileTypeVideoNote(),
         )
         private const val DEFAULT_CODE_LENGTH = 5
-        // Telegram's per-method rate-limit error codes. TDLib reports two distinct
-        // codes depending on which protocol layer answered: 420 (legacy MTProto,
-        // "FLOOD_WAIT_42") and 429 (newer translation, "Too Many Requests:
-        // retry after 42"). Both observed in the field — treat as equivalent.
-        fun isFloodWaitCode(code: Int): Boolean = code == 420 || code == 429
+        fun isFloodWaitCode(code: Int): Boolean = dev.lyo.hortay.data.isFloodWaitCode(code)
 
         // Shared with [registerFloodWait] and [parseFloodWaitSeconds]; matches
         // both TDLib formats — "FLOOD_WAIT_<n>" (420 / MTProto) and "retry after
@@ -705,8 +701,8 @@ class TdClient private constructor(
                 ?.groupValues?.get(1)?.toIntOrNull()
         }
 
-        /** Same as [parseFloodWaitSeconds] but for a [TdException] surfaced from [send]. */
-        fun parseFloodWaitSeconds(exception: TdException): Int? {
+        /** Same as [parseFloodWaitSeconds] but for a [TdRpcException] surfaced from [send]. */
+        fun parseFloodWaitSeconds(exception: TdRpcException): Int? {
             if (!isFloodWaitCode(exception.code)) return null
             val msg = exception.message ?: return null
             return FLOOD_WAIT_SECONDS_RX.find(msg)
