@@ -3,6 +3,7 @@ package dev.lyo.hortay.data.posts
 import dev.lyo.hortay.data.ChatPresence
 import dev.lyo.hortay.data.ConnectionStatus
 import dev.lyo.hortay.data.FeedSource
+import dev.lyo.hortay.data.TdRpcException
 import dev.lyo.hortay.data.IgnoredChannelsStore
 import dev.lyo.hortay.data.MessageContentMapper
 import dev.lyo.hortay.data.MessageMapper
@@ -12,13 +13,15 @@ import dev.lyo.hortay.data.ReactionKind
 import dev.lyo.hortay.data.ReactionTogglePolicy
 import dev.lyo.hortay.data.Reactions
 import dev.lyo.hortay.data.StringResolver
-import dev.lyo.hortay.data.TdClient
 import dev.lyo.hortay.data.TdSender
 import dev.lyo.hortay.data.TimelinePost
 import dev.lyo.hortay.data.TimelineSnapshotStore
 import dev.lyo.hortay.data.UserMessageBus
 import dev.lyo.hortay.data.surfaceTo
 import dev.lyo.hortay.data.warnUnlessCancelled
+import dev.lyo.hortay.nowMs
+import dev.lyo.hortay.tdlib.TdApi
+import kotlinx.atomicfu.atomic
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.PersistentMap
 import kotlinx.collections.immutable.persistentListOf
@@ -52,9 +55,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import org.drinkless.tdlib.TdApi
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicBoolean
 import hortay.shared.generated.resources.Res
 import hortay.shared.generated.resources.op_load_channel
 import hortay.shared.generated.resources.op_load_older
@@ -178,7 +178,7 @@ class PostsRepository(
      * worker. Consumers that miss the cache fall back to `td.send(GetChat)`
      * and re-populate.
      */
-    private val chatCache = ConcurrentHashMap<Long, TdApi.Chat>()
+    private val chatCache = HashMap<Long, TdApi.Chat>()
 
     /**
      * Supergroup metadata mirror, fed by [TdApi.UpdateSupergroup]. TDLib emits
@@ -204,7 +204,7 @@ class PostsRepository(
      * suspending fallback could call `td.send(GetSupergroup)` directly,
      * but the cache is the only synchronous path.
      */
-    private val supergroupCache = ConcurrentHashMap<Long, TdApi.Supergroup>()
+    private val supergroupCache = HashMap<Long, TdApi.Supergroup>()
 
     /**
      * Test-only accessor. Exposes the internal chat cache so unit tests can verify that
@@ -220,7 +220,7 @@ class PostsRepository(
 
     // Stamped on successful refreshLocked completion. refreshIfStale uses it to skip
     // re-opening the app from hammering 200+ TDLib calls when the feed is still warm.
-    @Volatile
+    @kotlin.concurrent.Volatile
     private var lastRefreshAtMs: Long = 0L
 
     // Album coalescing: TDLib emits one UpdateNewMessage per album member with no
@@ -253,8 +253,8 @@ class PostsRepository(
     // (layer 2), "5-photo album restore on relaunch" / "Snapshot preserves
     // saved album siblings" / "Editing an album caption no longer collapses"
     // (layer 3).
-    private val albumBuffers = ConcurrentHashMap<Pair<Long, Long>, MutableList<TdApi.Message>>()
-    private val albumDebounce = ConcurrentHashMap<Pair<Long, Long>, Job>()
+    private val albumBuffers = HashMap<Pair<Long, Long>, MutableList<TdApi.Message>>()
+    private val albumDebounce = HashMap<Pair<Long, Long>, Job>()
 
     // Single-flight + cooldown for deep channel-history loads. Re-entering the same
     // channel filter within DEEP_LOAD_COOLDOWN_MS reuses the previous load (no second
@@ -264,8 +264,8 @@ class PostsRepository(
     // no-op (empty batch, non-channel chat). The cooldown gate honours that
     // distinction so a transient empty success doesn't strand a channel for
     // DEEP_LOAD_COOLDOWN_MS.
-    private val deepLoadJobs = ConcurrentHashMap<Long, Deferred<Result<Boolean>>>()
-    private val deepLoadCooldownUntilMs = ConcurrentHashMap<Long, Long>()
+    private val deepLoadJobs = HashMap<Long, Deferred<Result<Boolean>>>()
+    private val deepLoadCooldownUntilMs = HashMap<Long, Long>()
 
     // Coalescing buffer for UpdateMessageInteractionInfo. On busy days these arrive in
     // dozens-per-second bursts for *every* channel in the user's list (not just visible
@@ -276,8 +276,8 @@ class PostsRepository(
     // UpdateMessageInteractionInfo with null `interactionInfo` (which the original
     // per-field-fallback handler treated as a no-op), so we drop those at the entry.
     private val pendingInteractionInfo =
-        ConcurrentHashMap<Pair<Long, Long>, TdApi.MessageInteractionInfo>()
-    private val interactionFlushScheduled = AtomicBoolean(false)
+        HashMap<Pair<Long, Long>, TdApi.MessageInteractionInfo>()
+    private val interactionFlushScheduled = atomic(false)
 
     private val _posts = MutableStateFlow<PersistentList<TimelinePost>>(persistentListOf())
     override val posts: StateFlow<PersistentList<TimelinePost>> = _posts.asStateFlow()
@@ -777,7 +777,7 @@ class PostsRepository(
     override suspend fun refresh() {
         refreshMutex.withLock {
             runCatching { refreshLocked() }
-                .onSuccess { lastRefreshAtMs = System.currentTimeMillis() }
+                .onSuccess { lastRefreshAtMs = nowMs() }
                 .warnUnlessCancelled("refresh")
                 .onFailure { it.surfaceTo(userMessages, res, Res.string.op_refresh_feed, connection.value) }
         }
@@ -789,9 +789,9 @@ class PostsRepository(
      */
     override suspend fun refreshIfStale() {
         refreshMutex.withLock {
-            if (System.currentTimeMillis() - lastRefreshAtMs <= REFRESH_STALE_MS) return@withLock
+            if (nowMs() - lastRefreshAtMs <= REFRESH_STALE_MS) return@withLock
             runCatching { refreshLocked() }
-                .onSuccess { lastRefreshAtMs = System.currentTimeMillis() }
+                .onSuccess { lastRefreshAtMs = nowMs() }
                 .warnUnlessCancelled("refreshIfStale")
                 .onFailure { it.surfaceTo(userMessages, res, Res.string.op_refresh_feed, connection.value) }
         }
@@ -840,19 +840,19 @@ class PostsRepository(
      */
     fun hasWarmChannelHistory(chatId: Long): Boolean {
         val until = deepLoadCooldownUntilMs[chatId] ?: return false
-        return System.currentTimeMillis() < until
+        return nowMs() < until
     }
 
     suspend fun loadChannelHistory(chatId: Long, limit: Int = 80): Result<Unit> {
-        val now = System.currentTimeMillis()
+        val now = nowMs()
         deepLoadCooldownUntilMs[chatId]?.let { until ->
             if (now < until) return Result.success(Unit)
         }
-        val deferred = deepLoadJobs.computeIfAbsent(chatId) {
+        val deferred = deepLoadJobs.getOrPut(chatId) {
             scope.async { runCatching { loadChannelHistoryLocked(chatId, limit) } }
         }
         val result = deferred.await()
-        deepLoadJobs.remove(chatId, deferred)
+        if (deepLoadJobs[chatId] === deferred) deepLoadJobs.remove(chatId)
         // Mark cooldown only if we actually loaded posts. A "successful empty
         // batch" result (chat became inaccessible mid-load, transient TDLib
         // reject swallowed by getOrNull, GetChatHistory returned empty list)
@@ -861,7 +861,7 @@ class PostsRepository(
         // [Result<Boolean>] contract: true = at least one mapped post landed,
         // false = success-shaped no-op.
         if (result.getOrNull() == true) {
-            deepLoadCooldownUntilMs[chatId] = System.currentTimeMillis() + DEEP_LOAD_COOLDOWN_MS
+            deepLoadCooldownUntilMs[chatId] = nowMs() + DEEP_LOAD_COOLDOWN_MS
         }
         return result
             .map { Unit }
@@ -939,8 +939,8 @@ class PostsRepository(
     suspend fun closeChat(chatId: Long) = ChatPresence.closeChat(td, chatId)
 
     /** Per-channel "we already paginated to the bottom of TDLib's local store" sentinel. */
-    private val pageEnded = ConcurrentHashMap.newKeySet<Long>()
-    private val pageJobs = ConcurrentHashMap<Long, Deferred<Result<Int>>>()
+    private val pageEnded = mutableSetOf<Long>()
+    private val pageJobs = HashMap<Long, Deferred<Result<Int>>>()
 
     /**
      * Pull older posts for a channel, anchored on the oldest post we currently render.
@@ -953,13 +953,13 @@ class PostsRepository(
      */
     suspend fun loadOlder(chatId: Long, limit: Int = 30): Int {
         if (chatId in pageEnded) return 0
-        val deferred = pageJobs.computeIfAbsent(chatId) {
+        val deferred = pageJobs.getOrPut(chatId) {
             scope.async {
                 runCatching { loadOlderLocked(chatId, limit) }
             }
         }
         val result = deferred.await()
-        pageJobs.remove(chatId, deferred)
+        if (pageJobs[chatId] === deferred) pageJobs.remove(chatId)
         return result
             .warnUnlessCancelled(TAG, "loadOlder($chatId)")
             .onFailure { it.surfaceTo(userMessages, res, Res.string.op_load_older, connection.value) }
@@ -1197,7 +1197,7 @@ class PostsRepository(
         val chat = runCatching { td.send(TdApi.SearchPublicChat(cleaned)) }
             .warnUnlessCancelled(TAG, "resolvePublicHandle($cleaned)")
             .getOrNull() ?: return PublicHandleResult.NotFound
-        chatCache.putIfAbsent(chat.id, chat)
+        if (chat.id !in chatCache) chatCache[chat.id] = chat
         return chat.toPublicHandleResult()
     }
 
@@ -1324,9 +1324,7 @@ class PostsRepository(
         // every accumulated member in a single _posts.update so PostFilterStrategy
         // sees them as one group.
         val key = message.chatId to message.mediaAlbumId
-        albumBuffers.compute(key) { _, existing ->
-            (existing ?: mutableListOf()).also { it += message }
-        }
+        albumBuffers.getOrPut(key) { mutableListOf() }.also { it += message }
         albumDebounce[key]?.cancel()
         albumDebounce[key] = scope.launch {
             delay(ALBUM_DEBOUNCE_MS)
@@ -1503,13 +1501,13 @@ class PostsRepository(
      */
     private fun handleInteractionInfo(update: TdApi.UpdateMessageInteractionInfo) {
         // null interactionInfo: original handler resolved every field to its current value
-        // (effectively no-op). Drop here so the buffer stays non-null for ConcurrentHashMap.
+        // (effectively no-op). Drop here so the buffer stays non-null for HashMap.
         val info = update.interactionInfo ?: return
         pendingInteractionInfo[update.chatId to update.messageId] = info
         if (interactionFlushScheduled.compareAndSet(false, true)) {
             scope.launch {
                 delay(INTERACTION_INFO_COALESCE_MS)
-                interactionFlushScheduled.set(false)
+                interactionFlushScheduled.value = false
                 flushPendingInteractionInfo()
             }
         }
@@ -1991,7 +1989,7 @@ class PostsRepository(
             supergroupCache.clear()
             _chatReadCursors.value = persistentMapOf()
             pendingInteractionInfo.clear()
-            interactionFlushScheduled.set(false)
+            interactionFlushScheduled.value = false
             albumBuffers.clear()
             albumDebounce.values.forEach { it.cancel() }
             albumDebounce.clear()
@@ -2025,7 +2023,7 @@ class PostsRepository(
         repeat(MAX_LOAD_CHATS_PAGES) {
             val res = runCatching { td.send(TdApi.LoadChats(list, CHAT_LIST_HINT)) }
             val err = res.exceptionOrNull()
-            if (err is TdClient.TdException && err.code == 404) return
+            if (err is TdRpcException && err.code == 404) return
             // Any other failure: retry on the next iteration; the bounded loop guards
             // against an infinite retry storm if TDLib stays unhealthy.
         }

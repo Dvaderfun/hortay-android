@@ -38,22 +38,21 @@ kotlin {
         withHostTest {}
     }
 
-    // iOS targets. Kotlin/Native compilation requires macOS + Xcode 16+; Gradle
-    // configures the targets fine on any host (tasks appear in :shared:tasks),
-    // but `compileKotlinIosArm64` / `linkDebugFrameworkIosArm64` only run on Mac.
-    // TDLib is Android-only for v1 — iosMain provides a stub TdClient so the iOS
-    // app boots straight into WebModeScaffold (guest-mode). Full TDLib iOS port
-    // is a separate track (cinterop + cross-compiled libtdjni.xcframework).
-    listOf(
-        iosArm64(),
-        iosSimulatorArm64(),
-    ).forEach { iosTarget ->
-        iosTarget.binaries.framework {
+    // iOS target: arm64 device only. Kotlin/Native compilation requires
+    // macOS + Xcode 16+. TDLib is cross-compiled for ios-arm64 via cinterop;
+    // simulator slices are not supported (no libtdjson for simulator).
+    iosArm64 {
+        binaries.framework {
             baseName = "Shared"
-            // Static framework: smaller binary, no dyld lookups for shared-module
-            // symbols. CMP's recommended default for iOS apps that don't expose
-            // the framework to third-party Swift packages.
             isStatic = true
+        }
+        compilations.getByName("main").cinterops.create("tdjson") {
+            defFile = project.file("src/iosArm64Main/cinterop/tdjson.def")
+            packageName = "dev.lyo.hortay.tdlib.native"
+            val tdlibAppleDir = rootProject.layout.projectDirectory
+                .dir("libtdlib/build/apple/libtdlight.xcframework/ios-arm64")
+            includeDirs(tdlibAppleDir.dir("Headers"))
+            extraOpts("-libraryPath", tdlibAppleDir.asFile.absolutePath)
         }
     }
 
@@ -198,25 +197,21 @@ kotlin {
         }
 
         // iosMain intermediate source set — code shared between iosArm64 and
-        // iosSimulatorArm64. Per-target source sets (iosArm64Main, etc.) are
-        // auto-created by the KMP plugin; we wire them to depend on iosMain
-        // so platform-specific actuals can live in one place.
-        val iosMain by creating {
-            dependsOn(commonMain.get())
-            dependencies {
-                // Darwin engine for Ktor — uses NSURLSession on iOS.
-                // Apple-side connection pooling + caching come from URLCache,
-                // configured via the engine block at construction time.
-                implementation(libs.ktor.client.darwin)
+        // iosSimulatorArm64. The default Kotlin hierarchy template (enabled
+        // by default in K2) auto-creates `iosMain` and wires both
+        // per-target sets to `dependsOn(iosMain)` for us, so we just attach
+        // dependencies here.
+        iosMain.dependencies {
+            // Darwin engine for Ktor — uses NSURLSession on iOS. Apple-side
+            // connection pooling + caching come from URLCache, configured
+            // via the engine block at construction time.
+            implementation(libs.ktor.client.darwin)
 
-                // Native SQLDelight driver for iOS targets — wraps the system
-                // sqlite3 library via cinterop. Same query API as
-                // AndroidSqliteDriver, different open/close lifecycle.
-                implementation(libs.sqldelight.native.driver)
-            }
+            // Native SQLDelight driver for iOS targets — wraps the system
+            // sqlite3 library via cinterop. Same query API as
+            // AndroidSqliteDriver, different open/close lifecycle.
+            implementation(libs.sqldelight.native.driver)
         }
-        val iosArm64Main by getting { dependsOn(iosMain) }
-        val iosSimulatorArm64Main by getting { dependsOn(iosMain) }
     }
 }
 

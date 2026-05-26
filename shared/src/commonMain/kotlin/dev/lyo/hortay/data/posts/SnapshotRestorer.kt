@@ -1,6 +1,6 @@
 package dev.lyo.hortay.data.posts
 
-import android.util.Log
+import dev.lyo.hortay.PlatformLog
 import dev.lyo.hortay.data.PostFilterStrategy
 import dev.lyo.hortay.data.TimelinePost
 import kotlinx.collections.immutable.PersistentList
@@ -85,7 +85,7 @@ internal fun foldRawIntoCurrent(
         // runCatching keeps the helper unit-testable on the JVM where the
         // android.util.Log static stubs throw "not mocked" by default.
         runCatching {
-            Log.w("PostsRepository", "preserving ${partialAlbumKeys.size} merged album(s) over partial raw batch")
+            PlatformLog.w("PostsRepository", "preserving ${partialAlbumKeys.size} merged album(s) over partial raw batch")
         }
     }
     val rawSafe = if (partialAlbumKeys.isEmpty()) raw

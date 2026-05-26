@@ -14,8 +14,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import org.drinkless.tdlib.TdApi
-import java.util.concurrent.ConcurrentHashMap
+import dev.lyo.hortay.tdlib.TdApi
 
 /**
  * Mirror of the user's Telegram chat folders ("filters"). Both the folder *list*
@@ -66,7 +65,7 @@ class ChatFoldersRepository(
     private val _fullFolders = MutableStateFlow<Map<Int, TdApi.ChatFolder>>(emptyMap())
     val fullFolders: StateFlow<Map<Int, TdApi.ChatFolder>> = _fullFolders.asStateFlow()
 
-    private val fullFoldersCache = ConcurrentHashMap<Int, TdApi.ChatFolder>()
+    private val fullFoldersCache = HashMap<Int, TdApi.ChatFolder>()
 
     private val _folderChatIds = MutableStateFlow<Map<Int, Set<Long>>>(emptyMap())
     override val folderChatIds: StateFlow<Map<Int, Set<Long>>> = _folderChatIds.asStateFlow()
@@ -82,7 +81,7 @@ class ChatFoldersRepository(
 
     // Serialise the drain+get pair per folder so two concurrent callers don't both
     // pay the LoadChats round-trip when the answer is already in flight.
-    private val folderChatIdsMutex = ConcurrentHashMap<Int, Mutex>()
+    private val folderChatIdsMutex = HashMap<Int, Mutex>()
 
     init {
         // TDLib emits an UpdateChatFolders shortly after auth, then again whenever the user
@@ -220,7 +219,7 @@ class ChatFoldersRepository(
         repeat(MAX_LOAD_CHATS_PAGES) {
             val res = runCatching { td.send(TdApi.LoadChats(list, CHAT_LIST_HINT)) }
             val err = res.exceptionOrNull()
-            if (err is TdClient.TdException && err.code == 404) return
+            if (err is TdRpcException && err.code == 404) return
         }
     }
 

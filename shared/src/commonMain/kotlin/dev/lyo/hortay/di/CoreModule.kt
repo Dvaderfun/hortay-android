@@ -7,6 +7,8 @@ import dev.lyo.hortay.data.NavStack
 import dev.lyo.hortay.data.StringResolver
 import dev.lyo.hortay.data.UserMessageBus
 import dev.lyo.hortay.data.report.ReportDialogState
+import dev.lyo.hortay.PlatformLog
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -24,7 +26,12 @@ import org.koin.dsl.module
  * dismiss / deep-link routing). See each class's KDoc for the rationale.
  */
 val coreModule = module {
-    single<CoroutineScope> { CoroutineScope(SupervisorJob() + Dispatchers.Default) }
+    single<CoroutineScope> {
+        val handler = CoroutineExceptionHandler { _, t ->
+            PlatformLog.w("AppScope", "Unhandled coroutine exception: ${t::class.simpleName}: ${t.message}", t)
+        }
+        CoroutineScope(SupervisorJob() + Dispatchers.Default + handler)
+    }
     single { UserMessageBus() }
     single { LinkDialogState() }
     single { ReportDialogState() }

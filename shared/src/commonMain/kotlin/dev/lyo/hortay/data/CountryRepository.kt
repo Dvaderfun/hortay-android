@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import org.drinkless.tdlib.TdApi
+import dev.lyo.hortay.tdlib.TdApi
 import hortay.shared.generated.resources.Res
 import hortay.shared.generated.resources.country_anonymous_numbers
 import hortay.shared.generated.resources.country_other
@@ -69,7 +69,7 @@ class CountryRepository(
     private val _detectedIso = MutableStateFlow<String?>(null)
     val detectedIso: StateFlow<String?> = _detectedIso.asStateFlow()
 
-    @Volatile private var loaded = false
+    @kotlin.concurrent.Volatile private var loaded = false
     private val loadMutex = Mutex()
 
     /**
@@ -153,5 +153,20 @@ internal fun isoToFlagEmoji(iso: String): String {
     val base = 0x1F1E6
     val first = base + (a - 'A')
     val second = base + (b - 'A')
-    return String(Character.toChars(first)) + String(Character.toChars(second))
+    return buildString {
+        appendCodePoint(first)
+        appendCodePoint(second)
+    }
+}
+
+private fun StringBuilder.appendCodePoint(codePoint: Int): StringBuilder {
+    if (codePoint in 0..0xFFFF) {
+        append(codePoint.toChar())
+    } else {
+        val hi = ((codePoint - 0x10000) shr 10) + 0xD800
+        val lo = ((codePoint - 0x10000) and 0x3FF) + 0xDC00
+        append(hi.toChar())
+        append(lo.toChar())
+    }
+    return this
 }

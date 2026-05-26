@@ -1,7 +1,7 @@
 package dev.lyo.hortay.data
 
 import kotlinx.coroutines.flow.StateFlow
-import org.drinkless.tdlib.TdApi
+import dev.lyo.hortay.tdlib.TdApi
 import hortay.shared.generated.resources.Res
 import hortay.shared.generated.resources.op_change_reaction
 import hortay.shared.generated.resources.op_close_poll
@@ -100,7 +100,7 @@ class ChannelActionsRepository(
         optionIds: IntArray,
     ): Boolean {
         val outcome = runCatching {
-            td.send(TdApi.SetPollAnswer(chatId, messageId, optionIds))
+            td.send(TdApi.SetPollAnswer(chatId, messageId, optionIds.toTypedArray()))
         }
             .warnUnlessCancelled(TAG, "setPollAnswer(chat=$chatId msg=$messageId, n=${optionIds.size})")
             .onFailure { it.surfaceTo(userMessages, res, Res.string.op_vote_in_poll, connection.value) }

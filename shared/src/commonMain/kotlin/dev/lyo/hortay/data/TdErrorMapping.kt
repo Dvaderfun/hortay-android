@@ -14,11 +14,10 @@ import hortay.shared.generated.resources.err_no_connection
 import hortay.shared.generated.resources.err_not_found
 import hortay.shared.generated.resources.err_server
 import hortay.shared.generated.resources.err_unauthorized
-import hortay.shared.generated.resources.op_refresh_feed
 
 /**
  * Categorisation of a TDLib failure into a small set of user-meaningful kinds. The
- * raw [TdClient.TdException.code] is too granular to drive UI off — an error code
+ * raw [TdRpcException.code] is too granular to drive UI off — an error code
  * tells you the protocol bucket but not "should I tell the user, should I retry,
  * should I shrug it off because they're offline anyway".
  *
@@ -61,14 +60,12 @@ fun Throwable.toUserFacing(
     operationRes: StringResource,
 ): Pair<TdErrorKind, String> {
     if (this is CancellationException) throw this
-    val code = (this as? TdClient.TdException)?.code ?: 0
+    val code = (this as? TdRpcException)?.code ?: 0
     val raw = stripCode(this.message.orEmpty())
     val operation = res.getString(operationRes)
 
     return when {
-        // Both 420 (legacy MTProto) and 429 (translated layer) signify rate limiting;
-        // see [TdClient.isFloodWaitCode] for the rationale.
-        TdClient.isFloodWaitCode(code) -> {
+        isFloodWaitCode(code) -> {
             val seconds = parseLeadingDigits(raw)
             val human = seconds?.let { humaniseSeconds(res, it) }
             val msg = if (human != null) res.getString(Res.string.err_flood_with_time, human)
@@ -143,11 +140,3 @@ private fun severityFor(kind: TdErrorKind): UserMessageBus.Severity = when (kind
     else -> UserMessageBus.Severity.Error
 }
 
-/**
- * True when this throwable is TDLib's documented silent-no-op sentinel (code 406). Callers
- * with optimistic UI (poll vote, reaction toggle) treat a 406 outcome as success so the
- * authoritative `UpdateMessageContent` / `UpdateMessageInteractionInfo` is what flips the
- * chip — never a snackbar that TDLib explicitly forbids.
- */
-internal fun Throwable?.isTdSilent(): Boolean =
-    (this as? TdClient.TdException)?.code == 406

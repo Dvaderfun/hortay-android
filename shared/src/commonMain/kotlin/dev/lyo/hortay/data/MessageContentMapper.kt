@@ -2,7 +2,7 @@ package dev.lyo.hortay.data
 
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toPersistentList
-import org.drinkless.tdlib.TdApi
+import dev.lyo.hortay.tdlib.TdApi
 import hortay.shared.generated.resources.Res
 import hortay.shared.generated.resources.content_game
 import hortay.shared.generated.resources.content_gift
@@ -250,7 +250,7 @@ internal object MessageContentMapper {
             title = res.getString(Res.string.content_gift),
         )
         is TdApi.MessagePaidMedia -> mapPaidMedia(content, res)
-        else -> PostContent.Unsupported(content::class.java.simpleName)
+        else -> PostContent.Unsupported(content::class.simpleName ?: "Unknown")
     }
 
     /**
@@ -550,16 +550,16 @@ internal object MessageContentMapper {
         }
         // optionOrder is a permutation of indices; when present, render in that sequence.
         // Empty/malformed → fall back to natural order.
-        val order: IntArray? = poll.optionOrder
-        val ordered = if (order != null && order.isNotEmpty() && order.size == mapped.size) {
-            val reordered = order.asList().mapNotNull { mapped.getOrNull(it) }
+        val order: Array<Int> = poll.optionOrder
+        val ordered = if (order.isNotEmpty() && order.size == mapped.size) {
+            val reordered = order.mapNotNull { mapped.getOrNull(it) }
             if (reordered.size == mapped.size) reordered else mapped
         } else {
             mapped
         }
         val kind = when (val t = poll.type) {
             is TdApi.PollTypeQuiz -> PollKind.Quiz(
-                correctOptionIds = (t.correctOptionIds ?: IntArray(0)).toList().toImmutableList(),
+                correctOptionIds = t.correctOptionIds.toList().toImmutableList(),
                 explanation = mapFormattedText(t.explanation),
             )
             else -> {

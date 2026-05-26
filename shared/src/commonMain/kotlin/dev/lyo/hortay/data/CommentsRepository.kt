@@ -16,9 +16,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.launch
-import org.drinkless.tdlib.TdApi
-import java.util.Collections
-import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import dev.lyo.hortay.tdlib.TdApi
 import hortay.shared.generated.resources.Res
 import hortay.shared.generated.resources.comments_unavailable
 
@@ -84,7 +84,7 @@ class CommentsRepository(
     // positive (Resolved) and negative (NoThread) outcomes are cached so a
     // post that genuinely has no comments doesn't keep re-firing
     // GetMessageProperties + GetMessageThread on every viewport stable.
-    private val resolvedAnchors = ConcurrentHashMap<Pair<Long, Long>, AnchorResolution>()
+    private val resolvedAnchors = HashMap<Pair<Long, Long>, AnchorResolution>()
 
     /**
      * In-flight [ensureAnchor] requests. Concurrent callers (e.g. [prefetchThread]
@@ -94,7 +94,7 @@ class CommentsRepository(
      * for free. The deferred lets the second caller `await` the first caller's
      * result; the entry is removed once the answer is cached.
      */
-    private val inflightAnchors = ConcurrentHashMap<Pair<Long, Long>, CompletableDeferred<AnchorResolution?>>()
+    private val inflightAnchors = HashMap<Pair<Long, Long>, CompletableDeferred<AnchorResolution?>>()
 
     // Anchors we already warmed in this session via [prefetchThread]. Without this
     // dedup the same thread re-runs `GetMessageThreadHistory` every time the
@@ -106,7 +106,7 @@ class CommentsRepository(
     // session, and a tap-driven [observeThread] still fetches fresh history if
     // the prefetched batch doesn't cover the viewport. ~16 bytes per entry, on
     // par with [resolvedAnchors].
-    private val prefetchedAnchors = ConcurrentHashMap.newKeySet<Pair<Long, Long>>()
+    private val prefetchedAnchors = mutableSetOf<Pair<Long, Long>>()
 
     /**
      * Optimistic reaction overrides keyed by `(threadChatId, messageId)`. Populated by
@@ -119,7 +119,7 @@ class CommentsRepository(
      * Survives the [SharingStarted.WhileSubscribed] linger so a scroll-out + scroll-in
      * inside the 30 s window picks the override back up. Cleared by [clear] on logout.
      */
-    private val optimisticOverrides = ConcurrentHashMap<Pair<Long, Long>, Reactions>()
+    private val optimisticOverrides = HashMap<Pair<Long, Long>, Reactions>()
 
     /**
      * Side-channel that nudges the active [threadFlow] to re-emit when an override
@@ -130,24 +130,12 @@ class CommentsRepository(
      */
     private val invalidations = MutableSharedFlow<Pair<Long, Long>>(extraBufferCapacity = 64)
 
-    // Bounded LRU. accessOrder=true bumps an entry to most-recently-used on every
-    // get/put; removeEldestEntry caps the size and lets the JVM GC the dropped
-    // SharedFlow once its WhileSubscribed upstream cancels. Synchronized at the map
-    // level because LinkedHashMap is not thread-safe — the hot path inside the
-    // synchronized block is a single SharedFlow construction (no IO, no suspend), so
-    // contention is irrelevant in practice.
-    private val streams: MutableMap<Pair<Long, Long>, SharedFlow<ThreadState>> =
-        Collections.synchronizedMap(
-            object : LinkedHashMap<Pair<Long, Long>, SharedFlow<ThreadState>>(
-                /* initialCapacity */ 16,
-                /* loadFactor */ 0.75f,
-                /* accessOrder */ true,
-            ) {
-                override fun removeEldestEntry(
-                    eldest: MutableMap.MutableEntry<Pair<Long, Long>, SharedFlow<ThreadState>>,
-                ): Boolean = size > MAX_CACHED_THREADS
-            },
-        )
+    // Bounded cache. KMP LinkedHashMap preserves insertion order (no accessOrder
+    // LRU), so this is FIFO eviction rather than true LRU — acceptable for a
+    // thread-stream cache where the oldest entry is usually the least relevant.
+    // Guarded by [streamsMutex] since LinkedHashMap is not thread-safe.
+    private val streams = LinkedHashMap<Pair<Long, Long>, SharedFlow<ThreadState>>()
+    private val streamsLock = kotlinx.atomicfu.locks.SynchronizedObject()
 
     /**
      * Background warm-up for posts lingering in the viewport. Resolves the anchor AND
@@ -231,10 +219,14 @@ class CommentsRepository(
         val anchorKey = candidateMessageIds.minOrNull()
             ?: return flowOf(ThreadState.Error(unavailableMsg))
         val key = chatId to anchorKey
-        return synchronized(streams) {
+        return kotlinx.atomicfu.locks.synchronized(streamsLock) {
             streams.getOrPut(key) {
                 threadFlow(chatId, candidateMessageIds, limit)
                     .shareIn(scope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), replay = 1)
+            }.also {
+                while (streams.size > MAX_CACHED_THREADS) {
+                    streams.remove(streams.keys.first())
+                }
             }
         }
     }
@@ -383,13 +375,15 @@ class CommentsRepository(
         // null on cancellation/exception) and removes its in-flight entry, so
         // subsequent callers see the final cached value via [resolvedAnchors].
         val ours = CompletableDeferred<AnchorResolution?>()
-        val existing = inflightAnchors.putIfAbsent(key, ours)
+        val existing = inflightAnchors[key]
         if (existing != null) {
             return when (val r = existing.await()) {
                 is AnchorResolution.Resolved -> r.anchor
-                AnchorResolution.NoThread, null -> null
+                AnchorResolution.NoThread -> null
+                null -> null
             }
         }
+        inflightAnchors[key] = ours
 
         try {
             // Standalone post (non-album): GetMessageThread succeeds against the
@@ -423,7 +417,7 @@ class CommentsRepository(
                     probeResult.fold(
                         onSuccess = { it.canGetMessageThread == true },
                         onFailure = { err ->
-                            val code = (err as? TdClient.TdException)?.code ?: 0
+                            val code = (err as? TdRpcException)?.code ?: 0
                             if (code != 400) allProbesAuthoritative = false
                             false
                         },
@@ -475,7 +469,7 @@ class CommentsRepository(
                     // we cache only 400 — false-positive caching on a rare
                     // 401/403 just leaks the same retry budget the old code
                     // had. 429 / 500-599 / 0 (network) — never cache.
-                    val code = (err as? TdClient.TdException)?.code ?: 0
+                    val code = (err as? TdRpcException)?.code ?: 0
                     if (code == 400) {
                         resolvedAnchors[key] = AnchorResolution.NoThread
                         ours.complete(AnchorResolution.NoThread)
@@ -495,7 +489,7 @@ class CommentsRepository(
             ours.complete(null)
             throw t
         } finally {
-            inflightAnchors.remove(key, ours)
+            if (inflightAnchors[key] === ours) inflightAnchors.remove(key)
         }
     }
 
@@ -764,7 +758,7 @@ class CommentsRepository(
     fun clear() {
         resolvedAnchors.clear()
         optimisticOverrides.clear()
-        synchronized(streams) { streams.clear() }
+        kotlinx.atomicfu.locks.synchronized(streamsLock) { streams.clear() }
     }
 
     private companion object {

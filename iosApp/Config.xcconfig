@@ -1,0 +1,3 @@
+// Shared build settings for iosApp.
+// Local.xcconfig (gitignored) supplies TELEGRAM_API_ID / TELEGRAM_API_HASH.
+#include? "Local.xcconfig"

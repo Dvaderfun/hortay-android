@@ -6,10 +6,11 @@
 package dev.lyo.hortay.data.report
 
 import dev.lyo.hortay.data.StringResolver
-import dev.lyo.hortay.data.TdClient
+import dev.lyo.hortay.data.TdRpcException
 import dev.lyo.hortay.data.TdSender
+import dev.lyo.hortay.data.isFloodWaitCode
 import kotlinx.collections.immutable.toImmutableList
-import org.drinkless.tdlib.TdApi
+import dev.lyo.hortay.tdlib.TdApi
 import hortay.shared.generated.resources.Res
 import hortay.shared.generated.resources.error_generic
 
@@ -65,8 +66,8 @@ class ReportRepository(
         optionId: ByteArray,
         text: String,
     ): ReportStep {
-        val messageIds = if (messageId != null && messageId != 0L) longArrayOf(messageId)
-        else longArrayOf()
+        val messageIds = if (messageId != null && messageId != 0L) arrayOf(messageId)
+        else arrayOf()
         val result = runCatching {
             td.send(TdApi.ReportChat(chatId, optionId, messageIds, text))
         }
@@ -118,9 +119,10 @@ class ReportRepository(
         messageId: Long?,
         e: Throwable,
     ): ReportState {
-        val tdEx = e as? TdClient.TdException
-        if (tdEx != null && TdClient.isFloodWaitCode(tdEx.code)) {
-            val seconds = TdClient.parseFloodWaitSeconds(tdEx) ?: 0
+        val tdEx = e as? TdRpcException
+        if (tdEx != null && isFloodWaitCode(tdEx.code)) {
+            val seconds = Regex("(?:FLOOD_WAIT_|retry after )(\\d+)")
+                .find(tdEx.message.orEmpty())?.groupValues?.get(1)?.toIntOrNull() ?: 0
             logTerminal("tdlib", "failed", chatId, messageId)
             return ReportState.FloodWait(seconds)
         }
@@ -137,7 +139,7 @@ class ReportRepository(
     ) {
         log.log(
             ReportLogEntry(
-                timestamp = System.currentTimeMillis(),
+                timestamp = dev.lyo.hortay.nowMs(),
                 mode = "auth",
                 channelUsername = null,
                 chatId = chatId,
