@@ -20,6 +20,6 @@ import kotlinx.collections.immutable.ImmutableList
 @Immutable
 sealed interface ThreadState {
     data object Loading : ThreadState
-    data class Ready(val rows: ImmutableList<ThreadRow>, val threadChatId: Long) : ThreadState
+    data class Ready(val rows: ImmutableList<ThreadRow>, val threadChatId: ChatId) : ThreadState
     data class Error(val message: String) : ThreadState
 }

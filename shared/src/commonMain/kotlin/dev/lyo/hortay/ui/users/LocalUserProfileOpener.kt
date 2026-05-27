@@ -1,6 +1,7 @@
 package dev.lyo.hortay.ui.users
 
 import androidx.compose.runtime.staticCompositionLocalOf
+import dev.lyo.hortay.data.UserId
 
 /**
  * Functional handle that opens the [UserProfileSheet] for a given TDLib user id.
@@ -24,5 +25,5 @@ val LocalUserProfileOpener = staticCompositionLocalOf<UserProfileOpener> {
 
 /** Functional type so we can keep stable identity for equality without lambda boxing. */
 fun interface UserProfileOpener {
-    fun open(userId: Long)
+    fun open(userId: UserId)
 }

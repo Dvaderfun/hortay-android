@@ -1,8 +1,10 @@
 package dev.lyo.hortay.di
 
 import dev.lyo.hortay.data.BookmarkStore
+import dev.lyo.hortay.data.ChatId
 import dev.lyo.hortay.data.FeedSource
 import dev.lyo.hortay.data.HortayBackend
+import dev.lyo.hortay.data.MessageId
 import dev.lyo.hortay.ui.timeline.ChannelViewModel
 import dev.lyo.hortay.ui.timeline.TimelineViewModel
 import org.koin.core.module.dsl.viewModel
@@ -29,7 +31,7 @@ val viewModelModule = module {
     viewModel { (feed: FeedSource) ->
         TimelineViewModel(repo = feed, bookmarks = get<BookmarkStore>())
     }
-    viewModel { (chatId: Long, scrollToMessageId: Long?) ->
+    viewModel { (chatId: ChatId, scrollToMessageId: MessageId?) ->
         ChannelViewModel(
             backend = get<HortayBackend>(),
             bookmarks = get<BookmarkStore>(),

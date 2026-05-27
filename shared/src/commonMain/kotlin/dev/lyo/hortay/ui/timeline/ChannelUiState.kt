@@ -5,8 +5,10 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import dev.lyo.hortay.data.ChatId
 import dev.lyo.hortay.data.EmptyReadCursors
 import dev.lyo.hortay.data.FeedOrder
+import dev.lyo.hortay.data.MessageId
 import dev.lyo.hortay.data.ReadCursors
 import dev.lyo.hortay.data.TimelinePost
 import dev.lyo.hortay.data.continueReadingIndex
@@ -70,7 +72,7 @@ sealed interface ChannelUiState {
     data class Ready(
         val items: PersistentList<FeedItem>,
         val initialIndex: Int,
-        val highlightedMessageId: Long?,
+        val highlightedMessageId: MessageId?,
     ) : ChannelUiState
 
     @Immutable data object Missing : ChannelUiState
@@ -131,10 +133,10 @@ sealed interface ChannelUiState {
 internal fun buildChannelUiState(
     data: ChannelData,
     items: PersistentList<FeedItem>,
-    scrollToMessageId: Long?,
+    scrollToMessageId: MessageId?,
     attemptedAround: Boolean,
     searchActive: Boolean,
-    chatId: Long,
+    chatId: ChatId,
     feedOrder: FeedOrder = FeedOrder.Newest,
     cursors: ReadCursors = EmptyReadCursors,
 ): ChannelUiState {

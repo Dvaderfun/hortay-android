@@ -31,7 +31,7 @@ data class FormattedText(val text: String, val spans: List<Span>) {
         data class TextUrl(val url: String) : Style
         data object Url : Style
         data object Mention : Style
-        data class MentionName(val userId: Long) : Style
+        data class MentionName(val userId: UserId) : Style
         data object Hashtag : Style
         data object BotCommand : Style
         data object Spoiler : Style

@@ -18,13 +18,11 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
- * iosArm64 actual: thin Kotlin wrapper around TDLib's `td_json_client.h` C
- * interface, accessed via the cinterop binding declared in `tdjson.def`.
+ * Thin Kotlin wrapper around TDLib's `td_json_client.h` C interface, accessed
+ * via the cinterop binding declared in `tdjson.def`.
  *
  * Dispatching shape (one client id, one receive pump, request/response
- * correlation via `@extra`) is identical to the Android `TdClient.kt`. The
- * `expect class` seam in `iosMain` lets `TypedTdClient` + everything above
- * stay in iosMain; only this cinterop-bound bottom layer is target-specific.
+ * correlation via `@extra`) is identical to the Android `TdClient.kt`.
  *
  * Thread-safety: TDLib's tdjson is callable from any thread, but each client
  * id has a single receiver. We pump on Dispatchers.Default and fan updates

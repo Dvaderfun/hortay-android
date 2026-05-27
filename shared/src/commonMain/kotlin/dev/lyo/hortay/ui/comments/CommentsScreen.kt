@@ -29,7 +29,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import dev.lyo.hortay.data.AlbumItem
+import dev.lyo.hortay.data.ChatId
 import dev.lyo.hortay.data.HortayBackend
+import dev.lyo.hortay.data.MessageId
 import dev.lyo.hortay.data.ThreadState
 import dev.lyo.hortay.data.ReactionItem
 import dev.lyo.hortay.data.ReactionKind
@@ -38,22 +40,22 @@ import dev.lyo.hortay.data.ReplyMediaKind
 import dev.lyo.hortay.data.ReplyPreview
 import dev.lyo.hortay.data.ThreadRow
 import dev.lyo.hortay.data.TimelinePost
-import dev.lyo.hortay.ui.main.BackSwipeEdge
+import dev.lyo.hortay.ui.composables.navigation.BackSwipeEdge
 import kotlinx.coroutines.flow.map
-import dev.lyo.hortay.ui.components.HortayTopBar
-import dev.lyo.hortay.ui.components.HortayTopBarSize
-import dev.lyo.hortay.ui.main.rememberFloatingTopBarBehavior
+import dev.lyo.hortay.ui.composables.bars.HortayTopBar
+import dev.lyo.hortay.ui.composables.bars.HortayTopBarSize
+import dev.lyo.hortay.ui.composables.bars.rememberFloatingTopBarBehavior
 import dev.lyo.hortay.ui.icons.Symbol
 import dev.lyo.hortay.ui.media.LocalMediaViewer
 import dev.lyo.hortay.ui.media.TdAvatar
 import dev.lyo.hortay.ui.media.TdMediaImage
 import dev.lyo.hortay.ui.media.rememberDeferredLoading
 import dev.lyo.hortay.ui.media.toAlbumItems
-import dev.lyo.hortay.ui.timeline.PostBody
+import dev.lyo.hortay.ui.composables.cards.PostBody
 import dev.lyo.hortay.ui.timeline.formatRelative
-import dev.lyo.hortay.ui.timeline.PostCard
-import dev.lyo.hortay.ui.timeline.PostInteractions
-import dev.lyo.hortay.ui.timeline.ReactionChip
+import dev.lyo.hortay.ui.composables.cards.PostCard
+import dev.lyo.hortay.ui.composables.cards.PostInteractions
+import dev.lyo.hortay.ui.composables.cards.ReactionChip
 import dev.lyo.hortay.ui.timeline.label
 import dev.lyo.hortay.ui.timeline.symbolName
 import kotlinx.coroutines.delay
@@ -141,7 +143,7 @@ fun CommentsScreen(
      * users / private chats surface the kind-keyed snackbar instead of an empty
      * ChannelScreen.
      */
-    onAuthorChatClick: (chatId: Long) -> Unit = {},
+    onAuthorChatClick: (chatId: ChatId) -> Unit = {},
     /**
      * Fired when the user taps the inline reply quote card on the pinned anchor
      * post. Default no-op preserves the previous behaviour; production wiring in
@@ -163,7 +165,7 @@ fun CommentsScreen(
      * `CommentsRepository.applyOptimisticReaction` (comment), then to
      * `ChannelActionsRepository.toggleReaction` with revert-on-failure.
      */
-    onReactionToggle: (chatId: Long, messageId: Long, snapshot: Reactions, kind: ReactionKind, isChosen: Boolean) -> Unit = { _, _, _, _, _ -> },
+    onReactionToggle: (chatId: ChatId, messageId: MessageId, snapshot: Reactions, kind: ReactionKind, isChosen: Boolean) -> Unit = { _, _, _, _, _ -> },
     /**
      * Fired when the user votes on the pinned anchor post's poll. Default no-op so the
      * screen stays self-contained in previews/tests; production wiring lives in
@@ -171,7 +173,7 @@ fun CommentsScreen(
      * `ChannelActionsRepository.setPollAnswer` with revert-on-failure. Empty array =
      * retract (regular polls only).
      */
-    onPollVote: (chatId: Long, messageId: Long, chosenIndices: IntArray) -> Unit = { _, _, _ -> },
+    onPollVote: (chatId: ChatId, messageId: MessageId, chosenIndices: IntArray) -> Unit = { _, _, _ -> },
     backProgress: Float = 0f,
     backSwipeEdge: Int = BackSwipeEdge.Left,
 ) {
@@ -304,7 +306,7 @@ fun CommentsScreen(
     // is already opened by [CommentsRepository.threadFlow]'s withOpenChat for as long
     // as the SharedFlow has subscribers (i.e. for the lifetime of this overlay plus
     // a 30 s linger), and TDLib advances read state automatically for opened chats.
-    val ackedRead = remember { HashSet<Long>() }
+    val ackedRead = remember { HashSet<MessageId>() }
     val scope = rememberCoroutineScope()
     // Skip the dwell-ack effect when there's no live thread to ack against —
     // guest mode + override branches both fall here. The empty-state body has
@@ -314,7 +316,7 @@ fun CommentsScreen(
     if (!threadDisabled && backend != null) {
         val liveBackend = backend
         LaunchedEffect(listState, liveBackend, post.chatId) {
-            snapshotFlow { listState.layoutInfo.visibleItemsInfo.mapNotNull { it.key as? Long } }
+            snapshotFlow { listState.layoutInfo.visibleItemsInfo.mapNotNull { it.key as? MessageId } }
                 .distinctUntilChanged()
                 .collectLatest { ids ->
                     if (ids.isEmpty()) return@collectLatest
@@ -356,7 +358,7 @@ fun CommentsScreen(
     // the grace and sit on top of the empty-state hero forever.
     val showLoadingOverlay = rememberDeferredLoading(
         pending = !threadDisabled && state is ThreadState.Loading,
-        key = post.chatId to (candidateIds.minOrNull() ?: post.id),
+        key = post.chatId to (candidateIds.minByOrNull { it.value } ?: post.id),
         graceMs = dev.lyo.hortay.data.SCREEN_MOUNT_GRACE_MS,
     )
 

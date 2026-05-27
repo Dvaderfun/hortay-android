@@ -3,7 +3,9 @@ package dev.lyo.hortay.ui.timeline
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.lyo.hortay.data.BookmarkStore
+import dev.lyo.hortay.data.ChatId
 import dev.lyo.hortay.data.HortayBackend
+import dev.lyo.hortay.data.MessageId
 import dev.lyo.hortay.data.TimelinePost
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.toPersistentList
@@ -72,8 +74,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 class ChannelViewModel(
     private val backend: HortayBackend,
     private val bookmarks: BookmarkStore,
-    val chatId: Long,
-    val scrollToMessageId: Long?,
+    val chatId: ChatId,
+    val scrollToMessageId: MessageId?,
 ) : ViewModel() {
 
     // Cold flow that filters the global posts stream down to this channel.
@@ -339,7 +341,7 @@ class ChannelViewModel(
         viewModelScope.launch { bookmarks.toggle(post) }
     }
 
-    suspend fun viewMessages(chatId: Long, messageIds: List<Long>) {
+    suspend fun viewMessages(chatId: ChatId, messageIds: List<MessageId>) {
         backend.viewMessages(chatId, messageIds)
     }
 

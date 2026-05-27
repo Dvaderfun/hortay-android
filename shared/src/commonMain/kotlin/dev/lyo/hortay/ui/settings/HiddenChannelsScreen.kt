@@ -34,10 +34,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.lyo.hortay.data.ChatId
 import dev.lyo.hortay.data.HortayBackend
 import dev.lyo.hortay.data.IgnoredChannelsStore
-import dev.lyo.hortay.ui.components.HortayTopBar
-import dev.lyo.hortay.ui.components.HortayTopBarSize
+import dev.lyo.hortay.ui.composables.bars.HortayTopBar
+import dev.lyo.hortay.ui.composables.bars.HortayTopBarSize
 import dev.lyo.hortay.ui.icons.Symbol
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.coroutines.launch
@@ -252,7 +253,7 @@ private suspend fun resolve(
 ): HiddenChannelDisplay? {
     // TDLib first when available — server-side title beats local cache.
     if (backend != null) {
-        runCatching { backend.channelInfo(chatId) }.getOrNull()?.let { info ->
+        runCatching { backend.channelInfo(ChatId(chatId)) }.getOrNull()?.let { info ->
             return HiddenChannelDisplay(
                 title = info.title.ifBlank { "—" },
                 handle = info.handle?.removePrefix("@"),

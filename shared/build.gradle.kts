@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.android.multiplatform.library)
@@ -196,11 +198,8 @@ kotlin {
             }
         }
 
-        // iosMain intermediate source set — code shared between iosArm64 and
-        // iosSimulatorArm64. The default Kotlin hierarchy template (enabled
-        // by default in K2) auto-creates `iosMain` and wires both
-        // per-target sets to `dependsOn(iosMain)` for us, so we just attach
-        // dependencies here.
+        // Single iOS target (iosArm64). All iOS code lives in iosMain;
+        // only the cinterop-bound TdJsonClient actual sits in iosArm64Main.
         iosMain.dependencies {
             // Darwin engine for Ktor — uses NSURLSession on iOS. Apple-side
             // connection pooling + caching come from URLCache, configured
@@ -224,6 +223,57 @@ composeCompiler {
     stabilityConfigurationFiles.add(
         rootProject.layout.projectDirectory.file("compose_stability.conf")
     )
+}
+
+// Generated build config — replaces the mutable AppConfig runtime bridge.
+// Zero-dependency alternative to BuildKonfig (which is incompatible with
+// com.android.kotlin.multiplatform.library's android {} DSL extension).
+run {
+    val localProps = Properties()
+    rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { localProps.load(it) }
+    val apiId = localProps.getProperty("telegram.apiId", "0")
+    val apiHash = localProps.getProperty("telegram.apiHash", "")
+    val childSafetyUrl = project.findProperty("HORTAY_CHILD_SAFETY_POLICY_URL") as? String ?: ""
+    val privacyUrl = project.findProperty("HORTAY_PRIVACY_POLICY_URL") as? String ?: ""
+    val versionName = project.findProperty("HORTAY_VERSION_NAME") as? String ?: "0.0.0"
+    val gitCommitCount = providers.exec {
+        commandLine("git", "rev-list", "--count", "HEAD")
+        isIgnoreExitValue = true
+    }.standardOutput.asText.map { it.trim().toIntOrNull() ?: 0 }
+
+    val outputDir = layout.buildDirectory.dir("generated/buildkonfig")
+    val generateBuildKonfig = tasks.register("generateBuildKonfig") {
+        inputs.property("apiId", apiId)
+        inputs.property("apiHash", apiHash)
+        inputs.property("childSafetyUrl", childSafetyUrl)
+        inputs.property("privacyUrl", privacyUrl)
+        inputs.property("versionName", versionName)
+        inputs.property("versionCode", gitCommitCount)
+        outputs.dir(outputDir)
+        doLast {
+            val dir = outputDir.get().dir("dev/lyo/hortay").asFile
+            dir.mkdirs()
+            val code = gitCommitCount.get()
+            dir.resolve("BuildKonfig.kt").writeText(
+                """
+                |package dev.lyo.hortay
+                |
+                |object BuildKonfig {
+                |    const val TELEGRAM_API_ID: Int = $apiId
+                |    const val TELEGRAM_API_HASH: String = "$apiHash"
+                |    const val CHILD_SAFETY_POLICY_URL: String = "$childSafetyUrl"
+                |    const val PRIVACY_POLICY_URL: String = "$privacyUrl"
+                |    const val VERSION_NAME: String = "$versionName"
+                |    const val VERSION_CODE: Int = $code
+                |}
+                """.trimMargin(),
+            )
+        }
+    }
+
+    kotlin.sourceSets.commonMain {
+        kotlin.srcDir(generateBuildKonfig.map { outputDir.get() })
+    }
 }
 
 detekt {

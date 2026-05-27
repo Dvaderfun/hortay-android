@@ -1,0 +1,391 @@
+// CSAE-COMPLIANCE: Google Play Child Safety Standards
+// Policy: https://support.google.com/googleplay/android-developer/answer/14747720
+// Hortay published standards: BuildKonfig.CHILD_SAFETY_POLICY_URL
+// Architecture: delegation to Telegram moderation via TDLib reportChat dynamic flow
+
+@file:OptIn(
+    androidx.compose.material3.ExperimentalMaterial3Api::class,
+    androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class,
+)
+
+package dev.lyo.hortay.ui.composables.sheets
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LoadingIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import dev.lyo.hortay.data.ChatId
+import dev.lyo.hortay.data.MessageId
+import dev.lyo.hortay.data.report.ReportExplainerStore
+import dev.lyo.hortay.data.report.ReportFlowController
+import dev.lyo.hortay.data.report.ReportOption
+import dev.lyo.hortay.data.report.ReportState
+import dev.lyo.hortay.data.report.ReportStep
+import dev.lyo.hortay.ui.composables.dialogs.ReportAboutDialog
+import dev.lyo.hortay.ui.icons.Symbol
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.report_flood_wait_generic
+import hortay.shared.generated.resources.report_flood_wait_plural
+import hortay.shared.generated.resources.report_loading
+import hortay.shared.generated.resources.report_retry
+import hortay.shared.generated.resources.report_skip
+import hortay.shared.generated.resources.report_submit
+import hortay.shared.generated.resources.report_success
+import hortay.shared.generated.resources.report_text_hint
+import hortay.shared.generated.resources.report_text_placeholder
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
+
+/**
+ * Full reporting flow rendered inside a [ModalBottomSheet].
+ *
+ * Gate: if the user has never seen the one-time explainer (stored in
+ * [ReportExplainerStore]), shows [ReportAboutDialog] first. On its dismissal the
+ * explainer flag is persisted and the sheet body opens.
+ *
+ * State scope: keyed on (chatId, messageId, openToken) so a reopened report on
+ * the same post restores progress, while a fresh tap (openToken changes) starts
+ * a brand-new flow.
+ *
+ * Why no ViewModel: the only reason the previous Android-only implementation
+ * used a ViewModel was to survive configuration changes. Compose Multiplatform
+ * has no Activity-recreate concept on iOS, and on Android the per-tap openToken
+ * already forces a new instance every time anyway — a ViewModel adds no
+ * survival benefit and would require an Android-only `lifecycle-viewmodel-
+ * compose` dependency. `rememberCoroutineScope` + `remember(openToken)` covers
+ * the same surface in commonMain.
+ *
+ * Why [produceState] for the explainer check: DataStore reads are suspending and
+ * must not block the first composition frame. [produceState] suspends in the
+ * background while the UI renders [LoadingContent] as the initial value; the
+ * gate flips to the real value on the next recomposition.
+ */
+@Composable
+fun ReportFlowSheet(
+    chatId: ChatId,
+    messageId: MessageId?,
+    /**
+     * Per-tap session token from the parent scaffold (`Clock.System.now()...`).
+     * Re-keys the internal state so each fresh tap on Report restarts the flow
+     * regardless of previous terminal state.
+     */
+    openToken: Long,
+    @Suppress("UNUSED_PARAMETER") channelUsername: String?,
+    /**
+     * Called on every sheet exit. The `success` flag is true when the user reached
+     * [ReportState.Success] — the parent can dispatch a confirmation snackbar
+     * "Report sent to Telegram" before clearing its pendingReport state. Manual
+     * dismiss (scrim tap, back gesture, drag-down) calls back with success=false
+     * so no snackbar fires.
+     */
+    onDismiss: (success: Boolean) -> Unit,
+    reportController: ReportFlowController,
+    explainerStore: ReportExplainerStore,
+) {
+    val scope = rememberCoroutineScope()
+
+    // true = already shown (skip explainer), false = must show explainer first.
+    // Initial value = true (optimistic: skip explainer until we know otherwise).
+    val explainerShown by produceState(initialValue = true) {
+        value = explainerStore.shown.first()
+    }
+
+    var explainerDismissed by remember { mutableStateOf(false) }
+    val showExplainer = !explainerShown && !explainerDismissed
+
+    if (showExplainer) {
+        ReportAboutDialog(
+            onDismiss = { onDismiss(false) },
+            onConfirm = {
+                scope.launch { runCatching { explainerStore.markShown() } }
+                explainerDismissed = true
+            },
+        )
+        return
+    }
+
+    val dismissAsSuccess: () -> Unit = { onDismiss(true) }
+    val dismissManual: () -> Unit = { onDismiss(false) }
+
+    // openToken makes each tap on Report a fresh state slot — the previous Android
+    // ViewModelStore-based session caching, replaced.
+    var state by remember(chatId, messageId, openToken) {
+        mutableStateOf<ReportState>(ReportState.Loading)
+    }
+    var pendingOptionId by remember(chatId, messageId, openToken) {
+        mutableStateOf(byteArrayOf())
+    }
+    var retryCounter by remember(chatId, messageId, openToken) { mutableStateOf(0) }
+
+    fun applyStep(step: ReportStep) {
+        step.pendingOptionId?.let { pendingOptionId = it }
+        state = step.state
+    }
+
+    LaunchedEffect(chatId, messageId, openToken, retryCounter) {
+        state = ReportState.Loading
+        applyStep(reportController.start(chatId, messageId))
+    }
+
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    // Auto-dismiss on Success — flag the dismiss as a successful completion so the
+    // parent scaffold can dispatch its "Report sent to Telegram" snackbar.
+    LaunchedEffect(state) {
+        if (state is ReportState.Success) dismissAsSuccess()
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = dismissManual,
+        sheetState = sheetState,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .imePadding()
+                .padding(horizontal = 24.dp, vertical = 8.dp)
+                .padding(bottom = 24.dp),
+        ) {
+            when (val s = state) {
+                is ReportState.Idle, is ReportState.Loading -> LoadingContent()
+                is ReportState.OptionSelection -> OptionSelectionContent(
+                    title = s.title,
+                    options = s.options,
+                    onSelect = { option ->
+                        scope.launch {
+                            state = ReportState.Loading
+                            applyStep(reportController.selectOption(chatId, messageId, option))
+                        }
+                    },
+                )
+                is ReportState.TextRequired -> TextRequiredContent(
+                    isOptional = s.isOptional,
+                    onSubmit = { text ->
+                        scope.launch {
+                            state = ReportState.Loading
+                            applyStep(reportController.submitText(chatId, messageId, pendingOptionId, text))
+                        }
+                    },
+                    onSkip = if (s.isOptional) ({
+                        scope.launch {
+                            state = ReportState.Loading
+                            applyStep(reportController.submitText(chatId, messageId, pendingOptionId, ""))
+                        }
+                    }) else null,
+                )
+                is ReportState.Success -> {
+                    // LaunchedEffect above handles dismiss; brief success text in case
+                    // of a recomposition between the state flip and the dismiss.
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 32.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = stringResource(Res.string.report_success),
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                    }
+                }
+                is ReportState.Error -> ErrorContent(
+                    message = s.message,
+                    onRetry = { retryCounter += 1 },
+                )
+                is ReportState.FloodWait -> FloodWaitContent(seconds = s.retryAfterSeconds)
+            }
+        }
+    }
+}
+
+// ---- Sub-composables -------------------------------------------------------
+
+@Composable
+private fun LoadingContent() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 48.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            LoadingIndicator(modifier = Modifier.size(48.dp))
+            Spacer(Modifier.height(16.dp))
+            Text(
+                text = stringResource(Res.string.report_loading),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun OptionSelectionContent(
+    title: String,
+    options: List<ReportOption>,
+    onSelect: (ReportOption) -> Unit,
+) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.padding(bottom = 12.dp),
+    )
+    for (option in options) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(role = Role.Button) { onSelect(option) }
+                .padding(vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = option.label,
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(12.dp))
+            Symbol(
+                name = "chevron_right",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                size = 20.dp,
+            )
+        }
+        HorizontalDivider(
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+        )
+    }
+}
+
+@Composable
+private fun TextRequiredContent(
+    isOptional: Boolean,
+    onSubmit: (String) -> Unit,
+    onSkip: (() -> Unit)?,
+) {
+    var text by remember { mutableStateOf("") }
+
+    Text(
+        text = stringResource(Res.string.report_text_hint),
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.padding(bottom = 12.dp),
+    )
+    OutlinedTextField(
+        value = text,
+        onValueChange = { if (it.length <= 1024) text = it },
+        modifier = Modifier.fillMaxWidth(),
+        minLines = 3,
+        maxLines = 6,
+        placeholder = {
+            Text(
+                text = stringResource(Res.string.report_text_placeholder),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
+    )
+    Spacer(Modifier.height(16.dp))
+    Row {
+        if (onSkip != null) {
+            TextButton(onClick = onSkip) {
+                Text(stringResource(Res.string.report_skip))
+            }
+            Spacer(Modifier.width(8.dp))
+        }
+        FilledTonalButton(
+            onClick = { onSubmit(text) },
+            enabled = isOptional || text.isNotEmpty(),
+            modifier = Modifier.weight(1f),
+        ) {
+            Text(stringResource(Res.string.report_submit))
+        }
+    }
+}
+
+@Composable
+private fun ErrorContent(message: String, onRetry: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Symbol(
+            name = "error",
+            tint = MaterialTheme.colorScheme.error,
+            size = 40.dp,
+        )
+        Spacer(Modifier.height(12.dp))
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.error,
+        )
+        Spacer(Modifier.height(16.dp))
+        FilledTonalButton(onClick = onRetry) {
+            Text(stringResource(Res.string.report_retry))
+        }
+    }
+}
+
+@Composable
+private fun FloodWaitContent(seconds: Int) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Symbol(
+            name = "hourglass_empty",
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            size = 40.dp,
+        )
+        Spacer(Modifier.height(12.dp))
+        val message = if (seconds > 0) {
+            pluralStringResource(Res.plurals.report_flood_wait_plural, seconds, seconds)
+        } else {
+            stringResource(Res.string.report_flood_wait_generic)
+        }
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}

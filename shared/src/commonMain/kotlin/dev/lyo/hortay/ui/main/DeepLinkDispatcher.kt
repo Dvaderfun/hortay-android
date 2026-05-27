@@ -7,9 +7,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
+import dev.lyo.hortay.data.ChatId
 import dev.lyo.hortay.data.ChatInvitePreview
 import dev.lyo.hortay.data.ComposeResourcesStringResolver
 import dev.lyo.hortay.data.DeepLink
+import dev.lyo.hortay.data.MessageId
+import dev.lyo.hortay.data.UserId
 import dev.lyo.hortay.data.DeepLinkRouter
 import dev.lyo.hortay.data.InviteLinkKind
 import dev.lyo.hortay.data.LinkDialogState
@@ -60,27 +63,27 @@ internal fun DeepLinkDispatcher(
     userMessages: UserMessageBus,
     linkDialogs: LinkDialogState,
     resolvePublicHandle: suspend (String) -> PublicHandleResult,
-    resolveChatKind: suspend (Long) -> PublicHandleResult,
+    resolveChatKind: suspend (ChatId) -> PublicHandleResult,
     previewChatInvite: suspend (String) -> ChatInvitePreview?,
-    onPushChannel: (chatId: Long, scrollTo: Long?) -> Unit,
+    onPushChannel: (chatId: ChatId, scrollTo: MessageId?) -> Unit,
     /** Open the in-app user-profile sheet for an `@handle` that resolves to a 1:1
      *  user / bot. Same surface as in-text `TextEntityTypeMentionName` taps — an
      *  `@username` mention shouldn't bounce out to the official Telegram client. */
-    onOpenUser: (userId: Long) -> Unit,
+    onOpenUser: (userId: UserId) -> Unit,
 ) {
     val systemUriHandler: UriHandler = LocalUriHandler.current
     val res: StringResolver = remember { ComposeResourcesStringResolver() }
     LaunchedEffect(router) {
         router.events.collect { link ->
             try {
-                val targetChat: Long
-                val tdMessageId: Long?
+                val targetChat: ChatId
+                val tdMessageId: MessageId?
                 when (link) {
                     is DeepLink.PublicChannel -> {
                         when (val resolved = resolvePublicHandle(link.handle)) {
                             is PublicHandleResult.Channel -> {
                                 targetChat = resolved.chatId
-                                tdMessageId = link.serverPostId?.let { it shl SERVER_TO_TD_SHIFT }
+                                tdMessageId = link.serverPostId?.let { MessageId(it shl SERVER_TO_TD_SHIFT) }
                             }
                             is PublicHandleResult.User -> {
                                 // `@handle` resolves to a 1:1 user / bot — open the
@@ -114,7 +117,7 @@ internal fun DeepLinkDispatcher(
                         when (val resolved = resolveChatKind(link.chatId)) {
                             is PublicHandleResult.Channel -> {
                                 targetChat = resolved.chatId
-                                tdMessageId = link.serverPostId?.let { it shl SERVER_TO_TD_SHIFT }
+                                tdMessageId = link.serverPostId?.let { MessageId(it shl SERVER_TO_TD_SHIFT) }
                             }
                             is PublicHandleResult.User -> {
                                 // `t.me/c/<userId>/...` never legitimately addresses a

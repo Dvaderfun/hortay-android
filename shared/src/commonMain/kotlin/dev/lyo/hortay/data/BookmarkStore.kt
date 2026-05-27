@@ -38,4 +38,4 @@ class BookmarkStore(private val dataStore: DataStore<Preferences>) {
     }
 }
 
-fun TimelinePost.bookmarkKey(): String = "$chatId/$id"
+fun TimelinePost.bookmarkKey(): String = "${chatId.value}/${id.value}"

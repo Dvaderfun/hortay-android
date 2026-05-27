@@ -1,6 +1,8 @@
 package dev.lyo.hortay.data.web
 
 import kotlin.concurrent.Volatile
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.seconds
 import dev.lyo.hortay.PlatformLog
 import dev.lyo.hortay.data.FeedSource
 import dev.lyo.hortay.data.IgnoredChannelsStore
@@ -532,7 +534,7 @@ class WebFeedSource(
          * Pull-to-refresh always bypasses this. 30 s tracks the TDLib-mode value
          * for consistency.
          */
-        const val DEFAULT_STALENESS_WINDOW_MS = 30_000L
+        val DEFAULT_STALENESS_WINDOW_MS = 30.seconds.inWholeMilliseconds
 
         /**
          * After this long, post media URLs are considered likely-expired (signed
@@ -540,6 +542,6 @@ class WebFeedSource(
          * get FORCE_NETWORK on the next sweep so we pick up fresh URLs even
          * inside the OkHttp Cache validity window.
          */
-        const val DEFAULT_MEDIA_TTL_MS = 4 * 60 * 60 * 1000L // 4 hours
+        val DEFAULT_MEDIA_TTL_MS = 4.hours.inWholeMilliseconds
     }
 }

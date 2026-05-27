@@ -61,8 +61,8 @@ import dev.lyo.hortay.data.AutoDownloadFacade
 import dev.lyo.hortay.data.defaultPolicy
 import dev.lyo.hortay.data.policy
 import dev.lyo.hortay.data.withPolicy
-import dev.lyo.hortay.ui.components.HortayTopBar
-import dev.lyo.hortay.ui.components.HortayTopBarSize
+import dev.lyo.hortay.ui.composables.bars.HortayTopBar
+import dev.lyo.hortay.ui.composables.bars.HortayTopBarSize
 import dev.lyo.hortay.ui.icons.Symbol
 import kotlinx.coroutines.launch
 import hortay.shared.generated.resources.Res

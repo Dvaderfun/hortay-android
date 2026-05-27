@@ -73,7 +73,7 @@ sealed interface DeepLink {
 
     /** A private channel referenced by its TDLib chat id (`-100<raw>`). */
     data class PrivateChannel(
-        val chatId: Long,
+        val chatId: ChatId,
         val serverPostId: Long?,
         override val originalUrl: String,
     ) : DeepLink
@@ -83,8 +83,8 @@ sealed interface DeepLink {
      * [messageId] is already in TDLib's internal `(serverId shl 20)` form.
      */
     data class Message(
-        val chatId: Long,
-        val messageId: Long,
+        val chatId: ChatId,
+        val messageId: MessageId,
         override val originalUrl: String,
     ) : DeepLink
 

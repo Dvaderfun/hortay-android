@@ -1,7 +1,7 @@
 package dev.lyo.hortay.data.web
 
 import dev.lyo.hortay.PlatformLog
-import dev.lyo.hortay.AppConfig
+import dev.lyo.hortay.isDebugBuild
 import dev.lyo.hortay.currentLanguageTag
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.cache.HttpCache
@@ -141,7 +141,7 @@ class WebTelegramClient(
                 val page = TmePageParser.parse(body, username)
                 if (page == null) {
                     PlatformLog.w(TAG, "Parse failed for $username (body length=${body.length})")
-                    if (AppConfig.debug) {
+                    if (isDebugBuild) {
                         PlatformLog.w(TAG, "  head: ${body.take(400).replace('\n', ' ')}")
                         PlatformLog.w(TAG, "  ctype: ${response.headers[HttpHeaders.ContentType]} server: ${response.headers[HttpHeaders.Server]}")
                     }

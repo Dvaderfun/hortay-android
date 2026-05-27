@@ -42,8 +42,8 @@ import dev.lyo.hortay.data.bookmarkKey
 import dev.lyo.hortay.data.web.WebRepository
 import dev.lyo.hortay.ui.actions.PostActions
 import dev.lyo.hortay.ui.icons.Symbol
-import dev.lyo.hortay.ui.timeline.PostCard
-import dev.lyo.hortay.ui.timeline.PostInteractions
+import dev.lyo.hortay.ui.composables.cards.PostCard
+import dev.lyo.hortay.ui.composables.cards.PostInteractions
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.FlowPreview

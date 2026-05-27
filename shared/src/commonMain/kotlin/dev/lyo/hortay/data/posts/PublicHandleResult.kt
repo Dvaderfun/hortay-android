@@ -1,5 +1,8 @@
 package dev.lyo.hortay.data.posts
 
+import dev.lyo.hortay.data.ChatId
+import dev.lyo.hortay.data.UserId
+
 /**
  * Result of `HortayBackend.resolvePublicHandle` (Android: PostsRepository).
  * Discriminator for the three meaningful outcomes the UI handles:
@@ -13,8 +16,8 @@ package dev.lyo.hortay.data.posts
  *   - [NotFound] — handle is invalid / banned / never existed.
  */
 sealed interface PublicHandleResult {
-    data class Channel(val chatId: Long) : PublicHandleResult
-    data class User(val userId: Long) : PublicHandleResult
+    data class Channel(val chatId: ChatId) : PublicHandleResult
+    data class User(val userId: UserId) : PublicHandleResult
     data class Unsupported(val kind: PublicHandleKind) : PublicHandleResult
     data object NotFound : PublicHandleResult
 }

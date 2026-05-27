@@ -26,7 +26,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 import dev.lyo.hortay.data.BookmarkStore
+import dev.lyo.hortay.data.ChatId
 import dev.lyo.hortay.data.HortayBackend
+import dev.lyo.hortay.data.MessageId
 import dev.lyo.hortay.data.isUnplayableVideo
 import dev.lyo.hortay.data.isUnreadAt
 import dev.lyo.hortay.data.isUnreadIn
@@ -37,7 +39,19 @@ import dev.lyo.hortay.data.TimelinePost
 import dev.lyo.hortay.data.TranslationKey
 import dev.lyo.hortay.data.bookmarkKey
 import dev.lyo.hortay.ui.actions.PostActions
-import dev.lyo.hortay.ui.main.rememberFloatingTopBarBehavior
+import dev.lyo.hortay.ui.composables.badges.ChannelBadge
+import dev.lyo.hortay.ui.composables.badges.NewPostsPill
+import dev.lyo.hortay.ui.composables.badges.UnreadCounterPill
+import dev.lyo.hortay.ui.composables.bars.FilterScope
+import dev.lyo.hortay.ui.composables.bars.FolderTab
+import dev.lyo.hortay.ui.composables.bars.FoldersBar
+import dev.lyo.hortay.ui.composables.bars.rememberFloatingTopBarBehavior
+import dev.lyo.hortay.ui.composables.cards.PostCard
+import dev.lyo.hortay.ui.composables.cards.PostInteractions
+import dev.lyo.hortay.ui.composables.skeleton.EmptyKind
+import dev.lyo.hortay.ui.composables.skeleton.EmptyState
+import dev.lyo.hortay.ui.composables.skeleton.SkeletonFeed
+import dev.lyo.hortay.ui.composables.skeleton.UnreadBoundaryRow
 import androidx.compose.ui.draw.clipToBounds
 import dev.lyo.hortay.ui.media.LocalMediaCache
 import dev.lyo.hortay.ui.media.LocalMediaViewer
@@ -98,7 +112,7 @@ fun TimelineScreen(
      * path so the new [ChannelScreen] highlights the replied-to message instead
      * of opening cold. Header / forward-source taps pass null.
      */
-    onChannelOpen: (chatId: Long, scrollToMessageId: Long?) -> Unit = { _, _ -> },
+    onChannelOpen: (chatId: ChatId, scrollToMessageId: MessageId?) -> Unit = { _, _ -> },
     /**
      * Optional TDLib-backed backend. Null in pre-auth / guest-only paths
      * where the screen still renders the local feed source but every TDLib-
@@ -118,7 +132,7 @@ fun TimelineScreen(
      * This parameter remains for the all-feed case where a deep link needs the
      * feed to scroll to a post that happens to be in the merged view already.
      */
-    scrollToMessage: Pair<Long, Long>? = null,
+    scrollToMessage: Pair<ChatId, MessageId>? = null,
     onScrollHandled: () -> Unit = {},
     /**
      * Fired exactly once when a deep-link scroll request resolves dead — TDLib's
@@ -386,11 +400,11 @@ fun TimelineScreen(
     // while the user is in "Усі", or out-of-folder channels while a folder is active).
     val scopePredicate = remember(scope_filter, archivedChatIds, folderChatIdsForScope) {
         { p: TimelinePost ->
-            val isArchived = p.chatId in archivedChatIds
+            val isArchived = p.chatId.value in archivedChatIds
             when (scope_filter) {
                 FilterScope.All -> !isArchived
                 FilterScope.Archive -> isArchived
-                is FilterScope.Folder -> folderChatIdsForScope?.contains(p.chatId) == true
+                is FilterScope.Folder -> folderChatIdsForScope?.contains(p.chatId.value) == true
             }
         }
     }
@@ -760,12 +774,12 @@ fun TimelineScreen(
     // consumer — the LaunchedEffect below — resolves the target by scanning
     // feedItems and clears the request on success. Cleared too on filter dismissal
     // (C2 fix) so a stale target from a previous channel doesn't yank the user later.
-    var pendingScrollToMessage by remember { mutableStateOf<Pair<Long, Long>?>(null) }
+    var pendingScrollToMessage by remember { mutableStateOf<Pair<ChatId, MessageId>?>(null) }
     // (chatId, messageId) of the post we just scrolled to via a deep link / quote tap.
     // Drives a brief surface-tint highlight on that PostCard so the user can locate it
     // post-scroll. Auto-clears after [HIGHLIGHT_DURATION_MS]; null when no highlight is
     // active.
-    var highlightedPostKey by remember { mutableStateOf<Pair<Long, Long>?>(null) }
+    var highlightedPostKey by remember { mutableStateOf<Pair<ChatId, MessageId>?>(null) }
     LaunchedEffect(scrollToMessage) {
         if (scrollToMessage != null) {
             pendingScrollToMessage = scrollToMessage
@@ -926,7 +940,7 @@ fun TimelineScreen(
         pendingNew.filter(scopePredicate)
     }
     var overlayBlockedPendingKeys by remember {
-        mutableStateOf<Set<Pair<Long, Long>>>(emptySet())
+        mutableStateOf<Set<Pair<ChatId, MessageId>>>(emptySet())
     }
     LaunchedEffect(coveredByOverlay, scopedPendingNew) {
         val pendingKeys = scopedPendingNew.mapTo(HashSet()) { it.chatId to it.id }
@@ -1069,7 +1083,7 @@ fun TimelineScreen(
     // still flushes CloseChat.
     if (backend != null && !coveredByOverlay) {
         LaunchedEffect(listState, backend) {
-            var opened: Long? = null
+            var opened: ChatId? = null
             try {
                 androidx.compose.runtime.snapshotFlow {
                     listState.layoutInfo.visibleItemsInfo.firstOrNull()?.index
@@ -1111,7 +1125,7 @@ fun TimelineScreen(
     val postsState = rememberUpdatedState(posts)
     val translationsState = rememberUpdatedState(translationsMap)
     val bookmarkedState = rememberUpdatedState(bookmarkedKeys)
-    val onChannelOpenState = rememberUpdatedState { chatId: Long, scrollTo: Long? ->
+    val onChannelOpenState = rememberUpdatedState { chatId: ChatId, scrollTo: MessageId? ->
         onChannelOpen(chatId, scrollTo)
     }
     val onOpenCommentsState = rememberUpdatedState { post: TimelinePost ->
@@ -1226,7 +1240,7 @@ fun TimelineScreen(
                         // Append the message id when available so the resolver can drill
                         // straight to the original post.
                         val handle = sourceHandle.removePrefix("@")
-                        val url = if (sourceMessageId != null) "https://t.me/$handle/$sourceMessageId"
+                        val url = if (sourceMessageId != null) "https://t.me/$handle/${sourceMessageId.value}"
                             else "https://t.me/$handle"
                         uriHandler.openUri(url)
                     }
@@ -1417,7 +1431,7 @@ fun TimelineScreen(
                     // UpdateChatFolders and the GetChatFolder fan-out landing), we render
                     // the raw list so the bar doesn't briefly drop folders.
                     val visibleChatIds = remember(posts) {
-                        posts.asSequence().map { it.chatId }.toSet()
+                        posts.asSequence().map { it.chatId.value }.toSet()
                     }
                     val tabs = remember(foldersList, folderRulesMap, folderChatIdsMap, visibleChatIds) {
                         foldersList.mapNotNull { info ->
@@ -1796,7 +1810,7 @@ fun TimelineScreen(
             if (feedOrder == dev.lyo.hortay.data.FeedOrder.OldestUnreadFirst && !showOnlyBookmarked) {
                 val unreadRemaining by remember(visiblePosts, feedOrder) {
                     derivedStateOf {
-                        visiblePosts.count { it.isUnreadAt(cursorHolder[it.chatId]) }
+                        visiblePosts.count { it.isUnreadAt(cursorHolder[it.chatId.value]) }
                     }
                 }
                 AnimatedVisibility(
@@ -1850,7 +1864,7 @@ fun TimelineScreen(
                             // a stale captured list.
                             val items = feedItemsState.value
                             val live = items.indexOfFirst { item ->
-                                item.posts().any { it.isUnreadAt(cursorHolder[it.chatId]) }
+                                item.posts().any { it.isUnreadAt(cursorHolder[it.chatId.value]) }
                             }
                             val target = if (live >= 0) live else homeScrollIndexState.intValue
                             scope.launch { listState.smartScrollTo(target) }
@@ -1900,7 +1914,7 @@ private const val COLD_START_CURSOR_GRACE_MS = 800L
  * resume. The boundary divider above this floor is unaffected — it tracks the
  * read-edge for display, not the landing target.
  */
-private const val BOUNDARY_RECENCY_WINDOW_MS = 7L * 24L * 60L * 60L * 1000L
+private val BOUNDARY_RECENCY_WINDOW_MS = kotlin.time.Duration.Companion.days(7).inWholeMilliseconds
 
 /** Avatars in the "X нових постів" pill — same cap as the original VM-side limit. */
 private const val MAX_PILL_BADGES = 3

@@ -79,10 +79,7 @@ import platform.UIKit.UIViewController
  * `AuthScreen`; from there the "Continue without account" button is the only
  * working path forward.
  */
-private val koinApp by lazy {
-    populateAppConfig()
-    initKoin()
-}
+private val koinApp by lazy { initKoin() }
 
 @Suppress("FunctionName")
 fun MainViewController(): UIViewController = ComposeUIViewController {

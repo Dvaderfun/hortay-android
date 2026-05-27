@@ -352,7 +352,7 @@ internal object MessageContentMapper {
         is TdApi.TextEntityTypeTextUrl -> FormattedText.Style.TextUrl(type.url)
         is TdApi.TextEntityTypeUrl -> FormattedText.Style.Url
         is TdApi.TextEntityTypeMention -> FormattedText.Style.Mention
-        is TdApi.TextEntityTypeMentionName -> FormattedText.Style.MentionName(type.userId)
+        is TdApi.TextEntityTypeMentionName -> FormattedText.Style.MentionName(UserId(type.userId))
         is TdApi.TextEntityTypeHashtag -> FormattedText.Style.Hashtag
         is TdApi.TextEntityTypeBotCommand -> FormattedText.Style.BotCommand
         is TdApi.TextEntityTypeSpoiler -> FormattedText.Style.Spoiler

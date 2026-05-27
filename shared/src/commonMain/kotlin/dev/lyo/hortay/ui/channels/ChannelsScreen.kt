@@ -31,10 +31,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.lyo.hortay.data.ChatId
 import dev.lyo.hortay.data.HortayBackend
 import dev.lyo.hortay.data.TimelinePost
-import dev.lyo.hortay.ui.components.HortayTopBar
-import dev.lyo.hortay.ui.components.HortayTopBarSize
+import dev.lyo.hortay.ui.composables.bars.HortayTopBar
+import dev.lyo.hortay.ui.composables.bars.HortayTopBarSize
 import dev.lyo.hortay.ui.media.TdAvatar
 import hortay.shared.generated.resources.Res
 import hortay.shared.generated.resources.channels_empty_helper
@@ -57,7 +58,7 @@ import org.jetbrains.compose.resources.stringResource
 fun ChannelsScreen(
     backend: HortayBackend,
     contentPadding: PaddingValues,
-    onChannelClick: (chatId: Long) -> Unit,
+    onChannelClick: (chatId: ChatId) -> Unit,
 ) {
     val posts by backend.feedPosts.collectAsStateWithLifecycle()
     val channels = remember(posts) { aggregate(posts) }
@@ -113,7 +114,7 @@ fun ChannelsScreen(
 // so this trivially holds).
 @androidx.compose.runtime.Immutable
 private data class ChannelSummary(
-    val chatId: Long,
+    val chatId: ChatId,
     val title: String,
     val avatarThumb: ByteArray?,
     val avatarFileId: Int?,

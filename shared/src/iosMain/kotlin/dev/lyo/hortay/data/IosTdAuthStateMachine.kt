@@ -2,7 +2,7 @@
 
 package dev.lyo.hortay.data
 
-import dev.lyo.hortay.AppConfig
+import dev.lyo.hortay.BuildKonfig
 import dev.lyo.hortay.tdlib.TdApi
 import dev.lyo.hortay.tdlib.TypedTdClient
 import hortay.shared.generated.resources.Res
@@ -192,8 +192,8 @@ class IosTdAuthStateMachine(
             useChatInfoDatabase = true,
             useMessageDatabase = true,
             useSecretChats = false,
-            apiId = AppConfig.telegramApiId,
-            apiHash = AppConfig.telegramApiHash,
+            apiId = BuildKonfig.TELEGRAM_API_ID,
+            apiHash = BuildKonfig.TELEGRAM_API_HASH,
             systemLanguageCode = NSLocale.currentLocale.languageCode.ifBlank { "en" },
             deviceModel = UIDevice.currentDevice.model,
             systemVersion = "iOS ${UIDevice.currentDevice.systemVersion}",
@@ -309,8 +309,8 @@ class IosTdAuthStateMachine(
         }
 
         private fun appVersion(): String {
-            val info = NSBundle.mainBundle.infoDictionary ?: return AppConfig.versionName
-            return (info["CFBundleShortVersionString"] as? String) ?: AppConfig.versionName
+            val info = NSBundle.mainBundle.infoDictionary ?: return BuildKonfig.VERSION_NAME
+            return (info["CFBundleShortVersionString"] as? String) ?: BuildKonfig.VERSION_NAME
         }
     }
 }

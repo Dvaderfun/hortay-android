@@ -84,8 +84,8 @@ class MessageMapper(private val td: TdSender, private val res: StringResolver) {
         }
 
         return TimelinePost(
-            id = message.id,
-            chatId = message.chatId,
+            id = MessageId(message.id),
+            chatId = ChatId(message.chatId),
             mediaAlbumId = message.mediaAlbumId,
             senderName = displayName,
             senderHandle = displayHandle,
@@ -117,7 +117,7 @@ class MessageMapper(private val td: TdSender, private val res: StringResolver) {
             // taps route into the user-profile sheet instead of the channel sheet.
             // Channel-as-sender posts leave this null — the chat header is the right
             // affordance there.
-            senderUserId = (sender as? TdApi.MessageSenderUser)?.userId,
+            senderUserId = (sender as? TdApi.MessageSenderUser)?.userId?.let(::UserId),
             // Foreign-chat-as-sender (case 3): admin posted on behalf of one of their
             // OTHER channels. Header surfaces that foreign chat; tap routes into it
             // through [safelyOpenChannel] (same kind-gate the deep-link dispatcher uses).
@@ -125,7 +125,8 @@ class MessageMapper(private val td: TdSender, private val res: StringResolver) {
             // case 1 and the avatar/name already point at the host, no separate target.
             senderChatId = (sender as? TdApi.MessageSenderChat)
                 ?.chatId
-                ?.takeUnless { it == chat.id },
+                ?.takeUnless { it == chat.id }
+                ?.let(::ChatId),
             // Per-chat report eligibility from TDLib (TdApi.Chat.canBeReported).
             // Cheaper than [TdApi.GetMessageProperties] per post — TDLib already
             // populated this field on the Chat object via chatCache updates, and
@@ -151,8 +152,8 @@ class MessageMapper(private val td: TdSender, private val res: StringResolver) {
         val sender = resolveSender(message.senderId)
         val parent = (message.replyTo as? TdApi.MessageReplyToMessage)?.messageId
         return TimelinePost(
-            id = message.id,
-            chatId = message.chatId,
+            id = MessageId(message.id),
+            chatId = ChatId(message.chatId),
             mediaAlbumId = message.mediaAlbumId,
             senderName = sender.name,
             senderHandle = sender.handle,
@@ -168,14 +169,14 @@ class MessageMapper(private val td: TdSender, private val res: StringResolver) {
             reactions = MessageContentMapper.mapReactions(message.interactionInfo?.reactions),
             commentCount = null,
             albumMessageIds = emptyList(),
-            parentId = parent,
-            senderUserId = (message.senderId as? TdApi.MessageSenderUser)?.userId,
+            parentId = parent?.let(::MessageId),
+            senderUserId = (message.senderId as? TdApi.MessageSenderUser)?.userId?.let(::UserId),
             // Comment authored on behalf of a channel (rare anonymous-admin case where
             // the admin replies "as the channel" inside the linked discussion group).
             // The thread's hosting chat IS the discussion supergroup, so there is no
             // host/foreign discriminator here — every chat-sender id is "foreign" to
             // the human reader and worth a tap target. Null for human commenters.
-            senderChatId = (message.senderId as? TdApi.MessageSenderChat)?.chatId,
+            senderChatId = (message.senderId as? TdApi.MessageSenderChat)?.chatId?.let(::ChatId),
         )
     }
 
@@ -241,14 +242,14 @@ class MessageMapper(private val td: TdSender, private val res: StringResolver) {
     private suspend fun mapForwardOrigin(origin: TdApi.MessageOrigin): ForwardOrigin = when (origin) {
         is TdApi.MessageOriginUser -> ForwardOrigin.User(
             userName = fetchUser(origin.senderUserId).name,
-            userId = origin.senderUserId,
+            userId = UserId(origin.senderUserId),
         )
         is TdApi.MessageOriginChat -> {
             val resolved = fetchChat(origin.senderChatId)
             ForwardOrigin.Chat(
                 chatName = resolved.name,
                 authorSignature = origin.authorSignature?.takeUnless { it.isNullOrBlank() },
-                sourceChatId = origin.senderChatId,
+                sourceChatId = ChatId(origin.senderChatId),
                 sourceHandle = resolved.handle,
             )
         }
@@ -258,9 +259,9 @@ class MessageMapper(private val td: TdSender, private val res: StringResolver) {
             ForwardOrigin.Channel(
                 channelName = resolved.name,
                 authorSignature = origin.authorSignature?.takeUnless { it.isNullOrBlank() },
-                sourceChatId = origin.chatId,
+                sourceChatId = ChatId(origin.chatId),
                 sourceHandle = resolved.handle,
-                sourceMessageId = origin.messageId.takeIf { it != 0L },
+                sourceMessageId = origin.messageId.takeIf { it != 0L }?.let(::MessageId),
             )
         }
         else -> ForwardOrigin.HiddenUser("")
@@ -323,8 +324,8 @@ class MessageMapper(private val td: TdSender, private val res: StringResolver) {
             authorName = author,
             excerpt = excerpt,
             isQuote = reply.quote != null,
-            replyToChatId = effectiveReplyChatId,
-            replyToMessageId = reply.messageId,
+            replyToChatId = ChatId(effectiveReplyChatId),
+            replyToMessageId = MessageId(reply.messageId),
             mediaThumb = thumb,
             mediaKind = kind,
         )

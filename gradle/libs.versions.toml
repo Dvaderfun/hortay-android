@@ -30,7 +30,7 @@ graphicsShapes = "1.1.0"
 coreKtx = "1.16.0"
 appcompat = "1.7.0"
 activityCompose = "1.10.0"
-lifecycle = "2.9.0"
+lifecycle = "2.11.0-beta02"
 coroutines = "1.10.1"
 serialization = "1.7.3"
 datastore = "1.2.1"
@@ -68,17 +68,10 @@ navigation3 = "1.1.1"
 # overlay peek transform, so this lib is pulled transitively but not consumed
 # directly by app code at the moment.
 navigationEvent = "1.1.0"
-# androidx.lifecycle 2.11.0-beta02 — needed solely for
-# `lifecycle-viewmodel-navigation3`, which provides
+# lifecycle-viewmodel-navigation3 provides
 # `rememberViewModelStoreNavEntryDecorator()` (per-NavEntry ViewModelStore
-# isolation that replaces Hortay's hand-rolled `NavEntryHost`). The KMP
-# variants (iosarm64, iossimulatorarm64) are published under raw `androidx.*`
-# at Google Maven; JetBrains does NOT re-publish this artifact (same shape
-# as androidx.navigation3:navigation3-runtime). The rest of androidx.lifecycle
-# in this project still rides 2.9.0; Gradle's transitive resolution bumps
-# everything through to 2.11.0-betaN anyway via the nav3-ui pull, so the
-# version skew is paper-only.
-lifecycleNav3 = "2.11.0-beta02"
+# isolation). KMP variants (iosarm64, iossimulatorarm64) published under raw
+# `androidx.*` at Google Maven; JetBrains does NOT re-publish this artifact.
 junit5 = "5.11.4"
 junitPlatform = "1.11.4"
 kotlinxCoroutinesTest = "1.10.1"
@@ -233,7 +226,7 @@ jetbrains-navigationevent-compose = { module = "org.jetbrains.androidx.navigatio
 # the VM decorator lives in this companion artifact (raw `androidx.lifecycle`
 # group at Google Maven; KMP iosarm64 + iossimulatorarm64 variants published
 # natively, no JetBrains fork needed).
-lifecycle-viewmodel-navigation3 = { module = "androidx.lifecycle:lifecycle-viewmodel-navigation3", version.ref = "lifecycleNav3" }
+lifecycle-viewmodel-navigation3 = { module = "androidx.lifecycle:lifecycle-viewmodel-navigation3", version.ref = "lifecycle" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

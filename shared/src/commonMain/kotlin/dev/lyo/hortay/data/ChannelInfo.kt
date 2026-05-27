@@ -5,7 +5,7 @@ import androidx.compose.runtime.Immutable
 /** Data bundle backing the channel info bottom sheet. */
 @Immutable
 data class ChannelInfo(
-    val chatId: Long,
+    val chatId: ChatId,
     val title: String,
     val handle: String?,
     val description: String?,
@@ -23,7 +23,7 @@ data class ChannelInfo(
  */
 @Immutable
 data class UserProfile(
-    val userId: Long,
+    val userId: UserId,
     val displayName: String,
     /** `@username` (with leading `@`); null when the user hasn't picked a public handle. */
     val handle: String?,
@@ -53,7 +53,7 @@ data class UserProfile(
  */
 @Immutable
 data class PersonalChannelLink(
-    val chatId: Long,
+    val chatId: ChatId,
     val title: String,
     val handle: String?,
     val avatarThumb: ByteArray?,

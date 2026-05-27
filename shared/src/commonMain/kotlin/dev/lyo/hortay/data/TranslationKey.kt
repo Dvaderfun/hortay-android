@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
  * device language would be stale and confusing. The per-language key also lets a
  * future "translate to specific language" UI reuse the same cache.
  */
-data class TranslationKey(val chatId: Long, val messageId: Long, val language: String)
+data class TranslationKey(val chatId: ChatId, val messageId: MessageId, val language: String)
 
 /**
  * Platform-agnostic surface for the in-memory translation cache. Backed by
@@ -22,8 +22,8 @@ interface TranslationsFacade {
     val translations: StateFlow<Map<TranslationKey, FormattedText>>
 
     fun currentTargetLanguage(): String
-    fun isTranslated(chatId: Long, messageId: Long): Boolean
-    fun translation(chatId: Long, messageId: Long): FormattedText?
-    suspend fun translate(chatId: Long, messageId: Long): Boolean
-    fun clear(chatId: Long, messageId: Long)
+    fun isTranslated(chatId: ChatId, messageId: MessageId): Boolean
+    fun translation(chatId: ChatId, messageId: MessageId): FormattedText?
+    suspend fun translate(chatId: ChatId, messageId: MessageId): Boolean
+    fun clear(chatId: ChatId, messageId: MessageId)
 }

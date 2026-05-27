@@ -22,8 +22,11 @@ import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDe
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
+import dev.lyo.hortay.data.ChatId
 import dev.lyo.hortay.data.HortayBackend
+import dev.lyo.hortay.data.MessageId
 import dev.lyo.hortay.data.NavStack
+import dev.lyo.hortay.data.UserId
 import dev.lyo.hortay.data.NavTarget
 import dev.lyo.hortay.data.BookmarkStore
 import dev.lyo.hortay.data.ComposeResourcesStringResolver
@@ -38,6 +41,10 @@ import dev.lyo.hortay.data.report.ReportTarget
 import dev.lyo.hortay.data.web.GuestModeStore
 import dev.lyo.hortay.nowMs
 import dev.lyo.hortay.ui.comments.CommentsScreen
+import dev.lyo.hortay.ui.composables.bars.ConnectionBanner
+import dev.lyo.hortay.ui.composables.bars.FloatingNavBar
+import dev.lyo.hortay.ui.composables.navigation.NavTab
+import dev.lyo.hortay.ui.composables.navigation.TabContentSwitcher
 import dev.lyo.hortay.ui.timeline.ChannelScreen
 import dev.lyo.hortay.ui.timeline.LocalReadCursors
 import dev.lyo.hortay.ui.users.LocalUserProfileOpener
@@ -159,7 +166,7 @@ fun MainScaffold(
     // inverts: the cold-harvest post sits at the bottom (newest) of
     // an asc-sort, and history insertions land above — squarely in
     // the user's field of view.
-    val pushChannel: (Long, Long?) -> Unit = { chatId, scrollTo ->
+    val pushChannel: (ChatId, MessageId?) -> Unit = { chatId, scrollTo ->
         scope.launch {
             kotlinx.coroutines.withTimeoutOrNull(CHANNEL_PUSH_PREFETCH_TIMEOUT_MS) {
                 backend.loadChannelHistory(chatId)
@@ -208,7 +215,7 @@ fun MainScaffold(
     // Declared above the channel-open gates and the DeepLinkDispatcher so both can
     // route `PublicHandleResult.User` straight to the in-app sheet — same surface as
     // an in-text `TextEntityTypeMentionName` tap, no Telegram-client bounce.
-    var pendingUserId by remember { mutableStateOf<Long?>(null) }
+    var pendingUserId by remember { mutableStateOf<UserId?>(null) }
     // Soft-gated by design — the sheet renders with `null` profile and the
     // seed name / avatar from the trigger (PostCard sender row, in-text
     // mention, forward chip), so it's never blank on first frame. The
@@ -217,7 +224,7 @@ fun MainScaffold(
     // populate. No push-side prefetch — the sheet enters its animation
     // and fetches in parallel, like every other tap target in the app.
     val userProfileOpener = remember {
-        UserProfileOpener { userId -> pendingUserId = userId }
+        UserProfileOpener { userId: UserId -> pendingUserId = userId }
     }
 
     /**
@@ -256,7 +263,7 @@ fun MainScaffold(
      * channel screen, so the overlay has nothing left to show. For feed /
      * channel surfaces the top isn't Comments and the overlay stays put.
      */
-    val safelyOpenChannel: (Long, Long?) -> Unit = { chatId, scrollTo ->
+    val safelyOpenChannel: (ChatId, MessageId?) -> Unit = { chatId, scrollTo ->
         scope.launch {
             when (val resolved = backend.resolveChatKind(chatId)) {
                 is PublicHandleResult.Channel -> {
@@ -301,7 +308,7 @@ fun MainScaffold(
     // the floor — `ReportFlowViewModel` keeps partial answers across TDLib
     // roundtrips, and a re-created composition starting with null target would
     // erase the user's progress visibly.
-    val openReport: (Long, Long?) -> Unit = { chatId, messageId ->
+    val openReport: (ChatId, MessageId?) -> Unit = { chatId, messageId ->
         backend.reportDialogs.open(ReportTarget(chatId, messageId, nextTapToken()))
     }
 
@@ -396,7 +403,7 @@ fun MainScaffold(
             backend.reportDialogs.open(
                 ReportTarget(
                     post.chatId,
-                    if (post.id != 0L) post.id else null,
+                    if (post.id.value != 0L) post.id else null,
                     nextTapToken(),
                 ),
             )

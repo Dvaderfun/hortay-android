@@ -8,6 +8,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
+import dev.lyo.hortay.data.ChatId
+import dev.lyo.hortay.data.MessageId
 import dev.lyo.hortay.data.StartupCoordinator
 import dev.lyo.hortay.data.TimelinePost
 import kotlinx.coroutines.delay
@@ -27,8 +29,8 @@ import kotlinx.coroutines.withTimeoutOrNull
  */
 internal fun resolveTargetIndex(
     items: List<FeedItem>,
-    chatId: Long,
-    messageId: Long,
+    chatId: ChatId,
+    messageId: MessageId,
 ): Int = items.indexOfFirst { item ->
     item.posts().any { p ->
         p.chatId == chatId && (p.id == messageId || messageId in p.albumMessageIds)
@@ -64,9 +66,9 @@ internal fun resolveTargetIndex(
 @Composable
 fun rememberPendingScrollToMessage(
     displayedItems: List<FeedItem>,
-    pendingTarget: Pair<Long, Long>?,
-    loadHistoryAround: suspend (chatId: Long, messageId: Long) -> Boolean,
-    onLanded: suspend (chatId: Long, messageId: Long, index: Int) -> Unit,
+    pendingTarget: Pair<ChatId, MessageId>?,
+    loadHistoryAround: suspend (chatId: ChatId, messageId: MessageId) -> Boolean,
+    onLanded: suspend (chatId: ChatId, messageId: MessageId, index: Int) -> Unit,
     onMissed: () -> Unit,
     loadGraceMs: Long = 1500L,
 ) {
@@ -151,8 +153,8 @@ fun rememberReadAckDwell(
     markAsRead: (suspend (List<TimelinePost>) -> Unit)?,
     scope: CoroutineScope,
     dwellMs: Long = 500L,
-): MutableSet<Pair<Long, Long>> {
-    val ackedRead = remember(ackKey) { HashSet<Pair<Long, Long>>() }
+): MutableSet<Pair<ChatId, MessageId>> {
+    val ackedRead = remember(ackKey) { HashSet<Pair<ChatId, MessageId>>() }
     val itemsState = rememberUpdatedState(displayedItems)
     if (markAsRead != null) {
         LaunchedEffect(listState, ackKey) {
@@ -239,7 +241,7 @@ fun rememberCommentsPrefetch(
     listState: LazyListState,
     displayedItems: List<FeedItem>,
     startupPhase: StateFlow<StartupCoordinator.Phase>?,
-    prefetchThread: suspend (chatId: Long, candidateMessageIds: List<Long>) -> Unit,
+    prefetchThread: suspend (chatId: ChatId, candidateMessageIds: List<MessageId>) -> Unit,
     debounceMs: Long = 1200L,
     maxConcurrent: Int = 1,
 ) {

@@ -49,20 +49,20 @@ class ChannelActionsRepository(
      * rollback signal, not a substitute for user-facing error routing.
      */
     suspend fun toggleReaction(
-        chatId: Long,
-        messageId: Long,
+        chatId: ChatId,
+        messageId: MessageId,
         kind: ReactionKind,
         isChosen: Boolean,
     ): Boolean {
         val type = kind.toTd()
         val outcome = runCatching {
             if (isChosen) {
-                td.send(TdApi.RemoveMessageReaction(chatId, messageId, type))
+                td.send(TdApi.RemoveMessageReaction(chatId.value, messageId.value, type))
             } else {
                 td.send(
                     TdApi.AddMessageReaction(
-                        chatId,
-                        messageId,
+                        chatId.value,
+                        messageId.value,
                         type,
                         /* isBig */ false,
                         /* updateRecentReactions */ true,
@@ -95,14 +95,14 @@ class ChannelActionsRepository(
      * for quizzes so we never reach this with an empty array for a quiz in practice.
      */
     suspend fun setPollAnswer(
-        chatId: Long,
-        messageId: Long,
+        chatId: ChatId,
+        messageId: MessageId,
         optionIds: IntArray,
     ): Boolean {
         val outcome = runCatching {
-            td.send(TdApi.SetPollAnswer(chatId, messageId, optionIds.toTypedArray()))
+            td.send(TdApi.SetPollAnswer(chatId.value, messageId.value, optionIds.toTypedArray()))
         }
-            .warnUnlessCancelled(TAG, "setPollAnswer(chat=$chatId msg=$messageId, n=${optionIds.size})")
+            .warnUnlessCancelled(TAG, "setPollAnswer(chat=${chatId.value} msg=${messageId.value}, n=${optionIds.size})")
             .onFailure { it.surfaceTo(userMessages, res, Res.string.op_vote_in_poll, connection.value) }
         // TDLib code 406 = silent no-op per the documented `error` contract — typically fires
         // when the local poll mirror already matches the requested selection (the canonical
@@ -121,11 +121,11 @@ class ChannelActionsRepository(
      * for the source channel reaches this same client process, and a future "manage your
      * channel" surface would call this method without further wiring.
      */
-    suspend fun stopPoll(chatId: Long, messageId: Long): Boolean {
+    suspend fun stopPoll(chatId: ChatId, messageId: MessageId): Boolean {
         val outcome = runCatching {
-            td.send(TdApi.StopPoll(chatId, messageId, /* replyMarkup */ null))
+            td.send(TdApi.StopPoll(chatId.value, messageId.value, /* replyMarkup */ null))
         }
-            .warnUnlessCancelled(TAG, "stopPoll($chatId, $messageId)")
+            .warnUnlessCancelled(TAG, "stopPoll(${chatId.value}, ${messageId.value})")
             .onFailure { it.surfaceTo(userMessages, res, Res.string.op_close_poll, connection.value) }
         return outcome.isSuccess
     }
@@ -148,8 +148,8 @@ class ChannelActionsRepository(
      * as a pragmatic "forever" — matches the official client's longest preset and avoids
      * the user being surprised by reactivated notifications a year out.
      */
-    suspend fun setMuted(chatId: Long, muted: Boolean) {
-        val current = runCatching { td.send(TdApi.GetChat(chatId)) }
+    suspend fun setMuted(chatId: ChatId, muted: Boolean) {
+        val current = runCatching { td.send(TdApi.GetChat(chatId.value)) }
             .warnUnlessCancelled(TAG, "setMuted/getChat")
             .getOrNull()?.notificationSettings ?: TdApi.ChatNotificationSettings()
         val updated = TdApi.ChatNotificationSettings().apply {
@@ -170,26 +170,26 @@ class ChannelActionsRepository(
             useDefaultDisableMentionNotifications = current.useDefaultDisableMentionNotifications
             disableMentionNotifications = current.disableMentionNotifications
         }
-        runCatching { td.send(TdApi.SetChatNotificationSettings(chatId, updated)) }
+        runCatching { td.send(TdApi.SetChatNotificationSettings(chatId.value, updated)) }
             .warnUnlessCancelled(TAG, "setMuted($muted)")
             .onFailure { it.surfaceTo(userMessages, res, if (muted) Res.string.op_mute else Res.string.op_unmute, connection.value) }
     }
 
-    suspend fun isMuted(chatId: Long): Boolean {
-        val chat = runCatching { td.send(TdApi.GetChat(chatId)) }
+    suspend fun isMuted(chatId: ChatId): Boolean {
+        val chat = runCatching { td.send(TdApi.GetChat(chatId.value)) }
             .warnUnlessCancelled(TAG, "isMuted")
             .getOrNull() ?: return false
         return chat.notificationSettings?.muteFor.let { it != null && it > 0 }
     }
 
-    suspend fun joinChat(chatId: Long) {
-        runCatching { td.send(TdApi.JoinChat(chatId)) }
+    suspend fun joinChat(chatId: ChatId) {
+        runCatching { td.send(TdApi.JoinChat(chatId.value)) }
             .warnUnlessCancelled(TAG, "joinChat")
             .onFailure { it.surfaceTo(userMessages, res, Res.string.op_join_channel, connection.value) }
     }
 
-    suspend fun leaveChat(chatId: Long) {
-        runCatching { td.send(TdApi.LeaveChat(chatId)) }
+    suspend fun leaveChat(chatId: ChatId) {
+        runCatching { td.send(TdApi.LeaveChat(chatId.value)) }
             .warnUnlessCancelled(TAG, "leaveChat")
             .onFailure { it.surfaceTo(userMessages, res, Res.string.op_leave_channel, connection.value) }
     }
@@ -199,8 +199,8 @@ class ChannelActionsRepository(
      * subscriber count, mute state. Several TDLib calls coalesced — kept on this single
      * suspend method so the UI fires one coroutine and lays out when everything is in.
      */
-    suspend fun channelInfo(chatId: Long): ChannelInfo? {
-        val chat = runCatching { td.send(TdApi.GetChat(chatId)) }
+    suspend fun channelInfo(chatId: ChatId): ChannelInfo? {
+        val chat = runCatching { td.send(TdApi.GetChat(chatId.value)) }
             .warnUnlessCancelled(TAG, "channelInfo/getChat")
             .getOrNull() ?: return null
         val supergroupId = (chat.type as? TdApi.ChatTypeSupergroup)?.supergroupId
@@ -239,15 +239,15 @@ class ChannelActionsRepository(
      * rides along when the supergroup is already in TDLib's cache, otherwise the
      * row just renders without that subtitle line.
      */
-    suspend fun userProfile(userId: Long): UserProfile? {
-        val user = runCatching { td.send(TdApi.GetUser(userId)) }
+    suspend fun userProfile(userId: UserId): UserProfile? {
+        val user = runCatching { td.send(TdApi.GetUser(userId.value)) }
             .warnUnlessCancelled(TAG, "userProfile/getUser")
             .getOrNull() ?: return null
-        val full = runCatching { td.send(TdApi.GetUserFullInfo(userId)) }
+        val full = runCatching { td.send(TdApi.GetUserFullInfo(userId.value)) }
             .warnUnlessCancelled(TAG, "userProfile/getUserFullInfo")
             .getOrNull()
-        val personal = full?.personalChatId?.takeIf { it != 0L }?.let { chatId ->
-            val chat = runCatching { td.send(TdApi.GetChat(chatId)) }
+        val personal = full?.personalChatId?.takeIf { it != 0L }?.let { personalChatId ->
+            val chat = runCatching { td.send(TdApi.GetChat(personalChatId)) }
                 .warnUnlessCancelled(TAG, "userProfile/getChat(personal)")
                 .getOrNull() ?: return@let null
             val sg = (chat.type as? TdApi.ChatTypeSupergroup)?.supergroupId?.let { sgId ->
@@ -256,7 +256,7 @@ class ChannelActionsRepository(
                     .getOrNull()
             }
             PersonalChannelLink(
-                chatId = chatId,
+                chatId = ChatId(personalChatId),
                 title = chat.title.orEmpty(),
                 handle = sg?.usernames?.activeUsernames?.firstOrNull()?.let { "@$it" },
                 avatarThumb = chat.photo?.minithumbnail?.data,
@@ -310,7 +310,7 @@ class ChannelActionsRepository(
             .getOrNull() ?: return null
         return ChatInvitePreview(
             inviteLink = inviteLink,
-            chatId = info.chatId.takeIf { it != 0L },
+            chatId = info.chatId.takeIf { it != 0L }?.let(::ChatId),
             title = info.title.orEmpty(),
             memberCount = info.memberCount,
             kind = when (info.type) {

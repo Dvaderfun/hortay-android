@@ -51,15 +51,15 @@ actual class HortayBackend(
     actual fun clearAuthError() = auth.clearAuthError()
 
     // ---- Channels / users -------------------------------------------------
-    actual suspend fun channelInfo(chatId: Long): ChannelInfo? =
-        channelActions.channelInfo(chatId)
-    actual suspend fun setMuted(chatId: Long, muted: Boolean) =
-        channelActions.setMuted(chatId, muted)
-    actual suspend fun joinChat(chatId: Long) = channelActions.joinChat(chatId)
-    actual suspend fun leaveChat(chatId: Long) = channelActions.leaveChat(chatId)
+    actual suspend fun channelInfo(chatId: ChatId): ChannelInfo? =
+        channelActions.channelInfo(chatId.value)
+    actual suspend fun setMuted(chatId: ChatId, muted: Boolean) =
+        channelActions.setMuted(chatId.value, muted)
+    actual suspend fun joinChat(chatId: ChatId) = channelActions.joinChat(chatId.value)
+    actual suspend fun leaveChat(chatId: ChatId) = channelActions.leaveChat(chatId.value)
     actual suspend fun joinByInvite(inviteLink: String): Long? = channelActions.joinByInvite(inviteLink)
-    actual suspend fun userProfile(userId: Long): UserProfile? =
-        channelActions.userProfile(userId)
+    actual suspend fun userProfile(userId: UserId): UserProfile? =
+        channelActions.userProfile(userId.value)
 
     // ---- Links (no TelegramLinkResolver on iOS yet) -----------------------
     actual suspend fun resolveLink(uri: String): DeepLink? = null
@@ -70,65 +70,65 @@ actual class HortayBackend(
     actual val archivedChatIds: StateFlow<Set<Long>> get() = postsRepo.archivedChatIds
 
     actual suspend fun refreshFeed() = postsRepo.refresh()
-    actual suspend fun loadOlder(chatId: Long): Int = postsRepo.loadOlder(chatId)
-    actual suspend fun loadHistoryAround(chatId: Long, anchorMessageId: Long): Boolean =
-        postsRepo.loadHistoryAround(chatId, anchorMessageId)
-    actual suspend fun openChat(chatId: Long) = postsRepo.openChat(chatId)
-    actual suspend fun closeChat(chatId: Long) = postsRepo.closeChat(chatId)
-    actual suspend fun viewMessages(chatId: Long, messageIds: List<Long>) =
-        postsRepo.viewMessages(chatId, messageIds)
-    actual suspend fun loadChannelHistory(chatId: Long): Result<Unit> =
-        postsRepo.loadChannelHistory(chatId)
-    actual fun hasWarmChannelHistory(chatId: Long): Boolean =
-        postsRepo.hasWarmChannelHistory(chatId)
+    actual suspend fun loadOlder(chatId: ChatId): Int = postsRepo.loadOlder(chatId.value)
+    actual suspend fun loadHistoryAround(chatId: ChatId, anchorMessageId: MessageId): Boolean =
+        postsRepo.loadHistoryAround(chatId.value, anchorMessageId.value)
+    actual suspend fun openChat(chatId: ChatId) = postsRepo.openChat(chatId.value)
+    actual suspend fun closeChat(chatId: ChatId) = postsRepo.closeChat(chatId.value)
+    actual suspend fun viewMessages(chatId: ChatId, messageIds: List<MessageId>) =
+        postsRepo.viewMessages(chatId.value, messageIds.map { it.value })
+    actual suspend fun loadChannelHistory(chatId: ChatId): Result<Unit> =
+        postsRepo.loadChannelHistory(chatId.value)
+    actual fun hasWarmChannelHistory(chatId: ChatId): Boolean =
+        postsRepo.hasWarmChannelHistory(chatId.value)
 
-    actual suspend fun chatTitle(chatId: Long): String? = postsRepo.chatTitle(chatId)
-    actual suspend fun channelSubscribers(chatId: Long): Int? =
-        postsRepo.channelSubscribers(chatId)
-    actual fun channelSubscribersCached(chatId: Long): Int? =
-        postsRepo.channelSubscribersCached(chatId)
-    actual suspend fun chatAvatar(chatId: Long): Pair<Int?, ByteArray?>? =
-        postsRepo.chatAvatar(chatId)
+    actual suspend fun chatTitle(chatId: ChatId): String? = postsRepo.chatTitle(chatId.value)
+    actual suspend fun channelSubscribers(chatId: ChatId): Int? =
+        postsRepo.channelSubscribers(chatId.value)
+    actual fun channelSubscribersCached(chatId: ChatId): Int? =
+        postsRepo.channelSubscribersCached(chatId.value)
+    actual suspend fun chatAvatar(chatId: ChatId): Pair<Int?, ByteArray?>? =
+        postsRepo.chatAvatar(chatId.value)
 
-    actual suspend fun searchInChannel(chatId: Long, query: String): List<TimelinePost> =
-        postsRepo.searchInChannel(chatId, query)
+    actual suspend fun searchInChannel(chatId: ChatId, query: String): List<TimelinePost> =
+        postsRepo.searchInChannel(chatId.value, query)
 
     // ---- Reactions / polls ------------------------------------------------
     actual fun applyOptimisticReaction(
-        chatId: Long, messageId: Long, kind: ReactionKind, nowChosen: Boolean,
-    ) = postsRepo.applyOptimisticReaction(chatId, messageId, kind, nowChosen)
+        chatId: ChatId, messageId: MessageId, kind: ReactionKind, nowChosen: Boolean,
+    ) = postsRepo.applyOptimisticReaction(chatId.value, messageId.value, kind, nowChosen)
 
-    actual fun applyOptimisticPollAnswer(chatId: Long, messageId: Long, chosenIndices: IntArray) =
-        postsRepo.applyOptimisticPollAnswer(chatId, messageId, chosenIndices)
+    actual fun applyOptimisticPollAnswer(chatId: ChatId, messageId: MessageId, chosenIndices: IntArray) =
+        postsRepo.applyOptimisticPollAnswer(chatId.value, messageId.value, chosenIndices)
 
-    actual fun clearPollPending(chatId: Long, messageId: Long, revert: Boolean) =
-        postsRepo.clearPollPending(chatId, messageId, revert)
+    actual fun clearPollPending(chatId: ChatId, messageId: MessageId, revert: Boolean) =
+        postsRepo.clearPollPending(chatId.value, messageId.value, revert)
 
     actual suspend fun toggleReaction(
-        chatId: Long, messageId: Long, kind: ReactionKind, isChosen: Boolean,
-    ): Boolean = channelActions.toggleReaction(chatId, messageId, kind, isChosen)
+        chatId: ChatId, messageId: MessageId, kind: ReactionKind, isChosen: Boolean,
+    ): Boolean = channelActions.toggleReaction(chatId.value, messageId.value, kind, isChosen)
 
-    actual suspend fun setPollAnswer(chatId: Long, messageId: Long, optionIds: IntArray): Boolean =
-        channelActions.setPollAnswer(chatId, messageId, optionIds)
+    actual suspend fun setPollAnswer(chatId: ChatId, messageId: MessageId, optionIds: IntArray): Boolean =
+        channelActions.setPollAnswer(chatId.value, messageId.value, optionIds)
 
     // ---- Public handle / chat kind ----------------------------------------
     actual suspend fun resolvePublicHandle(handle: String): PublicHandleResult =
         postsRepo.resolvePublicHandle(handle)
-    actual suspend fun resolveChatKind(chatId: Long): PublicHandleResult =
-        postsRepo.resolveChatKind(chatId)
+    actual suspend fun resolveChatKind(chatId: ChatId): PublicHandleResult =
+        postsRepo.resolveChatKind(chatId.value)
 
     // ---- Comments ---------------------------------------------------------
-    actual fun observeThread(chatId: Long, candidateMessageIds: List<Long>): Flow<ThreadState> =
-        commentsRepo.observeThread(chatId, candidateMessageIds)
-    actual suspend fun viewThreadMessages(threadChatId: Long, messageIds: List<Long>) =
-        commentsRepo.viewMessages(threadChatId, messageIds)
-    actual suspend fun prefetchThread(chatId: Long, candidateMessageIds: List<Long>) =
-        commentsRepo.prefetchThread(chatId, candidateMessageIds)
+    actual fun observeThread(chatId: ChatId, candidateMessageIds: List<MessageId>): Flow<ThreadState> =
+        commentsRepo.observeThread(chatId.value, candidateMessageIds.map { it.value })
+    actual suspend fun viewThreadMessages(threadChatId: ChatId, messageIds: List<MessageId>) =
+        commentsRepo.viewMessages(threadChatId.value, messageIds.map { it.value })
+    actual suspend fun prefetchThread(chatId: ChatId, candidateMessageIds: List<MessageId>) =
+        commentsRepo.prefetchThread(chatId.value, candidateMessageIds.map { it.value })
     actual fun applyCommentOptimisticReaction(
-        threadChatId: Long, messageId: Long, current: Reactions, kind: ReactionKind, nowChosen: Boolean,
-    ) = commentsRepo.applyOptimisticReaction(threadChatId, messageId, current, kind, nowChosen)
-    actual fun clearCommentOptimisticReaction(threadChatId: Long, messageId: Long) =
-        commentsRepo.clearOptimisticReaction(threadChatId, messageId)
+        threadChatId: ChatId, messageId: MessageId, current: Reactions, kind: ReactionKind, nowChosen: Boolean,
+    ) = commentsRepo.applyOptimisticReaction(threadChatId.value, messageId.value, current, kind, nowChosen)
+    actual fun clearCommentOptimisticReaction(threadChatId: ChatId, messageId: MessageId) =
+        commentsRepo.clearOptimisticReaction(threadChatId.value, messageId.value)
 
     actual suspend fun canonicalShareUrl(post: TimelinePost): String? =
         postsRepo.canonicalShareUrl(post)

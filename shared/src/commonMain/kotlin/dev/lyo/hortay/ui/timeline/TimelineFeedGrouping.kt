@@ -172,8 +172,8 @@ data class FeedItem(val post: TimelinePost) {
  * standalones key on `post.id`. See [FeedItem] for the full rationale.
  */
 private fun feedItemKey(post: TimelinePost): String =
-    if (post.mediaAlbumId != 0L) "album_${post.chatId}_${post.mediaAlbumId}"
-    else "post_${post.chatId}_${post.id}"
+    if (post.mediaAlbumId != 0L) "album_${post.chatId.value}_${post.mediaAlbumId}"
+    else "post_${post.chatId.value}_${post.id.value}"
 
 /**
  * Compatibility shim for downstream call sites that derive a [TimelinePost] from a feed

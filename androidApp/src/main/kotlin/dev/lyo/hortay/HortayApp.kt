@@ -46,13 +46,6 @@ class HortayApp : Application(), SingletonImageLoader.Factory {
         // module instantiates DataStores at startKoin time (eager
         // singletons depend on them).
         dev.lyo.hortay.data.PlatformContextHolder.init(this)
-        AppConfig.telegramApiId = BuildConfig.TELEGRAM_API_ID
-        AppConfig.telegramApiHash = BuildConfig.TELEGRAM_API_HASH
-        AppConfig.childSafetyPolicyUrl = BuildConfig.CHILD_SAFETY_POLICY_URL
-        AppConfig.privacyPolicyUrl = BuildConfig.PRIVACY_POLICY_URL
-        AppConfig.debug = BuildConfig.DEBUG
-        AppConfig.versionName = BuildConfig.VERSION_NAME
-        AppConfig.versionCode = BuildConfig.VERSION_CODE
         startKoin {
             androidLogger(if (BuildConfig.DEBUG) Level.INFO else Level.ERROR)
             androidContext(this@HortayApp)

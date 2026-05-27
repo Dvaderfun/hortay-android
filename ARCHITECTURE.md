@@ -7,8 +7,6 @@ Maintainer notes:
 
 # Architecture
 
-> 🚧 **ACTIVE MIGRATION:** **BuildKonfig** (Config bridge replacement). Rules against this tool below are actively being phased out. (Koin DI: done — Phase I.5. Navigation 3: done — see "Hard rules → Architecture & DI".)
-
 Modules, load-bearing decisions, hard rules, and conventions. Pair with [README.md](README.md) for setup.
 
 ## Language policy
@@ -33,7 +31,7 @@ Single-process, single-Activity. `MainActivity` routes: `auth.Ready → MainScaf
 
 **Why split `:androidApp` + `:shared`:** AGP 9 forbids `com.android.application` + `org.jetbrains.kotlin.multiplatform` in the same module. Application module stays pure Android; KMP library module owns shared code. See [JetBrains migration guide](https://kotlinlang.org/docs/multiplatform/multiplatform-project-agp-9-migration.html).
 
-**BuildConfig bridge.** `com.android.kotlin.multiplatform.library` doesn't generate `buildConfigField`. `:androidApp` defines BuildConfig fields (`TELEGRAM_API_ID`, etc.), `HortayApp.onCreate` writes them into the `AppConfig` object in `:shared`/androidMain. All non-Application code reads from `AppConfig`.
+**BuildKonfig.** `com.android.kotlin.multiplatform.library` doesn't generate `buildConfigField`. A Gradle task (`generateBuildKonfig` in `shared/build.gradle.kts`) reads `local.properties` (API credentials) + `gradle.properties` (policy URLs, version) at build time and generates `dev.lyo.hortay.BuildKonfig` — an `object` with `const val` fields accessible from `commonMain`. Debug detection uses the expect/actual `isDebugBuild` (Android: `ApplicationInfo.FLAG_DEBUGGABLE`; iOS: `false`).
 
 **Namespace split.** `:shared` namespace = `dev.lyo.hortay` (so `R.string.*` references stay unchanged across 130+ files). `:androidApp` namespace = `dev.lyo.hortay.app` (avoids R-class collision). Manifest uses FQCN `android:name="dev.lyo.hortay.HortayApp"` because `HortayApp` and `MainActivity` live in `androidApp/src/main/kotlin/dev/lyo/hortay/` — manifest's namespace-relative resolution would otherwise look in `dev.lyo.hortay.app.*`.
 
@@ -130,7 +128,7 @@ Each `❌` carries a **Revisit:** clause — the concrete condition that would j
 - ❌ `x86_64` in release `abiFilters` — +24 MB libtdjni.so for zero users.
 - ❌ Bumping `versionCode` by hand. It's auto-derived from `git rev-list --count HEAD` in `androidApp/build.gradle.kts`.
 - ❌ `bundleRelease` without a fresh commit — same versionCode → Play returns 409. Workflow: commit → bundle.
-- 🚧 **MIGRATION TO BUILDKONFIG**: We are adopting `com.codingfeline.buildkonfig` to replace the manual `AppConfig` bridge from `:androidApp` to `:shared`.
+- ✅ **BuildKonfig via Gradle task.** `generateBuildKonfig` in `shared/build.gradle.kts` generates `dev.lyo.hortay.BuildKonfig` (const vals, accessible from commonMain). No third-party plugin — `com.codingfeline.buildkonfig` is incompatible with `com.android.kotlin.multiplatform.library`'s `android {}` DSL.
 - ❌ `com.android.application` plugin + `org.jetbrains.kotlin.multiplatform` in the same module. AGP 9 forbids it. App-shell stays separate from KMP library.
 
 ### Workspace
@@ -183,7 +181,7 @@ Toolchain: JDK 21, Gradle 9.5.1, AGP 9.2.0, Kotlin 2.3.10 (K2), Compose Multipla
 ## Setup delta on top of README
 
 - `keystore.properties` at the repo root (gitignored) supplies `storeFile`, `storePassword`, `keyAlias`, `keyPassword`. AGP enables release signing only when this file exists (`androidApp/build.gradle.kts`).
-- `local.properties` at repo root (gitignored) supplies `telegram.apiId` + `telegram.apiHash` from <https://my.telegram.org>. Read by `androidApp/build.gradle.kts` → `BuildConfig` → `AppConfig`.
+- `local.properties` at repo root (gitignored) supplies `telegram.apiId` + `telegram.apiHash` from <https://my.telegram.org>. Read by `shared/build.gradle.kts` → `generateBuildKonfig` → `BuildKonfig`.
 - Beta uses the same keystore + auto-versionCode from git.
 - `gradle.properties` carries `HORTAY_CHILD_SAFETY_POLICY_URL` / `HORTAY_PRIVACY_POLICY_URL` for CSAE compliance.
 

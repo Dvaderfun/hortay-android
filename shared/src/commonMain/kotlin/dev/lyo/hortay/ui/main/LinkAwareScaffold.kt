@@ -10,7 +10,7 @@ import dev.lyo.hortay.data.DeepLink
 import dev.lyo.hortay.data.DeepLinkRouter
 import dev.lyo.hortay.data.HortayBackend
 import dev.lyo.hortay.data.LinkDialogState
-import dev.lyo.hortay.ui.text.ExternalLinkConfirmDialog
+import dev.lyo.hortay.ui.composables.dialogs.ExternalLinkConfirmDialog
 import dev.lyo.hortay.ui.text.LocalHashtagTap
 import dev.lyo.hortay.ui.text.LocalLinkConfirm
 import dev.lyo.hortay.ui.text.parseHashtagWithScope

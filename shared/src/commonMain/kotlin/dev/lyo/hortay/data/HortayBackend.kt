@@ -105,16 +105,16 @@ expect class HortayBackend {
      * subscriber count, mute / member flags). Returns null if the chat isn't a
      * channel-style supergroup or TDLib rejects the lookup.
      */
-    suspend fun channelInfo(chatId: Long): ChannelInfo?
+    suspend fun channelInfo(chatId: ChatId): ChannelInfo?
 
     /** Toggle the mute state of [chatId] in the user's notification settings. */
-    suspend fun setMuted(chatId: Long, muted: Boolean)
+    suspend fun setMuted(chatId: ChatId, muted: Boolean)
 
     /** Subscribe the user to [chatId]. */
-    suspend fun joinChat(chatId: Long)
+    suspend fun joinChat(chatId: ChatId)
 
     /** Unsubscribe from [chatId]. */
-    suspend fun leaveChat(chatId: Long)
+    suspend fun leaveChat(chatId: ChatId)
 
     /**
      * Join a chat by invite link. Returns the resolved chat id on success
@@ -128,7 +128,7 @@ expect class HortayBackend {
      * groups count). Returns null if the user isn't visible or TDLib rejects
      * the lookup.
      */
-    suspend fun userProfile(userId: Long): UserProfile?
+    suspend fun userProfile(userId: UserId): UserProfile?
 
     // ---- Links --------------------------------------------------------
 
@@ -181,27 +181,27 @@ expect class HortayBackend {
      * Load older history for [chatId] (channel-screen pagination). Returns the
      * number of new posts that landed; zero means "no more history available".
      */
-    suspend fun loadOlder(chatId: Long): Int
+    suspend fun loadOlder(chatId: ChatId): Int
 
     /**
      * Pull a window of history around [anchorMessageId] in [chatId] so a deep
      * link can render the anchor with context on either side. Returns `true`
      * when the anchor (or an album sibling) is now in the merged feed.
      */
-    suspend fun loadHistoryAround(chatId: Long, anchorMessageId: Long): Boolean
+    suspend fun loadHistoryAround(chatId: ChatId, anchorMessageId: MessageId): Boolean
 
     /** Bump TDLib's `OpenChat` refcount via [ChatPresence]. */
-    suspend fun openChat(chatId: Long)
+    suspend fun openChat(chatId: ChatId)
 
     /** Symmetric [openChat] partner. Wrap critical pairs in `NonCancellable`. */
-    suspend fun closeChat(chatId: Long)
+    suspend fun closeChat(chatId: ChatId)
 
     /**
      * Mark [messageIds] in [chatId] as viewed (TDLib `ViewMessages`). The
      * channel screen's dwell-ack effect calls this when a message sits in
      * the viewport past the read-mark dwell window.
      */
-    suspend fun viewMessages(chatId: Long, messageIds: List<Long>)
+    suspend fun viewMessages(chatId: ChatId, messageIds: List<MessageId>)
 
     /**
      * Warm the per-channel history slice — drains `GetChatHistory` once and
@@ -210,46 +210,46 @@ expect class HortayBackend {
      * frame. Returns `Result.success` even when TDLib serves an empty page;
      * `Result.failure` carries the underlying exception for retry chrome.
      */
-    suspend fun loadChannelHistory(chatId: Long): Result<Unit>
+    suspend fun loadChannelHistory(chatId: ChatId): Result<Unit>
 
     /**
      * True when [loadChannelHistory] has already drained successfully for
      * [chatId] this session — push paths use this to short-circuit the
      * await on cooldown (warm/cache opens stay instant).
      */
-    fun hasWarmChannelHistory(chatId: Long): Boolean
+    fun hasWarmChannelHistory(chatId: ChatId): Boolean
 
     /**
      * Chat display title from TDLib's local cache (or one-shot `GetChat` on
      * miss). Used by channel chrome and link-preview fallbacks.
      */
-    suspend fun chatTitle(chatId: Long): String?
+    suspend fun chatTitle(chatId: ChatId): String?
 
     /**
      * Subscriber count for [chatId] — supergroup-only. Suspending variant;
      * hits TDLib once on cache miss, then served from the local mirror.
      */
-    suspend fun channelSubscribers(chatId: Long): Int?
+    suspend fun channelSubscribers(chatId: ChatId): Int?
 
     /**
      * Synchronous mirror read of [channelSubscribers]. Returns null when the
      * value hasn't been fetched yet — callers fall through to the suspending
      * variant in that case. Composed-into `ChannelViewModel` seed paths.
      */
-    fun channelSubscribersCached(chatId: Long): Int?
+    fun channelSubscribersCached(chatId: ChatId): Int?
 
     /**
      * Chat avatar bundle: TDLib file id of the small (160 dp) variant plus
      * the inline minithumbnail bytes (~200 B, embedded in every chat photo
      * so we can paint something while the file downloads).
      */
-    suspend fun chatAvatar(chatId: Long): Pair<Int?, ByteArray?>?
+    suspend fun chatAvatar(chatId: ChatId): Pair<Int?, ByteArray?>?
 
     /**
      * Search the channel's history for [query]. Returns matches as ready-to-
      * render [TimelinePost]s. Throttled by TDLib's per-chat search limits.
      */
-    suspend fun searchInChannel(chatId: Long, query: String): List<TimelinePost>
+    suspend fun searchInChannel(chatId: ChatId, query: String): List<TimelinePost>
 
     /**
      * Optimistic reaction flip — paints the chip immediately on the local
@@ -259,8 +259,8 @@ expect class HortayBackend {
      * to roll back the visual change.
      */
     fun applyOptimisticReaction(
-        chatId: Long,
-        messageId: Long,
+        chatId: ChatId,
+        messageId: MessageId,
         kind: ReactionKind,
         nowChosen: Boolean,
     )
@@ -270,21 +270,21 @@ expect class HortayBackend {
      * so the tap shows a shimmer immediately. Eventual `UpdateMessageContent`
      * settles the authoritative percentages.
      */
-    fun applyOptimisticPollAnswer(chatId: Long, messageId: Long, chosenIndices: IntArray)
+    fun applyOptimisticPollAnswer(chatId: ChatId, messageId: MessageId, chosenIndices: IntArray)
 
     /** Drop `isBeingChosen` shimmer; if [revert] also reset `isChosen`. */
-    fun clearPollPending(chatId: Long, messageId: Long, revert: Boolean)
+    fun clearPollPending(chatId: ChatId, messageId: MessageId, revert: Boolean)
 
     /** Send the reaction toggle to TDLib. Returns success for rollback gating. */
     suspend fun toggleReaction(
-        chatId: Long,
-        messageId: Long,
+        chatId: ChatId,
+        messageId: MessageId,
         kind: ReactionKind,
         isChosen: Boolean,
     ): Boolean
 
     /** Send the poll-vote commit to TDLib. Returns success for rollback gating. */
-    suspend fun setPollAnswer(chatId: Long, messageId: Long, optionIds: IntArray): Boolean
+    suspend fun setPollAnswer(chatId: ChatId, messageId: MessageId, optionIds: IntArray): Boolean
 
     /**
      * Resolve a Telegram public `@handle` (without the leading `@`) to a
@@ -298,7 +298,7 @@ expect class HortayBackend {
      * already have an id from a forward header / reply target and need to
      * decide whether to push a channel screen or open the user sheet.
      */
-    suspend fun resolveChatKind(chatId: Long): PublicHandleResult
+    suspend fun resolveChatKind(chatId: ChatId): PublicHandleResult
 
     /**
      * Subscribe to live updates of a discussion thread. The flow emits
@@ -311,7 +311,7 @@ expect class HortayBackend {
      * with `canGetMessageThread = true` and starts the conversation from
      * there.
      */
-    fun observeThread(chatId: Long, candidateMessageIds: List<Long>): Flow<ThreadState>
+    fun observeThread(chatId: ChatId, candidateMessageIds: List<MessageId>): Flow<ThreadState>
 
     /**
      * Mark thread messages as read (TDLib `ViewMessages` against the
@@ -319,7 +319,7 @@ expect class HortayBackend {
      * effect when a comment row sits in the viewport past the read-mark
      * dwell window.
      */
-    suspend fun viewThreadMessages(threadChatId: Long, messageIds: List<Long>)
+    suspend fun viewThreadMessages(threadChatId: ChatId, messageIds: List<MessageId>)
 
     /**
      * Warm the comments-thread cache for [chatId] / [candidateMessageIds]
@@ -327,7 +327,7 @@ expect class HortayBackend {
      * tapping the comments affordance opens the overlay without an extra
      * RPC round-trip.
      */
-    suspend fun prefetchThread(chatId: Long, candidateMessageIds: List<Long>)
+    suspend fun prefetchThread(chatId: ChatId, candidateMessageIds: List<MessageId>)
 
     /**
      * Optimistic reaction flip on a comments-thread message. Separate from
@@ -335,15 +335,15 @@ expect class HortayBackend {
      * on the thread observer's own snapshot, not on the feed `_posts` stream.
      */
     fun applyCommentOptimisticReaction(
-        threadChatId: Long,
-        messageId: Long,
+        threadChatId: ChatId,
+        messageId: MessageId,
         current: Reactions,
         kind: ReactionKind,
         nowChosen: Boolean,
     )
 
     /** Drop a previously-applied comment optimistic-reaction override. */
-    fun clearCommentOptimisticReaction(threadChatId: Long, messageId: Long)
+    fun clearCommentOptimisticReaction(threadChatId: ChatId, messageId: MessageId)
 
     /**
      * TDLib-minted canonical share URL for [post]: handles album-anchor,

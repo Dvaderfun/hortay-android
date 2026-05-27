@@ -55,9 +55,9 @@ import dev.lyo.hortay.data.web.WebFeedSource
 import dev.lyo.hortay.data.web.ChannelEntry
 import dev.lyo.hortay.data.web.ChannelFetchStatus
 import dev.lyo.hortay.data.web.WebPostAdapter
-import dev.lyo.hortay.ui.components.HortayTopBar
+import dev.lyo.hortay.ui.composables.bars.HortayTopBar
 import kotlinx.collections.immutable.persistentSetOf
-import dev.lyo.hortay.ui.components.HortayTopBarSize
+import dev.lyo.hortay.ui.composables.bars.HortayTopBarSize
 import dev.lyo.hortay.ui.icons.Symbol
 import dev.lyo.hortay.ui.media.TdAvatar
 import kotlinx.coroutines.launch

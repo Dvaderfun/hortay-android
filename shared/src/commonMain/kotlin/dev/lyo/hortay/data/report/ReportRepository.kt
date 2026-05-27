@@ -5,6 +5,8 @@
 
 package dev.lyo.hortay.data.report
 
+import dev.lyo.hortay.data.ChatId
+import dev.lyo.hortay.data.MessageId
 import dev.lyo.hortay.data.StringResolver
 import dev.lyo.hortay.data.TdRpcException
 import dev.lyo.hortay.data.TdSender
@@ -40,20 +42,20 @@ class ReportRepository(
      * Begin a report against [chatId] / [messageId].
      * Pass an empty option id and empty [text] per TDLib spec for the initial request.
      */
-    override suspend fun start(chatId: Long, messageId: Long?): ReportStep =
+    override suspend fun start(chatId: ChatId, messageId: MessageId?): ReportStep =
         sendReport(chatId, messageId, byteArrayOf(), "")
 
     /** User selected one of the server-provided options. */
     override suspend fun selectOption(
-        chatId: Long,
-        messageId: Long?,
+        chatId: ChatId,
+        messageId: MessageId?,
         option: ReportOption,
     ): ReportStep = sendReport(chatId, messageId, option.id, "")
 
     /** User typed text (or tapped Skip when text is optional). */
     override suspend fun submitText(
-        chatId: Long,
-        messageId: Long?,
+        chatId: ChatId,
+        messageId: MessageId?,
         optionId: ByteArray,
         text: String,
     ): ReportStep = sendReport(chatId, messageId, optionId, text)
@@ -61,15 +63,15 @@ class ReportRepository(
     // -------------------------------------------------------------------------
 
     private suspend fun sendReport(
-        chatId: Long,
-        messageId: Long?,
+        chatId: ChatId,
+        messageId: MessageId?,
         optionId: ByteArray,
         text: String,
     ): ReportStep {
-        val messageIds = if (messageId != null && messageId != 0L) arrayOf(messageId)
+        val messageIds = if (messageId != null && messageId.value != 0L) arrayOf(messageId.value)
         else arrayOf()
         val result = runCatching {
-            td.send(TdApi.ReportChat(chatId, optionId, messageIds, text))
+            td.send(TdApi.ReportChat(chatId.value, optionId, messageIds, text))
         }
         return result.fold(
             onSuccess = { reportResult -> mapResult(chatId, messageId, reportResult) },
@@ -78,8 +80,8 @@ class ReportRepository(
     }
 
     private suspend fun mapResult(
-        chatId: Long,
-        messageId: Long?,
+        chatId: ChatId,
+        messageId: MessageId?,
         result: TdApi.ReportChatResult,
     ): ReportStep = when (result) {
         is TdApi.ReportChatResultOk -> {
@@ -115,8 +117,8 @@ class ReportRepository(
     }
 
     private suspend fun mapError(
-        chatId: Long,
-        messageId: Long?,
+        chatId: ChatId,
+        messageId: MessageId?,
         e: Throwable,
     ): ReportState {
         val tdEx = e as? TdRpcException
@@ -134,16 +136,16 @@ class ReportRepository(
     private suspend fun logTerminal(
         method: String,
         status: String,
-        chatId: Long,
-        messageId: Long?,
+        chatId: ChatId,
+        messageId: MessageId?,
     ) {
         log.log(
             ReportLogEntry(
                 timestamp = dev.lyo.hortay.nowMs(),
                 mode = "auth",
                 channelUsername = null,
-                chatId = chatId,
-                messageId = messageId,
+                chatId = chatId.value,
+                messageId = messageId?.value,
                 deliveryMethod = method,
                 deliveryStatus = status,
             ),

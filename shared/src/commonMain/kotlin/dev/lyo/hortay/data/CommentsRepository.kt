@@ -144,8 +144,8 @@ class CommentsRepository(
      * storage instead of paying a server round-trip. See [ChatPresence] for why we
      * scope the open/close around the fetch.
      */
-    suspend fun prefetchThread(chatId: Long, candidateMessageIds: List<Long>) {
-        val anchor = ensureAnchor(chatId, candidateMessageIds) ?: return
+    suspend fun prefetchThread(chatId: ChatId, candidateMessageIds: List<MessageId>) {
+        val anchor = ensureAnchor(chatId.value, candidateMessageIds.map { it.value }) ?: return
         val anchorKey = anchor.threadChatId to anchor.rootId
         // Skip if we've already warmed this exact thread in this session.
         // [Set.add] is atomic — only the first caller proceeds; concurrent
@@ -212,16 +212,16 @@ class CommentsRepository(
      * input ordering.
      */
     fun observeThread(
-        chatId: Long,
-        candidateMessageIds: List<Long>,
+        chatId: ChatId,
+        candidateMessageIds: List<MessageId>,
         limit: Int = DEFAULT_LIMIT,
     ): Flow<ThreadState> {
-        val anchorKey = candidateMessageIds.minOrNull()
+        val anchorKey = candidateMessageIds.minOfOrNull { it.value }
             ?: return flowOf(ThreadState.Error(unavailableMsg))
-        val key = chatId to anchorKey
+        val key = chatId.value to anchorKey
         return kotlinx.atomicfu.locks.synchronized(streamsLock) {
             streams.getOrPut(key) {
-                threadFlow(chatId, candidateMessageIds, limit)
+                threadFlow(chatId.value, candidateMessageIds.map { it.value }, limit)
                     .shareIn(scope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), replay = 1)
             }.also {
                 while (streams.size > MAX_CACHED_THREADS) {
@@ -609,7 +609,7 @@ class CommentsRepository(
         live: List<TdApi.Message>,
         anchor: ResolvedAnchor,
     ): ThreadState.Ready =
-        ThreadState.Ready(buildTree(live, anchor).toImmutableList(), anchor.threadChatId)
+        ThreadState.Ready(buildTree(live, anchor).toImmutableList(), ChatId(anchor.threadChatId))
 
     /**
      * Apply an optimistic reaction toggle on a comment row inside this thread. The
@@ -623,14 +623,14 @@ class CommentsRepository(
      * removes the override the moment TDLib confirms the change.
      */
     fun applyOptimisticReaction(
-        threadChatId: Long,
-        messageId: Long,
+        threadChatId: ChatId,
+        messageId: MessageId,
         current: Reactions,
         kind: ReactionKind,
         nowChosen: Boolean,
     ) {
         val next = ReactionTogglePolicy.apply(current, kind, nowChosen)
-        val key = threadChatId to messageId
+        val key = threadChatId.value to messageId.value
         optimisticOverrides[key] = next
         invalidations.tryEmit(key)
     }
@@ -643,8 +643,8 @@ class CommentsRepository(
      * message in the meantime still wins because [applyUpdate] already cleared
      * the override.
      */
-    fun clearOptimisticReaction(threadChatId: Long, messageId: Long) {
-        val key = threadChatId to messageId
+    fun clearOptimisticReaction(threadChatId: ChatId, messageId: MessageId) {
+        val key = threadChatId.value to messageId.value
         if (optimisticOverrides.remove(key) != null) {
             invalidations.tryEmit(key)
         }
@@ -655,11 +655,11 @@ class CommentsRepository(
         data object OptimisticInvalidate : ThreadEvent
     }
 
-    suspend fun viewMessages(threadChatId: Long, messageIds: List<Long>) =
+    suspend fun viewMessages(threadChatId: ChatId, messageIds: List<MessageId>) =
         ChatPresence.viewMessages(
             td = td,
-            chatId = threadChatId,
-            messageIds = messageIds,
+            chatId = threadChatId.value,
+            messageIds = messageIds.map { it.value },
             // The user is reading a comments thread overlay — explicit source helps
             // TDLib classify the view (vs. plain chat history scrolling).
             source = TdApi.MessageSourceMessageThreadHistory(),

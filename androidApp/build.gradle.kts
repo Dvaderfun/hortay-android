@@ -7,13 +7,6 @@ plugins {
     alias(libs.plugins.baselineprofile)
 }
 
-val telegramProps = Properties().apply {
-    val f = rootProject.file("local.properties")
-    if (f.exists()) f.inputStream().use { load(it) }
-}
-val telegramApiId: String = telegramProps.getProperty("telegram.apiId") ?: "0"
-val telegramApiHash: String = telegramProps.getProperty("telegram.apiHash") ?: ""
-
 val keystoreProps = Properties().apply {
     val f = rootProject.file("keystore.properties")
     if (f.exists()) f.inputStream().use { load(it) }
@@ -72,15 +65,8 @@ android {
         minSdk = 26
         targetSdk = 36
         versionCode = 1
-        versionName = "0.6.0"
+        versionName = project.findProperty("HORTAY_VERSION_NAME") as? String ?: "0.0.0"
 
-        buildConfigField("int", "TELEGRAM_API_ID", telegramApiId)
-        buildConfigField("String", "TELEGRAM_API_HASH", "\"$telegramApiHash\"")
-
-        val childSafetyProp = (project.findProperty("HORTAY_CHILD_SAFETY_POLICY_URL") as? String)?.takeIf { it.isNotBlank() }
-        val privacyProp = (project.findProperty("HORTAY_PRIVACY_POLICY_URL") as? String)?.takeIf { it.isNotBlank() }
-        buildConfigField("String", "CHILD_SAFETY_POLICY_URL", "\"${childSafetyProp ?: "https://dev.lyo.hortay/child-safety"}\"")
-        buildConfigField("String", "PRIVACY_POLICY_URL", "\"${privacyProp ?: "https://dev.lyo.hortay/privacy"}\"")
     }
 
     signingConfigs {

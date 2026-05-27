@@ -40,11 +40,11 @@ import dev.lyo.hortay.data.isUnreadIn
 import dev.lyo.hortay.data.orderedFor
 import dev.lyo.hortay.data.web.WebPostAdapter
 import dev.lyo.hortay.ui.media.LocalMediaViewer
-import dev.lyo.hortay.ui.timeline.ChannelHeaderAvatar
-import dev.lyo.hortay.ui.timeline.ChannelHeaderBar
+import dev.lyo.hortay.ui.composables.bars.ChannelHeaderAvatar
+import dev.lyo.hortay.ui.composables.bars.ChannelHeaderBar
 import dev.lyo.hortay.ui.timeline.LocalReadCursors
-import dev.lyo.hortay.ui.timeline.PostCard
-import dev.lyo.hortay.ui.timeline.PostInteractions
+import dev.lyo.hortay.ui.composables.cards.PostCard
+import dev.lyo.hortay.ui.composables.cards.PostInteractions
 import hortay.shared.generated.resources.Res
 import hortay.shared.generated.resources.web_subscribers
 import org.jetbrains.compose.resources.stringResource
@@ -164,7 +164,7 @@ fun WebChannelScreen(
             // here. Cross-channel jumps in guest mode go through the URI handler
             // (no in-app channel-screen drill for arbitrary handles yet).
             onChannelClick = { post ->
-                if (post.chatId != chatId) {
+                if (post.chatId.value != chatId) {
                     val handle = post.senderHandle?.removePrefix("@")
                     if (!handle.isNullOrBlank()) {
                         uriHandler.openUri("https://t.me/${handle}")

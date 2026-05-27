@@ -52,7 +52,7 @@ object PostActions {
      * `seq=36046` to 0 and produce a `/0` URL.
      */
     private fun fallbackServerPostId(post: TimelinePost, isGuest: Boolean): Long =
-        if (isGuest) post.id else post.id ushr 20
+        if (isGuest) post.id.value else post.id.value ushr 20
 
     /**
      * Open the post in the Telegram client via [uriHandler]

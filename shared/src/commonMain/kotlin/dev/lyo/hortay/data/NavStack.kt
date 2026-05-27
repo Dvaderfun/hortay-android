@@ -56,8 +56,8 @@ sealed interface NavTarget : NavKey {
      */
     @Immutable
     data class Channel(
-        val chatId: Long,
-        val scrollToMessageId: Long? = null,
+        val chatId: ChatId,
+        val scrollToMessageId: MessageId? = null,
         override val entryId: String = nextNavEntryId(),
     ) : NavTarget
 

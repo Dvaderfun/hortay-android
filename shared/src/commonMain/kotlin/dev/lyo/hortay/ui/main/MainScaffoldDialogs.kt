@@ -6,13 +6,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.lyo.hortay.data.ChatId
 import dev.lyo.hortay.data.ComposeResourcesStringResolver
 import dev.lyo.hortay.data.HortayBackend
+import dev.lyo.hortay.data.MessageId
+import dev.lyo.hortay.data.UserId
 import dev.lyo.hortay.data.LinkDialogState
 import dev.lyo.hortay.data.UserMessageBus
-import dev.lyo.hortay.ui.report.ReportFlowSheet
-import dev.lyo.hortay.ui.text.ChatInvitePreviewDialog
-import dev.lyo.hortay.ui.users.UserProfileSheet
+import dev.lyo.hortay.ui.composables.sheets.ReportFlowSheet
+import dev.lyo.hortay.ui.composables.dialogs.ChatInvitePreviewDialog
+import dev.lyo.hortay.ui.composables.sheets.UserProfileSheet
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import hortay.shared.generated.resources.Res
@@ -43,9 +46,9 @@ internal fun MainScaffoldDialogs(
     linkDialogs: LinkDialogState,
     userMessages: UserMessageBus,
     scope: CoroutineScope,
-    pendingUserId: Long?,
+    pendingUserId: UserId?,
     onUserSheetDismiss: () -> Unit,
-    onPushChannel: (chatId: Long, scrollTo: Long?) -> Unit,
+    onPushChannel: (chatId: ChatId, scrollTo: MessageId?) -> Unit,
 ) {
     val res = remember { ComposeResourcesStringResolver() }
     val pendingInvitePreview by linkDialogs.invitePreview.collectAsStateWithLifecycle()
@@ -59,7 +62,7 @@ internal fun MainScaffoldDialogs(
                 scope.launch {
                     val joinedId = backend.joinByInvite(preview.inviteLink)
                     if (joinedId != null) {
-                        onPushChannel(joinedId, null)
+                        onPushChannel(ChatId(joinedId), null)
                     }
                 }
             },

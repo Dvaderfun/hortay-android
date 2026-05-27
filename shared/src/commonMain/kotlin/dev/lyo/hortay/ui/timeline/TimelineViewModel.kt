@@ -6,7 +6,9 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.lyo.hortay.data.BookmarkStore
+import dev.lyo.hortay.data.ChatId
 import dev.lyo.hortay.data.FeedSource
+import dev.lyo.hortay.data.MessageId
 import dev.lyo.hortay.data.TimelinePost
 import dev.lyo.hortay.nowMs
 import kotlinx.collections.immutable.PersistentList
@@ -69,7 +71,7 @@ class TimelineViewModel(
     // chatId → max post.date the user has acknowledged seeing in this channel. Pending =
     // posts in livePosts whose date strictly exceeds this mark for their chatId. Empty
     // map until bootstrap completes — see [bootstrapped] below.
-    private val seenHighWater = MutableStateFlow<Map<Long, Long>>(emptyMap())
+    private val seenHighWater = MutableStateFlow<Map<ChatId, Long>>(emptyMap())
     // True once the first stable livePosts emission has seeded [seenHighWater]. Both
     // pendingNew and posts gate on this so a fast first-paint (snapshot restore) doesn't
     // briefly classify the whole feed as either "all pending" (empty hw + filter `>`) or
@@ -203,7 +205,7 @@ class TimelineViewModel(
             bootstrapped.first { it }
             livePosts.collect { live ->
                 val knownChats = seenHighWater.value.keys
-                val unseenChats = HashSet<Long>()
+                val unseenChats = HashSet<ChatId>()
                 for (p in live) {
                     if (p.chatId !in knownChats) unseenChats += p.chatId
                 }
@@ -269,7 +271,7 @@ class TimelineViewModel(
     fun acceptPending() {
         val live = livePosts.value
         if (live.isEmpty()) return
-        val maxByChat = HashMap<Long, Long>()
+        val maxByChat = HashMap<ChatId, Long>()
         for (p in live) {
             val prev = maxByChat[p.chatId]
             if (prev == null || p.date > prev) maxByChat[p.chatId] = p.date
@@ -295,12 +297,12 @@ class TimelineViewModel(
      * to the max acked date — any older post the caller might have included is already
      * covered by the bump, no per-id state needed.
      */
-    fun acceptIds(ids: Collection<Pair<Long, Long>>) {
+    fun acceptIds(ids: Collection<Pair<ChatId, MessageId>>) {
         if (ids.isEmpty()) return
         val live = livePosts.value
         if (live.isEmpty()) return
         val targets = ids.toHashSet()
-        val maxDateByChat = HashMap<Long, Long>()
+        val maxDateByChat = HashMap<ChatId, Long>()
         for (p in live) {
             if ((p.chatId to p.id) !in targets) continue
             val prev = maxDateByChat[p.chatId]
@@ -348,7 +350,7 @@ class TimelineViewModel(
         // 6 h covers typical offline-and-back-in-the-evening cases while
         // catching deeper backfills (a user opening a channel they hadn't
         // looked at in days) as stale.
-        const val PENDING_NEW_RECENCY_WINDOW_MS = 6L * 60L * 60L * 1000L
+        val PENDING_NEW_RECENCY_WINDOW_MS = kotlin.time.Duration.Companion.hours(6).inWholeMilliseconds
     }
 }
 

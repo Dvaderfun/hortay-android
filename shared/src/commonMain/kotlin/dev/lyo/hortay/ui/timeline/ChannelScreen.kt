@@ -58,12 +58,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 import dev.lyo.hortay.data.BookmarkStore
+import dev.lyo.hortay.data.ChatId
 import dev.lyo.hortay.data.DownloadPriority
 import dev.lyo.hortay.data.FeedOrder
 import dev.lyo.hortay.data.FormattedText
 import dev.lyo.hortay.data.ForwardOrigin
 import dev.lyo.hortay.data.HortayBackend
 import dev.lyo.hortay.data.IgnoredChannelsStore
+import dev.lyo.hortay.data.MessageId
 import dev.lyo.hortay.data.PostContent
 import dev.lyo.hortay.data.SCREEN_MOUNT_GRACE_MS
 import dev.lyo.hortay.data.StartupCoordinator
@@ -73,9 +75,15 @@ import dev.lyo.hortay.data.bookmarkKey
 import dev.lyo.hortay.data.isUnplayableVideo
 import dev.lyo.hortay.data.orderedFor
 import dev.lyo.hortay.ui.actions.PostActions
-import dev.lyo.hortay.ui.channels.ChannelInfoSheet
-import dev.lyo.hortay.ui.components.HortayTopBar
-import dev.lyo.hortay.ui.components.HortayTopBarSize
+import dev.lyo.hortay.ui.composables.bars.ChannelHeaderAvatar
+import dev.lyo.hortay.ui.composables.bars.ChannelHeaderBar
+import dev.lyo.hortay.ui.composables.bars.HortayTopBar
+import dev.lyo.hortay.ui.composables.bars.HortayTopBarSize
+import dev.lyo.hortay.ui.composables.cards.PostCard
+import dev.lyo.hortay.ui.composables.cards.PostInteractions
+import dev.lyo.hortay.ui.composables.sheets.ChannelInfoSheet
+import dev.lyo.hortay.ui.composables.skeleton.ExpressiveEmptyHero
+import dev.lyo.hortay.ui.composables.skeleton.SkeletonFeed
 import dev.lyo.hortay.ui.icons.Symbol
 import dev.lyo.hortay.ui.media.LocalIsCenteredItem
 import dev.lyo.hortay.ui.media.LocalIsHighlightedItem
@@ -119,14 +127,14 @@ import org.jetbrains.compose.resources.stringResource
 @OptIn(ExperimentalMaterial3Api::class, FlowPreview::class)
 @Composable
 fun ChannelScreen(
-    chatId: Long,
+    chatId: ChatId,
     backend: HortayBackend,
     bookmarks: BookmarkStore,
     contentPadding: PaddingValues,
     onBack: () -> Unit,
     onOpenComments: (TimelinePost) -> Unit,
-    onChannelOpen: (chatId: Long, scrollToMessageId: Long?) -> Unit,
-    scrollToMessage: Pair<Long, Long>? = null,
+    onChannelOpen: (chatId: ChatId, scrollToMessageId: MessageId?) -> Unit,
+    scrollToMessage: Pair<ChatId, MessageId>? = null,
     onScrollHandled: () -> Unit = {},
     onScrollMissed: () -> Unit = {},
     onReportClick: (TimelinePost) -> Unit = {},
@@ -205,7 +213,7 @@ fun ChannelScreen(
         if (channelUiState is ChannelUiState.Missing) onScrollMissed()
     }
 
-    var highlightedPostKey by remember(chatId) { mutableStateOf<Pair<Long, Long>?>(null) }
+    var highlightedPostKey by remember(chatId) { mutableStateOf<Pair<ChatId, MessageId>?>(null) }
     LaunchedEffect(channelUiState, chatId) {
         val mid = (channelUiState as? ChannelUiState.Ready)?.highlightedMessageId ?: return@LaunchedEffect
         highlightedPostKey = chatId to mid
@@ -215,7 +223,7 @@ fun ChannelScreen(
         delay(CHANNEL_HIGHLIGHT_DURATION_MS)
         highlightedPostKey = null
     }
-    var pendingScrollToMessage by remember(chatId) { mutableStateOf<Pair<Long, Long>?>(null) }
+    var pendingScrollToMessage by remember(chatId) { mutableStateOf<Pair<ChatId, MessageId>?>(null) }
 
     val pinnedChannelSeed = rememberSaveable(chatId) { mutableIntStateOf(-1) }
     val candidateInitialIndex = (channelUiState as? ChannelUiState.Ready)?.initialIndex
@@ -361,7 +369,7 @@ fun ChannelScreen(
                     sourceId != null -> onChannelOpenState.value(sourceId, sourceMessageId)
                     !sourceHandle.isNullOrBlank() -> {
                         val handle = sourceHandle.removePrefix("@")
-                        val url = if (sourceMessageId != null) "https://t.me/$handle/$sourceMessageId"
+                        val url = if (sourceMessageId != null) "https://t.me/$handle/${sourceMessageId.value}"
                             else "https://t.me/$handle"
                         uriHandler.openUri(url)
                     }

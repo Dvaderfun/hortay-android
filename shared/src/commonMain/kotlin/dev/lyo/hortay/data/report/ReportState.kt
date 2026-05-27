@@ -1,6 +1,8 @@
 package dev.lyo.hortay.data.report
 
 import androidx.compose.runtime.Immutable
+import dev.lyo.hortay.data.ChatId
+import dev.lyo.hortay.data.MessageId
 import kotlinx.collections.immutable.ImmutableList
 
 /**
@@ -66,7 +68,7 @@ data class ReportStep(
  * `isAuthenticated`.
  */
 interface ReportFlowController {
-    suspend fun start(chatId: Long, messageId: Long?): ReportStep
-    suspend fun selectOption(chatId: Long, messageId: Long?, option: ReportOption): ReportStep
-    suspend fun submitText(chatId: Long, messageId: Long?, optionId: ByteArray, text: String): ReportStep
+    suspend fun start(chatId: ChatId, messageId: MessageId?): ReportStep
+    suspend fun selectOption(chatId: ChatId, messageId: MessageId?, option: ReportOption): ReportStep
+    suspend fun submitText(chatId: ChatId, messageId: MessageId?, optionId: ByteArray, text: String): ReportStep
 }

@@ -1,11 +1,13 @@
 package dev.lyo.hortay.data.posts
 
+import dev.lyo.hortay.data.ChatId
 import dev.lyo.hortay.data.ChatPresence
 import dev.lyo.hortay.data.ConnectionStatus
 import dev.lyo.hortay.data.FeedSource
 import dev.lyo.hortay.data.TdRpcException
 import dev.lyo.hortay.data.IgnoredChannelsStore
 import dev.lyo.hortay.data.MessageContentMapper
+import dev.lyo.hortay.data.MessageId
 import dev.lyo.hortay.data.MessageMapper
 import dev.lyo.hortay.data.PostContent
 import dev.lyo.hortay.data.PostFilterStrategy
@@ -16,6 +18,7 @@ import dev.lyo.hortay.data.StringResolver
 import dev.lyo.hortay.data.TdSender
 import dev.lyo.hortay.data.TimelinePost
 import dev.lyo.hortay.data.TimelineSnapshotStore
+import dev.lyo.hortay.data.UserId
 import dev.lyo.hortay.data.UserMessageBus
 import dev.lyo.hortay.data.surfaceTo
 import dev.lyo.hortay.data.warnUnlessCancelled
@@ -308,9 +311,9 @@ class PostsRepository(
             ?: kotlinx.coroutines.flow.flowOf(kotlinx.collections.immutable.persistentSetOf())
         combine(_posts, _mainChatIds, _archivedChatIds, ignoredFlow) { all, mainIds, archivedIds, ignored ->
             val subscribed = if (mainIds.isEmpty() && archivedIds.isEmpty()) all
-            else all.filter { it.chatId in mainIds || it.chatId in archivedIds }
+            else all.filter { it.chatId.value in mainIds || it.chatId.value in archivedIds }
             if (ignored.isEmpty()) subscribed.toPersistentList()
-            else subscribed.filter { it.chatId !in ignored }.toPersistentList()
+            else subscribed.filter { it.chatId.value !in ignored }.toPersistentList()
         }
             .stateIn(scope, SharingStarted.Eagerly, persistentListOf())
     }
@@ -563,7 +566,7 @@ class PostsRepository(
             // re-runs PostFilterStrategy.mergeAlbums, which needs all siblings present
             // to rebuild the merged card.
             val ids = post.albumMessageIds.ifEmpty { listOf(post.id) }
-            ids.map { post.chatId to it }
+            ids.map { post.chatId.value to it.value }
         }
         val merged = preserveDegradedAlbumSiblings(current, newEntries)
         runCatching { snapshotStore.save(merged) }.warnUnlessCancelled(TAG, "saveSnapshot")
@@ -599,7 +602,7 @@ class PostsRepository(
     ): List<Pair<Long, Long>> {
         val degradedAlbums = current
             .filter { it.mediaAlbumId != 0L && it.albumMessageIds.size <= 1 }
-            .mapTo(HashSet()) { it.chatId to it.mediaAlbumId }
+            .mapTo(HashSet()) { it.chatId.value to it.mediaAlbumId }
         if (degradedAlbums.isEmpty()) return newEntries
 
         val previous = runCatching { snapshotStore.load() }
@@ -706,7 +709,7 @@ class PostsRepository(
         val degradedAlbumKeys = current
             .asSequence()
             .filter { it.mediaAlbumId != 0L && it.albumMessageIds.size <= 1 }
-            .mapTo(HashSet()) { it.chatId to it.mediaAlbumId }
+            .mapTo(HashSet()) { it.chatId.value to it.mediaAlbumId }
         if (degradedAlbumKeys.isEmpty()) return 0
 
         val candidateChats = degradedAlbumKeys.mapTo(HashSet()) { it.first }
@@ -728,9 +731,9 @@ class PostsRepository(
 
         var upgraded = 0
         _posts.update { live ->
-            val before = live.mapTo(HashSet()) { it.chatId to it.id }
+            val before = live.mapTo(HashSet()) { it.chatId.value to it.id.value }
             val next = foldRawIntoCurrent(live, mapped)
-            upgraded = next.count { (it.chatId to it.id) !in before }
+            upgraded = next.count { (it.chatId.value to it.id.value) !in before }
             next
         }
         return upgraded
@@ -804,7 +807,7 @@ class PostsRepository(
      * thin proxy to [ChatPresence] so all OpenChat/CloseChat traffic in the app flows
      * through one place.
      */
-    suspend fun openChat(chatId: Long) = ChatPresence.openChat(td, chatId)
+    suspend fun openChat(chatId: ChatId) = ChatPresence.openChat(td, chatId.value)
 
     /**
      * Loads up to [limit] additional history entries for [chatId] and folds them into the
@@ -838,21 +841,22 @@ class PostsRepository(
      *
      * Read-only against the cooldown map; no side effects.
      */
-    fun hasWarmChannelHistory(chatId: Long): Boolean {
-        val until = deepLoadCooldownUntilMs[chatId] ?: return false
+    fun hasWarmChannelHistory(chatId: ChatId): Boolean {
+        val until = deepLoadCooldownUntilMs[chatId.value] ?: return false
         return nowMs() < until
     }
 
-    suspend fun loadChannelHistory(chatId: Long, limit: Int = 80): Result<Unit> {
+    suspend fun loadChannelHistory(chatId: ChatId, limit: Int = 80): Result<Unit> {
+        val rawId = chatId.value
         val now = nowMs()
-        deepLoadCooldownUntilMs[chatId]?.let { until ->
+        deepLoadCooldownUntilMs[rawId]?.let { until ->
             if (now < until) return Result.success(Unit)
         }
-        val deferred = deepLoadJobs.getOrPut(chatId) {
-            scope.async { runCatching { loadChannelHistoryLocked(chatId, limit) } }
+        val deferred = deepLoadJobs.getOrPut(rawId) {
+            scope.async { runCatching { loadChannelHistoryLocked(rawId, limit) } }
         }
         val result = deferred.await()
-        if (deepLoadJobs[chatId] === deferred) deepLoadJobs.remove(chatId)
+        if (deepLoadJobs[rawId] === deferred) deepLoadJobs.remove(rawId)
         // Mark cooldown only if we actually loaded posts. A "successful empty
         // batch" result (chat became inaccessible mid-load, transient TDLib
         // reject swallowed by getOrNull, GetChatHistory returned empty list)
@@ -861,11 +865,11 @@ class PostsRepository(
         // [Result<Boolean>] contract: true = at least one mapped post landed,
         // false = success-shaped no-op.
         if (result.getOrNull() == true) {
-            deepLoadCooldownUntilMs[chatId] = nowMs() + DEEP_LOAD_COOLDOWN_MS
+            deepLoadCooldownUntilMs[rawId] = nowMs() + DEEP_LOAD_COOLDOWN_MS
         }
         return result
             .map { Unit }
-            .warnUnlessCancelled(TAG, "loadChannelHistory($chatId)")
+            .warnUnlessCancelled(TAG, "loadChannelHistory($rawId)")
             .onFailure { it.surfaceTo(userMessages, res, Res.string.op_load_channel, connection.value) }
     }
 
@@ -899,12 +903,14 @@ class PostsRepository(
      * contract (so callers can branch on emptiness — chat became inaccessible,
      * permission revoked, etc.).
      */
-    suspend fun loadHistoryAround(chatId: Long, anchorMessageId: Long, limit: Int = 80): Boolean {
-        val chat = chatCache[chatId]
-            ?: runCatching { td.send(TdApi.GetChat(chatId)) }
+    suspend fun loadHistoryAround(chatId: ChatId, anchorMessageId: MessageId, limit: Int = 80): Boolean {
+        val rawChatId = chatId.value
+        val rawMsgId = anchorMessageId.value
+        val chat = chatCache[rawChatId]
+            ?: runCatching { td.send(TdApi.GetChat(rawChatId)) }
                 .warnUnlessCancelled(TAG, "loadHistoryAround/getChat")
                 .getOrNull()
-                ?.also { chatCache[chatId] = it }
+                ?.also { chatCache[rawChatId] = it }
             ?: return false
         if (!chat.isChannel()) return false
 
@@ -920,15 +926,15 @@ class PostsRepository(
         // `GetChatHistory` then has a valid iterator point to walk back from.
         // Cheap when the anchor is already cached (offline lookup), one server
         // round-trip when it isn't.
-        runCatching { td.send(TdApi.GetMessage(chatId, anchorMessageId)) }
-            .warnUnlessCancelled(TAG, "loadHistoryAround/getMessage($chatId, $anchorMessageId)")
+        runCatching { td.send(TdApi.GetMessage(rawChatId, rawMsgId)) }
+            .warnUnlessCancelled(TAG, "loadHistoryAround/getMessage($rawChatId, $rawMsgId)")
 
         val history = runCatching {
-            td.send(TdApi.GetChatHistory(chatId, anchorMessageId, -(limit / 2), limit, false))
+            td.send(TdApi.GetChatHistory(rawChatId, rawMsgId, -(limit / 2), limit, false))
         }
-            .warnUnlessCancelled(TAG, "loadHistoryAround($chatId, $anchorMessageId)")
+            .warnUnlessCancelled(TAG, "loadHistoryAround($rawChatId, $rawMsgId)")
             .getOrNull() ?: return false
-        val raw = coalesceAlbumFragments(chatId, history.messages.orEmpty().toList())
+        val raw = coalesceAlbumFragments(rawChatId, history.messages.orEmpty().toList())
         val mapped = raw.map { mapper.toChannelPost(it, chat) }
         if (mapped.isEmpty()) return false
 
@@ -936,7 +942,7 @@ class PostsRepository(
         return true
     }
 
-    suspend fun closeChat(chatId: Long) = ChatPresence.closeChat(td, chatId)
+    suspend fun closeChat(chatId: ChatId) = ChatPresence.closeChat(td, chatId.value)
 
     /** Per-channel "we already paginated to the bottom of TDLib's local store" sentinel. */
     private val pageEnded = mutableSetOf<Long>()
@@ -951,25 +957,26 @@ class PostsRepository(
      * so an over-eager scroll listener can't fan out duplicate round-trips and won't keep
      * pinging TDLib once we've already learnt the channel has nothing older to give.
      */
-    suspend fun loadOlder(chatId: Long, limit: Int = 30): Int {
-        if (chatId in pageEnded) return 0
-        val deferred = pageJobs.getOrPut(chatId) {
+    suspend fun loadOlder(chatId: ChatId, limit: Int = 30): Int {
+        val rawId = chatId.value
+        if (rawId in pageEnded) return 0
+        val deferred = pageJobs.getOrPut(rawId) {
             scope.async {
-                runCatching { loadOlderLocked(chatId, limit) }
+                runCatching { loadOlderLocked(rawId, limit) }
             }
         }
         val result = deferred.await()
-        if (pageJobs[chatId] === deferred) pageJobs.remove(chatId)
+        if (pageJobs[rawId] === deferred) pageJobs.remove(rawId)
         return result
-            .warnUnlessCancelled(TAG, "loadOlder($chatId)")
+            .warnUnlessCancelled(TAG, "loadOlder($rawId)")
             .onFailure { it.surfaceTo(userMessages, res, Res.string.op_load_older, connection.value) }
             .getOrDefault(0)
     }
 
     private suspend fun loadOlderLocked(chatId: Long, limit: Int): Int {
         val oldestId = _posts.value
-            .filter { it.chatId == chatId }
-            .minOfOrNull { it.id }
+            .filter { it.chatId.value == chatId }
+            .minOfOrNull { it.id.value }
             ?: return 0
         val chat = chatCache[chatId] ?: td.send(TdApi.GetChat(chatId)).also { chatCache[chatId] = it }
         if (!chat.isChannel()) return 0
@@ -996,9 +1003,9 @@ class PostsRepository(
         var prevChannelSize = 0
         var nextChannelSize = 0
         _posts.update { current ->
-            prevChannelSize = current.count { it.chatId == chatId }
+            prevChannelSize = current.count { it.chatId.value == chatId }
             val result = foldRawIntoCurrent(current, mapped)
-            nextChannelSize = result.count { it.chatId == chatId }
+            nextChannelSize = result.count { it.chatId.value == chatId }
             result
         }
         // End-of-history detection: GetChatHistory(fromMessageId, offset=0, …) is
@@ -1020,12 +1027,13 @@ class PostsRepository(
      * Coalesces fragments from the same media album just like the regular timeline pipeline,
      * so a hit on a caption-bearing photo doesn't appear without its sibling photos.
      */
-    suspend fun searchInChannel(chatId: Long, query: String, limit: Int = 50): List<TimelinePost> {
+    suspend fun searchInChannel(chatId: ChatId, query: String, limit: Int = 50): List<TimelinePost> {
         if (query.isBlank()) return emptyList()
-        val chat = chatCache[chatId] ?: runCatching { td.send(TdApi.GetChat(chatId)) }
+        val rawId = chatId.value
+        val chat = chatCache[rawId] ?: runCatching { td.send(TdApi.GetChat(rawId)) }
             .warnUnlessCancelled(TAG, "searchInChannel/getChat")
             .onFailure { it.surfaceTo(userMessages, res, Res.string.op_search, connection.value) }
-            .getOrNull()?.also { chatCache[chatId] = it } ?: return emptyList()
+            .getOrNull()?.also { chatCache[rawId] = it } ?: return emptyList()
         // Search failures used to be silently swallowed → empty list, leaving the
         // user wondering whether the channel really has nothing matching or
         // whether the query failed (FLOOD_WAIT, transient TDLib reject…).
@@ -1035,7 +1043,7 @@ class PostsRepository(
         val result = runCatching {
             td.send(
                 TdApi.SearchChatMessages(
-                    chatId,
+                    rawId,
                     /* topicId */ null,
                     query,
                     /* senderId */ null,
@@ -1051,7 +1059,7 @@ class PostsRepository(
             .getOrNull() ?: return emptyList()
 
         val raw = result.messages.orEmpty().toList()
-        val coalesced = coalesceAlbumFragments(chatId, raw)
+        val coalesced = coalesceAlbumFragments(rawId, raw)
         val mapped = coalesced.map { mapper.toChannelPost(it, chat) }
         return PostFilterStrategy.apply(mapped)
     }
@@ -1074,8 +1082,8 @@ class PostsRepository(
      * session (the common case for every non-deep-link entry point) both
      * mirrors are warm and this returns the count immediately.
      */
-    fun channelSubscribersCached(chatId: Long): Int? {
-        val chat = chatCache[chatId] ?: return null
+    fun channelSubscribersCached(chatId: ChatId): Int? {
+        val chat = chatCache[chatId.value] ?: return null
         val supergroupId = (chat.type as? TdApi.ChatTypeSupergroup)?.supergroupId ?: return null
         return supergroupCache[supergroupId]?.memberCount?.takeIf { it > 0 }
     }
@@ -1094,17 +1102,18 @@ class PostsRepository(
      *      from TDLib's own local cache in steady state, so even this branch
      *      avoids the network in the common case.
      */
-    suspend fun channelSubscribers(chatId: Long): Int? {
+    suspend fun channelSubscribers(chatId: ChatId): Int? {
         channelSubscribersCached(chatId)?.let { return it }
+        val rawId = chatId.value
         // Cold-cache fallback. Skip [GetChat] when the cached Chat already
         // yielded the supergroupId — only [GetSupergroup] is missing.
-        val cachedChat = chatCache[chatId]
+        val cachedChat = chatCache[rawId]
         val supergroupId = (cachedChat?.type as? TdApi.ChatTypeSupergroup)?.supergroupId
             ?: run {
-                val chat = runCatching { td.send(TdApi.GetChat(chatId)) }
+                val chat = runCatching { td.send(TdApi.GetChat(rawId)) }
                     .warnUnlessCancelled(TAG, "channelSubscribers/getChat")
                     .getOrNull() ?: return null
-                chatCache[chatId] = chat
+                chatCache[rawId] = chat
                 (chat.type as? TdApi.ChatTypeSupergroup)?.supergroupId ?: return null
             }
         val sg = runCatching { td.send(TdApi.GetSupergroup(supergroupId)) }
@@ -1124,12 +1133,13 @@ class PostsRepository(
      * name before [loadChannelHistory] populates the merged feed — same UX
      * Telegram-Android offers when you open a public channel preview.
      */
-    suspend fun chatTitle(chatId: Long): String? {
-        val chat = chatCache[chatId]
-            ?: runCatching { td.send(TdApi.GetChat(chatId)) }
+    suspend fun chatTitle(chatId: ChatId): String? {
+        val rawId = chatId.value
+        val chat = chatCache[rawId]
+            ?: runCatching { td.send(TdApi.GetChat(rawId)) }
                 .warnUnlessCancelled(TAG, "chatTitle")
                 .getOrNull()
-                ?.also { chatCache[chatId] = it }
+                ?.also { chatCache[rawId] = it }
         return chat?.title?.takeIf { it.isNotBlank() }
     }
 
@@ -1142,12 +1152,13 @@ class PostsRepository(
      * steady state. Either field may be null for channels whose [TdApi.Chat.photo]
      * is itself null (rare — channel without a profile photo).
      */
-    suspend fun chatAvatar(chatId: Long): Pair<Int?, ByteArray?>? {
-        val chat = chatCache[chatId]
-            ?: runCatching { td.send(TdApi.GetChat(chatId)) }
+    suspend fun chatAvatar(chatId: ChatId): Pair<Int?, ByteArray?>? {
+        val rawId = chatId.value
+        val chat = chatCache[rawId]
+            ?: runCatching { td.send(TdApi.GetChat(rawId)) }
                 .warnUnlessCancelled(TAG, "chatAvatar")
                 .getOrNull()
-                ?.also { chatCache[chatId] = it }
+                ?.also { chatCache[rawId] = it }
             ?: return null
         return chat.photo?.small?.id to chat.photo?.minithumbnail?.data
     }
@@ -1163,10 +1174,10 @@ class PostsRepository(
      * as a channel filter, or the request fails. Callers fall through to a generic
      * "open external" action in that case.
      */
-    suspend fun resolvePublicChat(handle: String): Long? {
+    suspend fun resolvePublicChat(handle: String): ChatId? {
         val cleaned = handle.removePrefix("@").trim()
         if (cleaned.isBlank()) return null
-        return runCatching { td.send(TdApi.SearchPublicChat(cleaned)).id }
+        return runCatching { ChatId(td.send(TdApi.SearchPublicChat(cleaned)).id) }
             .warnUnlessCancelled(TAG, "resolvePublicChat($cleaned)")
             .getOrNull()
     }
@@ -1213,12 +1224,13 @@ class PostsRepository(
      * Returns [PublicHandleResult.NotFound] when TDLib has no record of the chat
      * (private chat the user lost access to, transient network failure on GetChat).
      */
-    suspend fun resolveChatKind(chatId: Long): PublicHandleResult {
-        val chat = chatCache[chatId]
-            ?: runCatching { td.send(TdApi.GetChat(chatId)) }
-                .warnUnlessCancelled(TAG, "resolveChatKind($chatId)")
+    suspend fun resolveChatKind(chatId: ChatId): PublicHandleResult {
+        val rawId = chatId.value
+        val chat = chatCache[rawId]
+            ?: runCatching { td.send(TdApi.GetChat(rawId)) }
+                .warnUnlessCancelled(TAG, "resolveChatKind($rawId)")
                 .getOrNull()
-                ?.also { chatCache[chatId] = it }
+                ?.also { chatCache[rawId] = it }
             ?: return PublicHandleResult.NotFound
         return chat.toPublicHandleResult()
     }
@@ -1226,12 +1238,12 @@ class PostsRepository(
     private fun TdApi.Chat.toPublicHandleResult(): PublicHandleResult {
         val t = type
         return when {
-            isChannel() -> PublicHandleResult.Channel(id)
+            isChannel() -> PublicHandleResult.Channel(ChatId(id))
             // Private chat = 1:1 user / bot. Carry the userId through so the deep-link
             // dispatcher can route the tap to UserProfileSheet instead of bouncing the
             // user out to the official Telegram client. Reading from `ChatTypePrivate`
             // keeps this correct even if TDLib ever decouples chat.id from user.id.
-            t is TdApi.ChatTypePrivate -> PublicHandleResult.User(t.userId)
+            t is TdApi.ChatTypePrivate -> PublicHandleResult.User(UserId(t.userId))
             t is TdApi.ChatTypeBasicGroup -> PublicHandleResult.Unsupported(PublicHandleKind.Group)
             t is TdApi.ChatTypeSupergroup -> PublicHandleResult.Unsupported(PublicHandleKind.Group)
             else -> PublicHandleResult.Unsupported(PublicHandleKind.Unknown)
@@ -1259,11 +1271,11 @@ class PostsRepository(
      * Telegram-Android's "copy link to album" behaviour.
      */
     suspend fun canonicalShareUrl(post: TimelinePost): String? {
-        val anchorId = post.albumMessageIds.firstOrNull() ?: post.id
+        val anchorId = (post.albumMessageIds.firstOrNull() ?: post.id).value
         val forAlbum = post.albumMessageIds.size > 1
-        val query = TdApi.GetMessageLink(post.chatId, anchorId, 0, 0, "", forAlbum, false)
+        val query = TdApi.GetMessageLink(post.chatId.value, anchorId, 0, 0, "", forAlbum, false)
         val response = runCatching { td.send(query) }
-            .warnUnlessCancelled(TAG, "canonicalShareUrl(${post.chatId}, ${post.id})")
+            .warnUnlessCancelled(TAG, "canonicalShareUrl(${post.chatId.value}, ${post.id.value})")
             .getOrNull()
         return response?.link?.takeIf { it.isNotBlank() }
     }
@@ -1298,11 +1310,11 @@ class PostsRepository(
      * [TimelineScreen]: that's a UX policy, not a TDLib invariant, so it stays at the
      * call site.
      */
-    suspend fun viewMessages(chatId: Long, messageIds: List<Long>) =
+    suspend fun viewMessages(chatId: ChatId, messageIds: List<MessageId>) =
         ChatPresence.viewMessages(
             td = td,
-            chatId = chatId,
-            messageIds = messageIds,
+            chatId = chatId.value,
+            messageIds = messageIds.map { it.value },
             // ChatHistory: the user is reading the channel feed (merged global view
             // or single-channel filter). Both look like history scrolling to TDLib.
             source = TdApi.MessageSourceChatHistory(),
@@ -1399,9 +1411,9 @@ class PostsRepository(
         // the state that actually got written).
         var addedForEmit: List<TimelinePost> = emptyList()
         _posts.update { current ->
-            val before = current.mapTo(HashSet()) { it.chatId to it.id }
+            val before = current.mapTo(HashSet()) { it.chatId.value to it.id.value }
             val next = foldRawIntoCurrent(current, newPosts)
-            addedForEmit = next.filter { (it.chatId to it.id) !in before }
+            addedForEmit = next.filter { (it.chatId.value to it.id.value) !in before }
             next
         }
         // Emit AFTER the state write so any listener sees a consistent feed.
@@ -1544,9 +1556,9 @@ class PostsRepository(
                 val byMessageId = HashMap<Pair<Long, Long>, Int>(list.size * 2)
                 for (i in list.indices) {
                     val post = list[i]
-                    byMessageId[post.chatId to post.id] = i
+                    byMessageId[post.chatId.value to post.id.value] = i
                     for (memberId in post.albumMessageIds) {
-                        if (memberId != post.id) byMessageId[post.chatId to memberId] = i
+                        if (memberId != post.id) byMessageId[post.chatId.value to memberId.value] = i
                     }
                 }
                 for ((key, info) in drained) {
@@ -1595,23 +1607,23 @@ class PostsRepository(
                 val toRemove = mutableListOf<Int>()
                 for (i in list.indices) {
                     val post = list[i]
-                    if (post.chatId != update.chatId) continue
+                    if (post.chatId.value != update.chatId) continue
                     val albumIds = post.albumMessageIds
                     if (albumIds.isEmpty()) {
-                        if (post.id in ids) toRemove += i
+                        if (post.id.value in ids) toRemove += i
                         continue
                     }
                     // Album: trim deleted members from items[] (mergeAlbumMembers builds
                     // items in albumMessageIds order, so they correspond by index). Drop
                     // the whole post if every member was deleted.
-                    val survivedIds = albumIds.filterNot { it in ids }
+                    val survivedIds = albumIds.filterNot { it.value in ids }
                     if (survivedIds.size == albumIds.size) continue
                     if (survivedIds.isEmpty()) {
                         toRemove += i
                         continue
                     }
                     val keepIdx = albumIds.withIndex()
-                        .filter { (_, id) -> id !in ids }
+                        .filter { (_, id) -> id.value !in ids }
                         .map { (idx, _) -> idx }
                         .toSet()
                     val content = post.content
@@ -1657,8 +1669,8 @@ class PostsRepository(
         // non-zero album id must re-ingest the whole group, regardless of
         // which member id the update names.
         val target = _posts.value.firstOrNull { post ->
-            post.chatId == update.chatId &&
-                (post.id == update.messageId || update.messageId in post.albumMessageIds)
+            post.chatId.value == update.chatId &&
+                (post.id.value == update.messageId || post.albumMessageIds.any { it.value == update.messageId })
         } ?: return
 
         if (target.mediaAlbumId == 0L) {
@@ -1704,12 +1716,12 @@ class PostsRepository(
      * one card in lockstep with however TDLib happens to address the message.
      */
     fun applyOptimisticReaction(
-        chatId: Long,
-        messageId: Long,
+        chatId: ChatId,
+        messageId: MessageId,
         kind: ReactionKind,
         nowChosen: Boolean,
     ) {
-        updateOnePostByAnyMemberId(chatId, messageId) {
+        updateOnePostByAnyMemberId(chatId.value, messageId.value) {
             it.copy(reactions = ReactionTogglePolicy.apply(it.reactions, kind, nowChosen))
         }
     }
@@ -1727,12 +1739,12 @@ class PostsRepository(
      *   * `[i, j, …]` → multi-answer poll commit.
      */
     fun applyOptimisticPollAnswer(
-        chatId: Long,
-        messageId: Long,
+        chatId: ChatId,
+        messageId: MessageId,
         chosenIndices: IntArray,
     ) {
         val selection: Set<Int> = chosenIndices.toHashSet()
-        updateOnePostByAnyMemberId(chatId, messageId) { post ->
+        updateOnePostByAnyMemberId(chatId.value, messageId.value) { post ->
             val poll = post.content as? PostContent.Poll ?: return@updateOnePostByAnyMemberId post
             val newOptions = poll.options.map { opt ->
                 opt.copy(
@@ -1756,8 +1768,8 @@ class PostsRepository(
      * shimmer. On failure ([revert]=true) we also reset `isChosen` on previously-being-chosen
      * rows so the visible flip is undone.
      */
-    fun clearPollPending(chatId: Long, messageId: Long, revert: Boolean) {
-        updateOnePostByAnyMemberId(chatId, messageId) { post ->
+    fun clearPollPending(chatId: ChatId, messageId: MessageId, revert: Boolean) {
+        updateOnePostByAnyMemberId(chatId.value, messageId.value) { post ->
             val poll = post.content as? PostContent.Poll ?: return@updateOnePostByAnyMemberId post
             if (poll.options.none { it.isBeingChosen }) return@updateOnePostByAnyMemberId post
             val newOptions = poll.options.map { opt ->
@@ -1802,7 +1814,7 @@ class PostsRepository(
     ): Boolean {
         var hit = false
         _posts.update { current ->
-            val idx = current.indexOfFirst { it.chatId == chatId && it.id == messageId }
+            val idx = current.indexOfFirst { it.chatId.value == chatId && it.id.value == messageId }
             if (idx == -1) current
             else { hit = true; current.set(idx, transform(current[idx])) }
         }
@@ -1823,8 +1835,8 @@ class PostsRepository(
         var hit = false
         _posts.update { current ->
             val idx = current.indexOfFirst { post ->
-                post.chatId == chatId &&
-                    (post.id == messageId || messageId in post.albumMessageIds)
+                post.chatId.value == chatId &&
+                    (post.id.value == messageId || post.albumMessageIds.any { it.value == messageId })
             }
             if (idx == -1) current
             else { hit = true; current.set(idx, transform(current[idx])) }

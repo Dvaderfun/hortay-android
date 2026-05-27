@@ -1,0 +1,280 @@
+package dev.lyo.hortay.ui.composables.sheets
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.collections.immutable.persistentSetOf
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import dev.lyo.hortay.data.ChannelInfo
+import dev.lyo.hortay.data.ChatId
+import dev.lyo.hortay.data.HortayBackend
+import dev.lyo.hortay.data.IgnoredChannelsStore
+import dev.lyo.hortay.ui.icons.Symbol
+import kotlinx.coroutines.launch
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.channels_hide_from_feed
+import hortay.shared.generated.resources.channels_join
+import hortay.shared.generated.resources.channels_leave
+import hortay.shared.generated.resources.channels_loading
+import hortay.shared.generated.resources.channels_mute
+import hortay.shared.generated.resources.channels_subscribers
+import hortay.shared.generated.resources.channels_unhide_from_feed
+import hortay.shared.generated.resources.channels_unmute
+import hortay.shared.generated.resources.report_action
+import org.jetbrains.compose.resources.stringResource
+
+/**
+ * Bottom sheet rendered when the user taps a channel header in filtered-feed mode. Pulls
+ * fresh metadata (title, handle, description, subscriber count, mute/member state) from
+ * [HortayBackend] on entry; the sheet itself stays visible during the loading window so
+ * the trigger feels instant — fields populate inline as TDLib responds.
+ *
+ * Mute / Leave toggles are optimistic: the local state flips first, then the call goes
+ * out. Errors fall back to the server state on the next refresh; given how rare a write
+ * failure is for these endpoints, the optimism reads as snappy without misleading the
+ * user for long.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ChannelInfoSheet(
+    chatId: ChatId,
+    backend: HortayBackend,
+    onDismiss: () -> Unit,
+    /**
+     * Tapping the Report row opens the TDLib reportChat flow at the channel level
+     * (no message id) — same flow the per-post action sheet uses with a message id.
+     * Null hides the row (guest mode currently passes null; the row is auth-only
+     * because the dynamic option flow requires TDLib).
+     */
+    onReport: (() -> Unit)? = null,
+    /**
+     * Hidden-channels store. When non-null, the sheet renders a "Hide from feed"
+     * toggle that flips the channel's membership in the ignore set. Null hides
+     * the row entirely — kept optional so call sites that haven't been wired
+     * yet (or test harnesses) still compile.
+     */
+    ignoredChannels: IgnoredChannelsStore? = null,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+    var info by remember(chatId) { mutableStateOf<ChannelInfo?>(null) }
+
+    // Live "is this channel hidden from the feed" state. Reads through to the
+    // DataStore Flow so toggling from elsewhere (Settings → Hidden Channels)
+    // reflects here within one emit. Null store → flow of empty set so the
+    // derived `isIgnored` is false and the row is hidden via `if`-gate below.
+    val ignoredFlow: Flow<Set<Long>> = ignoredChannels?.ignored ?: flowOf(persistentSetOf())
+    val ignored by ignoredFlow.collectAsStateWithLifecycle(initialValue = persistentSetOf())
+    val isIgnored = chatId.value in ignored
+
+    // First open or chatId switch → fetch fresh.
+    LaunchedEffect(chatId) {
+        info = backend.channelInfo(chatId)
+    }
+
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        val current = info
+        Column(modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 24.dp)) {
+            if (current == null) {
+                Text(
+                    stringResource(Res.string.channels_loading),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 24.dp),
+                )
+                return@Column
+            }
+            Text(
+                text = current.title,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            current.handle?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            current.subscribers?.let {
+                Text(
+                    text = stringResource(Res.string.channels_subscribers, formatThousandsKmp(it)),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            current.description?.let { desc ->
+                Spacer(Modifier.height(16.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(MaterialTheme.shapes.large)
+                        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                        .padding(16.dp),
+                ) {
+                    Text(
+                        text = desc,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+            Spacer(Modifier.height(20.dp))
+            ActionRow(
+                symbol = if (current.isMuted) "notifications_active" else "notifications_off",
+                label = stringResource(if (current.isMuted) Res.string.channels_unmute else Res.string.channels_mute),
+                onClick = {
+                    val target = !current.isMuted
+                    info = current.copy(isMuted = target)
+                    scope.launch { backend.setMuted(chatId, target) }
+                },
+            )
+            // "Hide from feed" row. Mute silences notifications but the
+            // channel still scrolls past in the merged timeline; this toggle
+            // hides those posts entirely. Two different user intents, two
+            // rows. Kept above the destructive "Leave" row so a tap landing
+            // here while reaching for Leave is the less-destructive
+            // out-of-bounds.
+            if (ignoredChannels != null) {
+                ActionRow(
+                    symbol = if (isIgnored) "visibility" else "visibility_off",
+                    label = stringResource(
+                        if (isIgnored) Res.string.channels_unhide_from_feed
+                        else Res.string.channels_hide_from_feed,
+                    ),
+                    onClick = { scope.launch { ignoredChannels.toggle(chatId.value) } },
+                )
+            }
+            if (current.isMember) {
+                ActionRow(
+                    symbol = "logout",
+                    label = stringResource(Res.string.channels_leave),
+                    tint = MaterialTheme.colorScheme.error,
+                    onClick = {
+                        info = current.copy(isMember = false)
+                        scope.launch { backend.leaveChat(chatId) }
+                    },
+                )
+            } else {
+                ActionRow(
+                    symbol = "add",
+                    label = stringResource(Res.string.channels_join),
+                    tint = MaterialTheme.colorScheme.primary,
+                    onClick = {
+                        info = current.copy(isMember = true)
+                        scope.launch { backend.joinChat(chatId) }
+                    },
+                )
+            }
+            // Report (CSAE-compliance): channel-level entry point into the same
+            // TDLib reportChat dynamic flow the long-press post sheet uses. Hidden
+            // in guest mode (caller passes onReport=null) — guest mode has no
+            // TDLib bridge for the dynamic option flow.
+            if (onReport != null) {
+                ActionRow(
+                    symbol = "flag",
+                    label = stringResource(Res.string.report_action),
+                    onClick = {
+                        onReport()
+                        onDismiss()
+                    },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Bottom-sheet action row built on Material 3 [ListItem]. Each entry is a
+ * standalone action (mute, leave, join, report), not part of a connected
+ * segmented group — so plain `ListItem` is the right primitive here rather
+ * than [androidx.compose.material3.SegmentedListItem]. The 36 dp tinted disc
+ * around the leading glyph is preserved as the leading slot content so the
+ * sheet retains its visual identity (matches Telegram's chat-info modal where
+ * destructive actions read in red-on-tonal). Container is transparent so it
+ * sits flat on the sheet surface, with the standard ListItem padding handling
+ * vertical rhythm — no hand-tuned `padding(vertical = 12.dp)` required.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ActionRow(
+    symbol: String,
+    label: String,
+    tint: Color = MaterialTheme.colorScheme.onSurface,
+    onClick: () -> Unit,
+) {
+    ListItem(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        leadingContent = {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                contentAlignment = Alignment.Center,
+            ) {
+                Symbol(name = symbol, tint = tint, size = 20.dp)
+            }
+        },
+        headlineContent = {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyLarge,
+                color = tint,
+            )
+        },
+    )
+}
+
+/**
+ * KMP-safe "12345" → "12 345" thousands grouping. `java.text.NumberFormat` is
+ * JVM-only; this single-pass formatter is locale-naïve (always a thin space,
+ * matching Ukrainian / Russian typography). Folded inline because the only
+ * other consumer (UserProfileSheet) is androidMain still and uses the same
+ * shape — extract to a shared helper when both call sites are common.
+ */
+internal fun formatThousandsKmp(n: Int): String {
+    val s = if (n < 0) (-n).toString() else n.toString()
+    if (s.length <= 3) return if (n < 0) "-$s" else s
+    val sb = StringBuilder()
+    for (i in s.indices) {
+        if (i > 0 && (s.length - i) % 3 == 0) sb.append(' ')
+        sb.append(s[i])
+    }
+    return if (n < 0) "-$sb" else sb.toString()
+}

@@ -4,7 +4,7 @@ package dev.lyo.hortay.data
 data class ChatInvitePreview(
     val inviteLink: String,
     /** Resolved chat id if the user already has access (already a member); null otherwise. */
-    val chatId: Long?,
+    val chatId: ChatId?,
     val title: String,
     val memberCount: Int,
     val kind: InviteLinkKind,

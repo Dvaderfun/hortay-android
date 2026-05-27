@@ -27,10 +27,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import dev.lyo.hortay.ui.components.HortayTopBar
-import dev.lyo.hortay.ui.components.HortayTopBarSize
+import dev.lyo.hortay.ui.composables.bars.HortayTopBar
+import dev.lyo.hortay.ui.composables.bars.HortayTopBarSize
+import dev.lyo.hortay.ui.composables.cards.PostCard
+import dev.lyo.hortay.ui.composables.cards.PostInteractions
+import dev.lyo.hortay.ui.composables.skeleton.UnreadBoundaryRow
 import dev.lyo.hortay.ui.icons.Symbol
 import dev.lyo.hortay.ui.main.BrandRow
+import dev.lyo.hortay.data.ChatId
+import dev.lyo.hortay.data.MessageId
 import dev.lyo.hortay.ui.media.LocalIsCenteredItem
 import dev.lyo.hortay.ui.media.LocalIsHighlightedItem
 import hortay.shared.generated.resources.Res
@@ -53,7 +58,7 @@ internal fun TimelineFeedColumn(
     feedItems: List<FeedItem>,
     unreadBoundaryKey: Any?,
     centeredItemKeyState: State<Any?>,
-    highlightedPostKey: Pair<Long, Long>?,
+    highlightedPostKey: Pair<ChatId, MessageId>?,
     interactions: PostInteractions,
     modifier: Modifier = Modifier,
 ) {

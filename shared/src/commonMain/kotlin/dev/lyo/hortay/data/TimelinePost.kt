@@ -20,8 +20,8 @@ import androidx.compose.runtime.Immutable
  */
 @Immutable
 data class TimelinePost(
-    val id: Long,
-    val chatId: Long,
+    val id: MessageId,
+    val chatId: ChatId,
     /** Telegram media album id; 0 means standalone post (do not merge). */
     val mediaAlbumId: Long,
     /** Channel title for posts; user/chat display name for comments. */
@@ -59,13 +59,13 @@ data class TimelinePost(
      * [getMessageThread]. The comments screen probes [getMessageProperties] across this
      * list to find the carrier without guessing.
      */
-    val albumMessageIds: List<Long>,
+    val albumMessageIds: List<MessageId>,
     /**
      * Parent comment id when this row is a discussion-thread reply. Null for top-level
      * comments AND for channel feed posts. Used by [CommentsRepository] to build the
      * threaded tree.
      */
-    val parentId: Long? = null,
+    val parentId: MessageId? = null,
     /** Mirrors `TdApi.Message.isPinned` — surfaces a small pin badge on the card. */
     val isPinned: Boolean = false,
     /**
@@ -93,7 +93,7 @@ data class TimelinePost(
      * is the channel/chat itself, and null in web mode (t.me/s/ exposes no author id).
      * Drives the avatar/name → [dev.lyo.hortay.ui.users.UserProfileSheet] tap surface.
      */
-    val senderUserId: Long? = null,
+    val senderUserId: UserId? = null,
     /**
      * Foreign chat id when the message was sent on behalf of another chat (TDLib's
      * `MessageSenderChat(chatId != hostChat.id)` — admin posting "as their other
@@ -102,7 +102,7 @@ data class TimelinePost(
      * host. Null when sender is the host channel itself (case 1) or a human user
      * (case 2 — covered by [senderUserId]), and null in web mode.
      */
-    val senderChatId: Long? = null,
+    val senderChatId: ChatId? = null,
 )
 
 /**

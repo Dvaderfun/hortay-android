@@ -42,7 +42,9 @@ import androidx.navigation3.ui.NavDisplay
 import dev.lyo.hortay.PlatformLog
 import dev.lyo.hortay.currentLanguageTag
 import dev.lyo.hortay.data.BookmarkStore
+import dev.lyo.hortay.data.ChatId
 import dev.lyo.hortay.data.DeepLink
+import dev.lyo.hortay.data.MessageId
 import dev.lyo.hortay.data.DeepLinkRouter
 import dev.lyo.hortay.data.HortayBackend
 import dev.lyo.hortay.data.IgnoredChannelsStore
@@ -57,14 +59,14 @@ import dev.lyo.hortay.data.web.WebPostAdapter
 import dev.lyo.hortay.data.web.WebRepository
 import dev.lyo.hortay.data.web.WebTelegramClient
 import dev.lyo.hortay.ui.icons.Symbol
-import dev.lyo.hortay.ui.main.BackSwipeEdge
-import dev.lyo.hortay.ui.main.FloatingNavBar
+import dev.lyo.hortay.ui.composables.navigation.BackSwipeEdge
+import dev.lyo.hortay.ui.composables.bars.FloatingNavBar
 import dev.lyo.hortay.ui.main.LinkAwareScaffold
-import dev.lyo.hortay.ui.main.NavTab
+import dev.lyo.hortay.ui.composables.navigation.NavTab
 import dev.lyo.hortay.ui.main.nextTapToken
 import dev.lyo.hortay.ui.report.GuestReportOutcome
 import dev.lyo.hortay.ui.report.LocalGuestReportDelegate
-import dev.lyo.hortay.ui.report.ReportInstructionDialog
+import dev.lyo.hortay.ui.composables.dialogs.ReportInstructionDialog
 import dev.lyo.hortay.ui.settings.SettingsScreen
 import dev.lyo.hortay.ui.timeline.LocalReadCursors
 import dev.lyo.hortay.ui.timeline.TimelineScreen
@@ -271,7 +273,7 @@ fun WebModeScaffold(
             batch.groupBy { it.senderHandle?.removePrefix("@")?.lowercase() ?: "" }
                 .forEach { (username, group) ->
                     if (username.isNotEmpty()) {
-                        webRepository.markChannelRead(username, group.maxOf { it.id })
+                        webRepository.markChannelRead(username, group.maxOf { it.id.value })
                     }
                 }
         }
@@ -313,9 +315,9 @@ fun WebModeScaffold(
     // in our subscriptions (e.g. a forwarded-from chip pointing at a stranger's
     // channel) — fall back to opening t.me/<u> in the system browser so the tap
     // is never silently dead.
-    val onFeedChannelOpen: (Long, Long?) -> Unit = remember(snackbarHostState) {
+    val onFeedChannelOpen: (ChatId, MessageId?) -> Unit = remember(snackbarHostState) {
         { chatId, _ ->
-            val u = resolveUsername(chatId)
+            val u = resolveUsername(chatId.value)
             if (u != null) pushWebChannel(u)
             else systemUriHandler.openUri("https://t.me/")
         }
@@ -468,7 +470,7 @@ fun WebModeScaffold(
                                 onReportClick = { post ->
                                     val outcome = guestReport(
                                         post.senderHandle?.removePrefix("@"),
-                                        if (post.id != 0L) post.id else null,
+                                        if (post.id.value != 0L) post.id.value else null,
                                     )
                                     if (outcome == GuestReportOutcome.OpenedTelegram ||
                                         outcome == GuestReportOutcome.OpenedWeb) {
@@ -513,7 +515,7 @@ fun WebModeScaffold(
                         onReportClick = { post ->
                             val outcome = guestReport(
                                 post.senderHandle?.removePrefix("@"),
-                                if (post.id != 0L) post.id else null,
+                                if (post.id.value != 0L) post.id.value else null,
                             )
                             if (outcome == GuestReportOutcome.OpenedTelegram ||
                                 outcome == GuestReportOutcome.OpenedWeb) {

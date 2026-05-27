@@ -348,7 +348,7 @@ enum class ExpiredKind { Photo, Video, VideoNote, VoiceNote }
 /** Service / system event payloads — symbolic so the UI picks both icon and label. */
 sealed interface ServiceEvent {
     @Immutable
-    data class PinnedMessage(val pinnedMessageId: Long) : ServiceEvent
+    data class PinnedMessage(val pinnedMessageId: MessageId) : ServiceEvent
     @Immutable
     data class ChannelBoosted(val boostCount: Int) : ServiceEvent
     data object GiveawayStarted : ServiceEvent
@@ -668,20 +668,20 @@ sealed interface ForwardOrigin {
         val userName: String,
         /** TDLib id of the original user sender. Null only on legacy forwards where the
          *  origin payload lacked the user id (the renderer falls back to the static name). */
-        val userId: Long? = null,
+        val userId: UserId? = null,
     ) : ForwardOrigin
     @Immutable
     data class Channel(
         val channelName: String,
         val authorSignature: String?,
-        val sourceChatId: Long,
+        val sourceChatId: ChatId,
         val sourceHandle: String?,
         /** Message id of the original post in the source channel. Drives the
          *  forward-chip tap so it lands AT the original post instead of the
          *  channel's newest entry. `TdApi.MessageOriginChannel.message_id` is
          *  non-zero for real channel forwards; the field is nullable only for
          *  the legacy fallback path in [MessageMapper.mapForwardOrigin]. */
-        val sourceMessageId: Long?,
+        val sourceMessageId: MessageId?,
     ) : ForwardOrigin
     @Immutable
     data class HiddenUser(val senderName: String) : ForwardOrigin
@@ -689,7 +689,7 @@ sealed interface ForwardOrigin {
     data class Chat(
         val chatName: String,
         val authorSignature: String?,
-        val sourceChatId: Long,
+        val sourceChatId: ChatId,
         val sourceHandle: String?,
     ) : ForwardOrigin
 }
@@ -705,9 +705,9 @@ data class ReplyPreview(
      * reply is a "self-reply" inside the same channel — TimelineScreen merges those into a
      * threaded pair so the parent appears stacked above the reply with a connector line.
      */
-    val replyToChatId: Long,
+    val replyToChatId: ChatId,
     /** Message id of the message being replied to. Companion to [replyToChatId]. */
-    val replyToMessageId: Long,
+    val replyToMessageId: MessageId,
     /**
      * Optional thumbnail of the parent's media (Twitter-style quote card affordance). Sourced
      * from [TdApi.MessageReplyToMessage.content] — TDLib gives us a snapshot of the parent's

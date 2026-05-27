@@ -28,7 +28,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.runtime.saveable.rememberSaveable
-import dev.lyo.hortay.AppConfig
+import dev.lyo.hortay.BuildKonfig
 import dev.lyo.hortay.data.AutoDownloadFacade
 import dev.lyo.hortay.data.FeedOrder
 import dev.lyo.hortay.data.HortayBackend
@@ -37,8 +37,8 @@ import dev.lyo.hortay.data.NetworkUsage
 import dev.lyo.hortay.data.SettingsStore
 import dev.lyo.hortay.data.StatsFacade
 import dev.lyo.hortay.data.StorageUsage
-import dev.lyo.hortay.ui.components.HortayTopBar
-import dev.lyo.hortay.ui.components.HortayTopBarSize
+import dev.lyo.hortay.ui.composables.bars.HortayTopBar
+import dev.lyo.hortay.ui.composables.bars.HortayTopBarSize
 import dev.lyo.hortay.ui.icons.Symbol
 import kotlinx.coroutines.launch
 import hortay.shared.generated.resources.Res
@@ -530,7 +530,7 @@ private fun SettingsMain(
                     chevron = true,
                     index = 0,
                     count = 2,
-                    onClick = { uriHandler.openUri(AppConfig.childSafetyPolicyUrl) },
+                    onClick = { uriHandler.openUri(BuildKonfig.CHILD_SAFETY_POLICY_URL) },
                 )
                 SettingsRow(
                     symbol = "shield",
@@ -539,7 +539,7 @@ private fun SettingsMain(
                     chevron = true,
                     index = 1,
                     count = 2,
-                    onClick = { uriHandler.openUri(AppConfig.privacyPolicyUrl) },
+                    onClick = { uriHandler.openUri(BuildKonfig.PRIVACY_POLICY_URL) },
                 )
             }
 
@@ -583,7 +583,7 @@ private fun SettingsMain(
                 SettingsRow(
                     symbol = "info",
                     title = stringResource(Res.string.settings_version),
-                    subtitle = "${AppConfig.versionName} · build ${AppConfig.versionCode}",
+                    subtitle = "${BuildKonfig.VERSION_NAME} · build ${BuildKonfig.VERSION_CODE}",
                     index = 1,
                     count = 2,
                 )

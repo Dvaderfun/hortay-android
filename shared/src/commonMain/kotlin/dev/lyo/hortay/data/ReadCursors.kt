@@ -47,7 +47,7 @@ val EmptyReadCursors: ReadCursors = persistentMapOf()
 fun TimelinePost.isUnreadAt(cursor: Long?): Boolean {
     if (parentId != null) return false
     if (cursor == null) return false
-    val highestId = albumMessageIds.maxOrNull() ?: id
+    val highestId = albumMessageIds.maxOfOrNull { it.value } ?: id.value
     return highestId > cursor
 }
 
@@ -67,7 +67,7 @@ fun TimelinePost.isUnreadAt(cursor: Long?): Boolean {
  */
 fun TimelinePost.isUnreadIn(cursors: ReadCursors): Boolean {
     if (parentId != null) return false
-    val cursor = cursors[chatId] ?: return false
+    val cursor = cursors[chatId.value] ?: return false
     // For albums, the anchor is the LOWEST member id (PostFilterStrategy
     // sorts ascending and picks `first()`). Comparing only anchor.id flips
     // the card to "read" as soon as the cursor passes the first member,
@@ -76,7 +76,7 @@ fun TimelinePost.isUnreadIn(cursors: ReadCursors): Boolean {
     // the official Telegram client) land the cursor mid-album. Use the
     // highest member id so the card stays unread until every member has
     // been acked.
-    val highestId = albumMessageIds.maxOrNull() ?: id
+    val highestId = albumMessageIds.maxOfOrNull { it.value } ?: id.value
     return highestId > cursor
 }
 
@@ -116,7 +116,7 @@ fun List<TimelinePost>.orderedFor(order: FeedOrder): List<TimelinePost> = when (
     // could swap places between refreshes and read as "feed jitters" in
     // the reverse-feed layout.
     FeedOrder.OldestUnreadFirst ->
-        sortedWith(compareBy<TimelinePost> { it.date }.thenBy { it.id })
+        sortedWith(compareBy<TimelinePost> { it.date }.thenBy { it.id.value })
 }
 
 /**

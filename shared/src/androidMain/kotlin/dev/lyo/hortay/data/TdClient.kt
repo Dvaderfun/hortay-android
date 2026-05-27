@@ -2,7 +2,8 @@ package dev.lyo.hortay.data
 
 import android.content.Context
 import android.util.Log
-import dev.lyo.hortay.AppConfig
+import dev.lyo.hortay.BuildKonfig
+import dev.lyo.hortay.isDebugBuild
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -179,7 +180,7 @@ class TdClient private constructor(
         //     all. Combined with LOG_VERBOSITY=0 (fatal-only) this means zero
         //     log I/O on the hot path in production.
         runCatching {
-            val stream: TdApi.LogStream = if (AppConfig.debug) {
+            val stream: TdApi.LogStream = if (isDebugBuild) {
                 val logsDir = context.filesDir.resolve("td-logs").apply { mkdirs() }
                 TdApi.LogStreamFile(
                     logsDir.resolve("td.log").absolutePath,
@@ -251,7 +252,7 @@ class TdClient private constructor(
                     systemLanguageCode = java.util.Locale.getDefault().language.ifBlank { "en" }
                     deviceModel = android.os.Build.MODEL
                     systemVersion = "Android ${android.os.Build.VERSION.RELEASE}"
-                    applicationVersion = AppConfig.versionName
+                    applicationVersion = BuildKonfig.VERSION_NAME
                 }
                 // Failure here is unrecoverable from inside the auth loop — bad apiId/apiHash,
                 // unwritable database directory, etc. Surface a stage the UI can render
@@ -645,7 +646,7 @@ class TdClient private constructor(
         // surface "error" level (1) for traceability while developing; release stays at
         // fatal-only because TDLib's WebPagesManager spams blockquote / link-preview
         // parses at "error" level which would clutter production crashlog tooling.
-        private val LOG_VERBOSITY = if (AppConfig.debug) 3 else 0
+        private val LOG_VERBOSITY = if (isDebugBuild) 3 else 0
         private const val TAG = "TdClient"
 
         // Defense-in-depth ceiling for a single [send] call. Generous enough that
@@ -715,13 +716,13 @@ class TdClient private constructor(
         private const val FLOOD_WAIT_CAP_SECONDS = 300L
 
         fun create(context: Context, settings: SettingsStore): TdClient {
-            check(AppConfig.telegramApiId != 0 && AppConfig.telegramApiHash.isNotEmpty()) {
+            check(BuildKonfig.TELEGRAM_API_ID != 0 && BuildKonfig.TELEGRAM_API_HASH.isNotEmpty()) {
                 "Telegram api credentials missing. Add telegram.apiId / telegram.apiHash to local.properties."
             }
             return TdClient(
                 context.applicationContext,
-                AppConfig.telegramApiId,
-                AppConfig.telegramApiHash,
+                BuildKonfig.TELEGRAM_API_ID,
+                BuildKonfig.TELEGRAM_API_HASH,
                 settings,
             )
         }

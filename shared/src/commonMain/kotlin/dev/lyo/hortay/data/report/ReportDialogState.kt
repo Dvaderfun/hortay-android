@@ -1,5 +1,7 @@
 package dev.lyo.hortay.data.report
 
+import dev.lyo.hortay.data.ChatId
+import dev.lyo.hortay.data.MessageId
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -12,7 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
  * reopening the sheet on the same (chatId, messageId) auto-dismisses or shows
  * stale errors. New tap → new `nanoTime` → distinct key → clean state machine.
  */
-data class ReportTarget(val chatId: Long, val messageId: Long?, val token: Long)
+data class ReportTarget(val chatId: ChatId, val messageId: MessageId?, val token: Long)
 
 /**
  * Process-wide holder for the in-app report flow target. Hoisted off
