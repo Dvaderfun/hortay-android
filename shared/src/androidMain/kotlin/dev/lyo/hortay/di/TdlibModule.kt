@@ -19,6 +19,12 @@ import dev.lyo.hortay.data.StartupCoordinator
 import dev.lyo.hortay.data.ProfileAccentRegistry
 import dev.lyo.hortay.data.ProfileAccentResolver
 import dev.lyo.hortay.data.StatsRepository
+import dev.lyo.hortay.data.archive.AndroidArchivedMediaStore
+import dev.lyo.hortay.data.archive.ArchiveLogoutClear
+import dev.lyo.hortay.data.archive.ArchiveRepository
+import dev.lyo.hortay.data.archive.ArchiveSettingsStore
+import dev.lyo.hortay.data.archive.ArchivedMediaStore
+import dev.lyo.hortay.data.archive.db.ArchiveDatabase
 import dev.lyo.hortay.data.proxy.ProxyRepository
 import dev.lyo.hortay.data.StringResolver
 import dev.lyo.hortay.data.TdClient
@@ -206,6 +212,17 @@ val tdlibModule = module {
             authStage = get<TdClient>().authStage,
             scope = get<CoroutineScope>(),
         ).also { it.bind() }
+    }
+
+    // ---- Post archive (TDLib-side platform deps; DB/repo/sweep/VMs live in archiveModule) --
+    single<ArchivedMediaStore> { AndroidArchivedMediaStore(androidContext(), get<ArchiveDatabase>()) }
+    single(createdAtStart = true) {
+        ArchiveLogoutClear(
+            repo = get<ArchiveRepository>(),
+            settingsStore = get<ArchiveSettingsStore>(),
+            loggedOut = get<TdClient>().loggedOut,
+            scope = get<CoroutineScope>(),
+        )
     }
 
     // ---- Proxy (eager — its init launches the pool refresh + failover watchdog) -----------

@@ -69,6 +69,17 @@ data class TimelinePost(
     /** Mirrors `TdApi.Message.isPinned` — surfaces a small pin badge on the card. */
     val isPinned: Boolean = false,
     /**
+     * True when this card is a reconstructed tombstone for a server-deleted post (the post
+     * archive rebuilds deleted posts into the feed when capture is enabled). Drives the
+     * `DeletedBadge` + passive media rendering ([dev.lyo.hortay.ui.media.LocalMediaPassive]).
+     */
+    val isDeleted: Boolean = false,
+    /**
+     * Number of admin edits the archive has captured for this post (0 = never edited / archive
+     * off). Seeds the `EditedChip` count so it survives a relaunch before the next live edit.
+     */
+    val revisionCount: Int = 0,
+    /**
      * Whether the Telegram user can report this post's chat. Populated from
      * [TdApi.MessageProperties.canReportChat] when the message mapper resolves
      * message properties; defaults to false for comment replies and guest-mode posts

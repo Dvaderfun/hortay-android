@@ -24,6 +24,7 @@ import coil3.request.crossfade
 import dev.lyo.hortay.data.DownloadPriority
 import dev.lyo.hortay.data.MediaState
 import dev.lyo.hortay.data.TdMedia
+import dev.lyo.hortay.ui.icons.Symbol
 import kotlinx.coroutines.launch
 
 /**
@@ -102,6 +103,10 @@ fun TdMediaImage(
     // stay invisible under the blurred minithumb. See [rememberDeferredLoading].
     val showLoadingOverlay = rememberDeferredLoading(state = state, key = fileId)
 
+    // Deleted-post tombstone: the file will never download (message gone server-side), so the
+    // spinner / retry chrome would lie. Render passively — Ready image + minithumb only.
+    val passive = LocalMediaPassive.current
+
     val baseModifier = if (placeholderColor != null) {
         modifier.background(placeholderColor)
     } else {
@@ -176,9 +181,10 @@ fun TdMediaImage(
                 }
             },
         )
-        // Loading / failed overlays — layered on top of the dissolve at full alpha.
+        // Loading / failed overlays — layered on top of the dissolve at full alpha. Suppressed
+        // for a passive (deleted-post tombstone) slot: the download never completes.
         when (val s = state) {
-            is MediaState.Downloading -> if (showLoadingOverlay && showProgress && fileId != null) {
+            is MediaState.Downloading -> if (showLoadingOverlay && showProgress && fileId != null && !passive) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     MediaLoadingOverlay(
                         progress = s.progress,
@@ -188,7 +194,7 @@ fun TdMediaImage(
                     )
                 }
             }
-            is MediaState.Failed -> if (showProgress && fileId != null) {
+            is MediaState.Failed -> if (showProgress && fileId != null && !passive) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     val coScope = rememberCoroutineScope()
                     MediaFailedOverlay(
@@ -197,6 +203,13 @@ fun TdMediaImage(
                 }
             }
             MediaState.Idle, is MediaState.Ready -> Unit
+        }
+        // Passive tombstone with neither an on-disk file nor an inline minithumb: a decorative
+        // "image unavailable" glyph reads better than a bare placeholder rectangle.
+        if (passive && state !is MediaState.Ready && minithumb == null) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Symbol(name = "hide_image", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }

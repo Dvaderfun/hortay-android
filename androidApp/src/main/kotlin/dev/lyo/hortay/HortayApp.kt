@@ -11,6 +11,7 @@ import coil3.memory.MemoryCache
 import coil3.request.crossfade
 import dev.lyo.hortay.app.BuildConfig
 import dev.lyo.hortay.data.LocaleStore
+import dev.lyo.hortay.di.archiveModule
 import dev.lyo.hortay.di.coreModule
 import dev.lyo.hortay.di.platformModule
 import dev.lyo.hortay.di.storesModule
@@ -56,6 +57,7 @@ class HortayApp : Application(), SingletonImageLoader.Factory {
                 tdlibModule,
                 uiBridgeModule,
                 viewModelModule,
+                archiveModule,
                 platformModule(),
             )
         }

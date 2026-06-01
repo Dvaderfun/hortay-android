@@ -22,6 +22,7 @@ fun initKoin(): KoinApplication = startKoin {
         tdlibIosModule,
         uiBridgeModule,
         viewModelModule,
+        archiveModule,
         platformModule(),
     )
 }
