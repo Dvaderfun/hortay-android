@@ -85,7 +85,11 @@ import hortay.shared.generated.resources.settings_section_author
 import hortay.shared.generated.resources.settings_section_feed
 import hortay.shared.generated.resources.settings_section_privacy
 import hortay.shared.generated.resources.settings_section_safety
+import hortay.shared.generated.resources.settings_archive_title
+import hortay.shared.generated.resources.settings_author_source_title
 import hortay.shared.generated.resources.settings_section_storage
+import dev.lyo.hortay.ui.archive.ArchiveScreen
+import dev.lyo.hortay.ui.archive.ArchiveSettingsScreen
 import hortay.shared.generated.resources.settings_section_traffic
 import hortay.shared.generated.resources.settings_snap_scroll_subtitle
 import hortay.shared.generated.resources.settings_snap_scroll_title
@@ -179,8 +183,12 @@ fun SettingsScreen(
     // gives the user a clear sense of depth.
     var showAutoDownload by rememberSaveable { mutableStateOf(false) }
     var showHiddenChannels by rememberSaveable { mutableStateOf(false) }
+    var showArchiveSettings by rememberSaveable { mutableStateOf(false) }
+    var showArchiveBrowser by rememberSaveable { mutableStateOf(false) }
     BackHandler(enabled = showAutoDownload) { showAutoDownload = false }
     BackHandler(enabled = showHiddenChannels) { showHiddenChannels = false }
+    BackHandler(enabled = showArchiveBrowser) { showArchiveBrowser = false }
+    BackHandler(enabled = showArchiveSettings && !showArchiveBrowser) { showArchiveSettings = false }
 
     // M3E shared-axis-X via MotionScheme: spatial spring for the slide, effects
     // spring for the crossfade. Same physics as MaterialTheme reads on every Material
@@ -197,6 +205,8 @@ fun SettingsScreen(
     // animates as "go deeper / come back" rather than two unrelated
     // crossfades.
     val current = when {
+        showArchiveBrowser -> SettingsSection.ArchiveBrowser
+        showArchiveSettings -> SettingsSection.ArchiveSettings
         showAutoDownload && autoDownload != null -> SettingsSection.AutoDownload
         showHiddenChannels && ignoredChannels != null -> SettingsSection.HiddenChannels
         else -> SettingsSection.Main
@@ -232,6 +242,15 @@ fun SettingsScreen(
                     webChannelByChatId = webChannelByChatId,
                 )
             }
+            SettingsSection.ArchiveSettings -> ArchiveSettingsScreen(
+                viewModel = org.koin.compose.viewmodel.koinViewModel(),
+                onBack = { showArchiveSettings = false },
+                onOpenArchive = { showArchiveBrowser = true },
+            )
+            SettingsSection.ArchiveBrowser -> ArchiveScreen(
+                viewModel = org.koin.compose.viewmodel.koinViewModel(),
+                onBack = { showArchiveBrowser = false },
+            )
             SettingsSection.Main -> SettingsMain(
                 settings = settings,
                 stats = stats,
@@ -244,6 +263,7 @@ fun SettingsScreen(
                 onOpenAutoDownload = { showAutoDownload = true },
                 ignoredChannels = ignoredChannels,
                 onOpenHiddenChannels = { showHiddenChannels = true },
+                onOpenArchive = { showArchiveSettings = true },
             )
         }
     }
@@ -258,6 +278,8 @@ private enum class SettingsSection(val depth: Int) {
     Main(0),
     AutoDownload(1),
     HiddenChannels(1),
+    ArchiveSettings(1),
+    ArchiveBrowser(2),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -274,6 +296,7 @@ private fun SettingsMain(
     onOpenAutoDownload: () -> Unit,
     ignoredChannels: IgnoredChannelsStore?,
     onOpenHiddenChannels: () -> Unit,
+    onOpenArchive: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
@@ -381,6 +404,15 @@ private fun SettingsMain(
                     onClick = onOpenHiddenChannels,
                 )
             }
+
+            // ---- Post archive (edit / delete history) — available in both auth + guest modes ----
+            Spacer(Modifier.height(8.dp))
+            SettingsRow(
+                symbol = "delete_sweep",
+                title = stringResource(Res.string.settings_archive_title),
+                chevron = true,
+                onClick = onOpenArchive,
+            )
 
             // ---- TDLib-mode-only: traffic & storage cards backed by StatsRepository ----
             if (stats != null) {
