@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android resource referenced by AndroidManifest.xml (android:label) — kept here with the
+         other manifest-referenced Android res (mipmap, themes, xml). Distinct from the CMP
+         `Res.string.app_name` used by Compose UI; the manifest can't read composeResources. -->
+    <string name="app_name">Hortay</string>
+</resources>
