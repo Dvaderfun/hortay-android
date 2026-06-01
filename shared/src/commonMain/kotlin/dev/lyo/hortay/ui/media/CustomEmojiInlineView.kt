@@ -15,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.lyo.hortay.data.CustomEmojiSticker
@@ -109,7 +110,6 @@ fun CustomEmojiInlineView(
         firstVisibleFileId == null -> true
         else -> binding.isReady
     }
-    val needsPlaceholder = !contentReady
 
     Box(modifier = modifier) {
         if (sticker == null) {
@@ -200,8 +200,18 @@ fun CustomEmojiInlineView(
         // LottieStickerView until the first visible file lands as Ready.
         // Kept on TOP (not as an underlay) so it doesn't bleed through
         // transparent corners of irregular glyphs once content paints.
-        if (needsPlaceholder) {
-            PlaceholderDisc()
+        //
+        // PLACEHOLDER-ON-TOP reveal (see [MediaReveal] KDoc): the disc fades OUT
+        // (`alpha = 1 - revealAlpha`) as content becomes ready, instead of
+        // popping off. [rememberPlaceholderLinger] keeps it composed through the
+        // fade then drops it; keyed on the emoji id so a slot reused for a
+        // different glyph re-arms.
+        val revealAlpha = rememberRevealAlpha(contentReady)
+        val showDisc = rememberPlaceholderLinger(contentReady, key = customEmojiId)
+        if (showDisc) {
+            Box(Modifier.fillMaxSize().graphicsLayer { alpha = 1f - revealAlpha }) {
+                PlaceholderDisc()
+            }
         }
     }
 }

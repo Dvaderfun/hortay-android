@@ -149,6 +149,7 @@ class IosTdAuthStateMachine(
                     nextChannelLabel = info?.nextType?.toLabel(res, phone),
                     resendAvailableInSec = info?.timeout ?: 0,
                     isNumeric = info?.type?.isNumeric() != false,
+                    deliveredInApp = info?.type is TdApi.AuthenticationCodeTypeTelegramMessage,
                 )
             }
             is TdApi.AuthorizationStateWaitPassword -> _authStage.value = AuthStage.WaitPassword(

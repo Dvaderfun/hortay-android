@@ -576,7 +576,7 @@ private fun FormattedText.Style.toSpanStyle(
     is FormattedText.Style.MentionName -> SpanStyle(color = accent)
     FormattedText.Style.BotCommand -> SpanStyle(color = accent)
     is FormattedText.Style.CustomEmoji -> null
-    FormattedText.Style.BlockQuote -> SpanStyle(color = mute)
+    is FormattedText.Style.BlockQuote -> SpanStyle(color = mute)
     FormattedText.Style.Url,
     is FormattedText.Style.TextUrl,
     FormattedText.Style.Mention,

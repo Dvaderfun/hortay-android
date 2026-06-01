@@ -2,6 +2,7 @@ package dev.lyo.hortay.ui.composables.sheets
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,7 +33,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -49,6 +52,8 @@ import dev.lyo.hortay.data.UserProfile
 import dev.lyo.hortay.nowMs
 import dev.lyo.hortay.rememberToaster
 import dev.lyo.hortay.ui.composables.sheets.formatThousandsKmp
+import dev.lyo.hortay.ui.composables.badges.PremiumStatusBadge
+import dev.lyo.hortay.ui.theme.LocalProfileAccent
 import dev.lyo.hortay.ui.icons.Symbol
 import dev.lyo.hortay.ui.media.TdAvatar
 import kotlin.time.Duration.Companion.days
@@ -205,13 +210,23 @@ private fun ProfileHero(
     val avatarThumb = profile?.avatarThumb ?: seedAvatarThumb
     val avatarFileId = profile?.avatarFileId ?: seedAvatarFileId
 
+    // Avatar ring tinted with the user's Telegram profile accent colours when set, else the
+    // brand tonal ring. Resolved through [LocalProfileAccent]; null/empty in guest mode, auth,
+    // previews and for users with no accent → brand fallback.
+    val ringArgb = LocalProfileAccent.current.ringArgb(profile?.profileAccentColorId ?: -1, isSystemInDarkTheme())
+    val ringBrush = when {
+        ringArgb != null && ringArgb.size >= 2 -> Brush.sweepGradient(ringArgb.map { Color(it) })
+        ringArgb != null && ringArgb.size == 1 -> SolidColor(Color(ringArgb[0]))
+        else -> SolidColor(MaterialTheme.colorScheme.primaryContainer)
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // Avatar disc with a soft tonal ring — anchors the eye and dresses up the small
+        // Avatar disc with a soft accent/tonal ring — anchors the eye and dresses up the small
         // initial-letter fallback so a fresh placeholder doesn't read as "broken".
         Box(
             modifier = Modifier
@@ -220,7 +235,7 @@ private fun ProfileHero(
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                 .border(
                     width = 2.dp,
-                    color = MaterialTheme.colorScheme.primaryContainer,
+                    brush = ringBrush,
                     shape = CircleShape,
                 ),
             contentAlignment = Alignment.Center,
@@ -247,15 +262,11 @@ private fun ProfileHero(
                 Spacer(Modifier.width(6.dp))
                 VerificationGlyph(it)
             }
-            if (profile?.isPremium == true) {
+            if (profile?.isPremium == true || profile?.emojiStatusId != null) {
                 Spacer(Modifier.width(6.dp))
-                Symbol(
-                    // `rocket_launch` stands in for Telegram Premium until a dedicated
-                    // star glyph is bundled — Premium itself is closer to "boost" than
-                    // a literal star in Telegram-Android marketing anyway.
-                    name = "rocket_launch",
-                    contentDescription = stringResource(Res.string.cd_premium_badge),
-                    tint = MaterialTheme.colorScheme.tertiary,
+                PremiumStatusBadge(
+                    isPremium = profile?.isPremium == true,
+                    emojiStatusId = profile?.emojiStatusId,
                     size = 16.dp,
                 )
             }

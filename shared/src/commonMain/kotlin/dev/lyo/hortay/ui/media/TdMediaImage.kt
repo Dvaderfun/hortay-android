@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -25,7 +24,6 @@ import coil3.request.crossfade
 import dev.lyo.hortay.data.DownloadPriority
 import dev.lyo.hortay.data.MediaState
 import dev.lyo.hortay.data.TdMedia
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -110,80 +108,76 @@ fun TdMediaImage(
         modifier
     }
 
+    // `revealed` = Coil has DECODED + is ready to paint the file image, not just
+    // MediaState.Ready (bytes on disk). Keyed on (fileId, ready path) so an in-place file
+    // change (in-channel media edit, album swipe reusing the slot) resets the reveal and
+    // re-shows the minithumb under the new file's fade.
+    val readyPath = (state as? MediaState.Ready)?.path?.takeIf { it.isNotEmpty() }
+    var photoPainted by remember(fileId, readyPath) { mutableStateOf(false) }
+
     Box(modifier = baseModifier) {
-        // Minithumb is a tiny inline JPEG (~150B). Coil decodes it off the
-        // main thread and we Gaussian-blur the rendered output for the
-        // Telegram-style "soft preview" look. The blur modifier is a GPU
-        // pass on API ≥ 31; on 26-30 Compose silently no-ops the blur, and
-        // the bilinear up-scale of the 40×40 minithumb still reads as a
-        // soft placeholder.
-        //
-        // **Stays composed THROUGH the Coil crossfade after [MediaState.Ready]**,
-        // then drops out [MINITHUMB_LINGER_MS] after Ready lands — long enough
-        // for Coil's `.crossfade(CROSSFADE_MS)` on the Ready-path AsyncImage
-        // to run to completion. An earlier version gated this branch on
-        // `state !is Ready` directly, which yanked the minithumb the instant
-        // the [MediaCache] reducer flipped Ready (= download-completed
-        // signal, NOT Coil-rendered-the-pixels signal). Coil fades the file
-        // image in from alpha 0 over CROSSFADE_MS; with no minithumb
-        // underneath, that fade window paints [placeholderColor] (typically
-        // surfaceContainerHigh), producing a sharp grey blink — the "блимок"
-        // symptom users described. The timer-drop preserves the crossfade
-        // bleed-through invariant while ending the steady-state GPU cost
-        // (one bitmap blit + one RenderEffect blur per visible media card
-        // per frame) once the full image has actually painted. Without the
-        // timer, every visible media card in the feed pays that GPU pass
-        // forever — measurable on weaker GPUs as scroll micro-jank.
+        // Blurred minithumb placeholder + the full-resolution photo cross-dissolving in on
+        // top via [MediaReveal]. The minithumb is a tiny inline JPEG (~150 B); Coil decodes
+        // it off the main thread and we Gaussian-blur the rendered output for the Telegram-
+        // style "soft preview" look (a GPU pass on API ≥ 31; a no-op on 26-30 where the
+        // bilinear up-scale of the 40×40 thumb still reads as soft). MediaReveal keeps the
+        // minithumb at full alpha through the photo fade and for [MEDIA_REVEAL_LINGER_MS]
+        // after the first painted pixel, then drops it — so the opaque thumb covers the
+        // whole fade and [placeholderColor] never bleeds through a half-decoded image.
         val minithumb = media.minithumbBytes
-        val showMinithumb = rememberMinithumbVisible(fileId, state)
-        if (minithumb != null && showMinithumb) {
-            val minithumbRequest = remember(minithumb, context) {
-                ImageRequest.Builder(context)
-                    .data(minithumb)
-                    .diskCachePolicy(CachePolicy.DISABLED)
-                    .build()
-            }
-            AsyncImage(
-                model = minithumbRequest,
-                contentDescription = null,
-                contentScale = contentScale,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .blur(MINITHUMB_BLUR_RADIUS),
-            )
-        }
-        when (val s = state) {
-            is MediaState.Ready -> if (s.path.isNotEmpty()) {
-                // Memoise on the Ready path string: rebuilding ImageRequest
-                // + re-attaching the listener every recomp churns Coil's
-                // queue. `data("file://...")` works on both Android (file
-                // URIs) and iOS (Coil's path fetcher).
-                val readyRequest = remember(s.path, fileId, context) {
-                    ImageRequest.Builder(context)
-                        .data("file://${s.path}")
-                        .diskCachePolicy(CachePolicy.DISABLED)
-                        .crossfade(CROSSFADE_MS)
-                        .listener(
-                            onError = { _, _ ->
-                                // TDLib's storage optimiser silently evicts
-                                // cached files and never emits an UpdateFile
-                                // for the deletion (per tdlib/td#3178). Coil
-                                // failing to open the path is our signal that
-                                // the slot is stale: invalidate it and the
-                                // cache will re-issue DownloadFile on its
-                                // own scope.
-                                binding.invalidate(priority)
-                            },
-                        )
-                        .build()
+        MediaReveal(
+            revealed = photoPainted,
+            key = fileId,
+            modifier = Modifier.fillMaxSize(),
+            placeholder = {
+                if (minithumb != null) {
+                    val minithumbRequest = remember(minithumb, context) {
+                        ImageRequest.Builder(context)
+                            .data(minithumb)
+                            .diskCachePolicy(CachePolicy.DISABLED)
+                            .build()
+                    }
+                    AsyncImage(
+                        model = minithumbRequest,
+                        contentDescription = null,
+                        contentScale = contentScale,
+                        modifier = Modifier.fillMaxSize().blur(MINITHUMB_BLUR_RADIUS),
+                    )
                 }
-                AsyncImage(
-                    model = readyRequest,
-                    contentDescription = contentDescription,
-                    contentScale = contentScale,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
+            },
+            content = {
+                if (readyPath != null) {
+                    // No Coil .crossfade(): MediaReveal owns the fade now (driven by
+                    // onSuccess). `data("file://...")` is the KMP-safe model — works on
+                    // Android (file URIs) and iOS (Coil's path fetcher) without java.io.File.
+                    val readyRequest = remember(readyPath, fileId, context) {
+                        ImageRequest.Builder(context)
+                            .data("file://$readyPath")
+                            .diskCachePolicy(CachePolicy.DISABLED)
+                            .listener(
+                                onSuccess = { _, _ -> photoPainted = true },
+                                onError = { _, _ ->
+                                    // TDLib's storage optimiser silently evicts cached files
+                                    // and never emits an UpdateFile for the deletion (per
+                                    // tdlib/td#3178). Coil failing to open the path is our
+                                    // signal that the slot is stale: invalidate it and the
+                                    // cache will re-issue DownloadFile on its own scope.
+                                    binding.invalidate(priority)
+                                },
+                            )
+                            .build()
+                    }
+                    AsyncImage(
+                        model = readyRequest,
+                        contentDescription = contentDescription,
+                        contentScale = contentScale,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+            },
+        )
+        // Loading / failed overlays — layered on top of the dissolve at full alpha.
+        when (val s = state) {
             is MediaState.Downloading -> if (showLoadingOverlay && showProgress && fileId != null) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     MediaLoadingOverlay(
@@ -202,45 +196,10 @@ fun TdMediaImage(
                     )
                 }
             }
-            MediaState.Idle -> Unit
+            MediaState.Idle, is MediaState.Ready -> Unit
         }
     }
 }
 
 private val MINITHUMB_BLUR_RADIUS = 20.dp
 private const val CROSSFADE_MS = 220
-
-/**
- * How long the blurred minithumb stays composed after [MediaState.Ready]
- * lands. Must comfortably exceed [CROSSFADE_MS] so the Coil crossfade on the
- * Ready-path AsyncImage runs to completion against the minithumb underneath
- * — preventing the grey-blink symptom when the placeholderColor would
- * otherwise show through a half-faded image. A small extra margin absorbs
- * scheduling jitter.
- */
-private const val MINITHUMB_LINGER_MS = 280L
-
-/**
- * Drives the minithumb's composition lifetime: visible while the state is not
- * Ready, and for [MINITHUMB_LINGER_MS] *after* it flips Ready (covering the
- * Coil crossfade), then false. The holder + effect are both keyed on
- * [fileId] so an in-place file change (rare; in-channel media edit, album
- * swipe reusing the same composable slot) resets the linger timer and
- * re-shows the minithumb under the new file's crossfade — without the key
- * a previous "Ready → hide" decision would carry over and the new file
- * would land on bare placeholder instead of its blurred preview.
- */
-@Composable
-private fun rememberMinithumbVisible(fileId: Int?, state: MediaState): Boolean {
-    val ready = state is MediaState.Ready
-    var visible by remember(fileId) { mutableStateOf(true) }
-    LaunchedEffect(fileId, ready) {
-        if (ready) {
-            delay(MINITHUMB_LINGER_MS)
-            visible = false
-        } else {
-            visible = true
-        }
-    }
-    return visible
-}

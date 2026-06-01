@@ -57,6 +57,7 @@ import dev.lyo.hortay.data.web.SubscriptionsStore
 import dev.lyo.hortay.data.web.WebFeedSource
 import dev.lyo.hortay.data.web.WebPostAdapter
 import dev.lyo.hortay.data.web.WebRepository
+import dev.lyo.hortay.data.UserMessageBus
 import dev.lyo.hortay.data.web.WebTelegramClient
 import dev.lyo.hortay.ui.icons.Symbol
 import dev.lyo.hortay.ui.composables.navigation.BackSwipeEdge
@@ -112,6 +113,7 @@ fun WebModeScaffold(
     webRepository: WebRepository,
     webClient: WebTelegramClient,
     settingsStore: SettingsStore,
+    userMessages: UserMessageBus,
     linkDialogs: LinkDialogState,
     deepLinkRouter: DeepLinkRouter,
     nav: NavStack,
@@ -175,12 +177,12 @@ fun WebModeScaffold(
     // the user gets the instruction dialog right away.
     val guestReport = LocalGuestReportDelegate.current
     val signInRequiredMsg = stringResource(Res.string.web_deeplink_signin_required)
-    // Snackbar host lifted into the scaffold so deep-link rejection messages
-    // ("sign in to open private channels") land regardless of which tab the
-    // user is currently looking at. Same pattern as MainScaffold's userMessages
-    // bus — TDLib mode's UserMessageBus has no analogue in guest mode, so this
-    // is the lightest surface that satisfies the few cases we need.
     val snackbarHostState = remember { SnackbarHostState() }
+    dev.lyo.hortay.ui.main.UserMessageSnackbarRelay(
+        userMessages = userMessages,
+        guestMode = guestMode,
+        hostState = snackbarHostState,
+    )
 
     // Deep-link dispatcher. Mirrors MainScaffold's collector but speaks the
     // guest-mode dialect: only [DeepLink.PublicChannel] is actionable here
@@ -331,6 +333,7 @@ fun WebModeScaffold(
     CompositionLocalProvider(
         LocalReadCursors provides cursorHolder,
         dev.lyo.hortay.ui.media.LocalInlineVideoAutoplay provides inlineVideoAutoplay,
+        dev.lyo.hortay.ui.main.LocalUserMessageBus provides userMessages,
     ) {
     Scaffold(
         modifier = Modifier.fillMaxSize(),

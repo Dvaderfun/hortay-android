@@ -8,6 +8,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -137,25 +138,32 @@ fun WebmStickerPlayer(
         }
     }
 
+    // TRANSPARENT-content reveal (see [MediaReveal] KDoc): the player sits underneath and
+    // the static thumb cross-dissolves OUT on top once a real frame lands, rather than
+    // hard-cutting on `firstFrameRendered`. The thumb must fade (not hold full alpha) or a
+    // playing frame under a static thumb would show a doubled silhouette. Kept composed
+    // through the fade by [rememberPlaceholderLinger], keyed on the sticker identity.
+    val revealed = firstFrameRendered
+    val revealAlpha = rememberRevealAlpha(revealed)
+    val showThumb = rememberPlaceholderLinger(revealed, key = fileId ?: remoteUrl)
     Box(modifier = modifier) {
-        // Thumb stays under the texture until the player has put a real frame
-        // on it. Hiding earlier (e.g. on `Ready` bytes-on-disk) leaves a window
-        // where the TextureView is transparent and exposes the surface behind.
-        if (thumb != null && !firstFrameRendered) {
-            TdMediaImage(
-                media = thumb,
-                contentDescription = contentDescription,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Fit,
-                placeholderColor = null,
-                showProgress = false,
-                priority = priority,
-            )
-        }
         VideoPlayerView(
             player = player,
             modifier = Modifier.fillMaxSize(),
             resizeMode = VideoResizeMode.Fit,
         )
+        if (thumb != null && showThumb) {
+            Box(Modifier.fillMaxSize().graphicsLayer { alpha = 1f - revealAlpha }) {
+                TdMediaImage(
+                    media = thumb,
+                    contentDescription = contentDescription,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit,
+                    placeholderColor = null,
+                    showProgress = false,
+                    priority = priority,
+                )
+            }
+        }
     }
 }

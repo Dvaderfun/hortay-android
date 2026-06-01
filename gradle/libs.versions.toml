@@ -33,6 +33,9 @@ activityCompose = "1.10.0"
 lifecycle = "2.11.0-beta02"
 coroutines = "1.10.1"
 serialization = "1.7.3"
+# KMP port of java-diff-utils (Myers diff). Pure-Kotlin, all targets — used by the
+# post-archive edit-history diff. Replaces the JVM-only io.github.java-diff-utils.
+multiplatformDiff = "1.1.0"
 datastore = "1.2.1"
 coil = "3.3.0"
 splashscreen = "1.2.0"
@@ -117,6 +120,11 @@ compose-ui-text-google-fonts = { group = "androidx.compose.ui", name = "ui-text-
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serialization" }
+# ProtoBuf format for kotlinx.serialization — KMP-native, used for compact on-disk
+# post-archive snapshot blobs (ContentBlobCodec).
+kotlinx-serialization-protobuf = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-protobuf", version.ref = "serialization" }
+# KMP port of java-diff-utils — post-archive edit-history diff (PostDiff).
+multiplatform-diff = { module = "io.github.petertrr:kotlin-multiplatform-diff", version.ref = "multiplatformDiff" }
 
 coil-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref = "coil" }
 # Coil network fetcher. ktor3 variant uses Ktor HttpClient (KMP) — required

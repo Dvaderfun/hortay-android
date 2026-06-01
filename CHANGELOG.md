@@ -4,6 +4,15 @@
 
 ## [Unreleased]
 
+### Added
+- Profile sheets tint the avatar ring with the person's Telegram profile colour.
+
+### Changed
+- Block quotes and code blocks now render the same way on every surface — feed, channel, comments and the open post — as padded blocks, with collapsible quotes and a one-tap "Show more" that opens the post instead of splitting into several toggles.
+- Photos, stickers, custom emoji and GIFs now fade in over their preview instead of popping, and avatars no longer flash a letter before their picture loads.
+- Tapping a reaction or voting in a poll now gives a light haptic tap.
+- The code screen now explains that the login code arrives inside Telegram on another signed-in device, not by SMS.
+
 ### Architecture
 - Navigation substrate migrated to `androidx.navigation3` (KMP) + `org.jetbrains.androidx.navigation3:navigation3-ui` + `androidx.lifecycle:lifecycle-viewmodel-navigation3`; the bespoke `NavStack` overlay renderer is gone, replaced by `NavDisplay` with built-in per-entry SaveableStateHolder + ViewModelStoreOwner decorators.
 

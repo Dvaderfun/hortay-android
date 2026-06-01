@@ -75,6 +75,7 @@ import hortay.shared.generated.resources.Res
 import hortay.shared.generated.resources.app_name
 import hortay.shared.generated.resources.auth_back
 import hortay.shared.generated.resources.auth_change_number
+import hortay.shared.generated.resources.auth_code_hint_telegram
 import hortay.shared.generated.resources.auth_code_placeholder
 import hortay.shared.generated.resources.auth_continue
 import hortay.shared.generated.resources.auth_continue_without_login
@@ -579,6 +580,18 @@ private fun CodeForm(
             )
         }
         AnimatedFieldError(text = errorMessage)
+        // For third-party apps the code only ever arrives inside Telegram itself
+        // (tdlib/td#2310) — SMS is reserved for official mobile clients. Spell that out so
+        // a user without a second signed-in device doesn't sit waiting for an SMS that will
+        // never come and conclude the app is broken.
+        if (stage.deliveredInApp) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = stringResource(Res.string.auth_code_hint_telegram),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         Spacer(Modifier.height(20.dp))
         PrimaryActionButton(
             text = stringResource(Res.string.auth_continue),

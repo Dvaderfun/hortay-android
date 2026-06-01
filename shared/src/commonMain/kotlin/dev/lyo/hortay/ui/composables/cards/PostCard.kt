@@ -23,6 +23,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -123,6 +125,7 @@ fun PostCard(
     // dependency on this post's chatId only, so an UpdateChatReadInbox for
     // a different chat does not invalidate this card.
     val cursor = LocalReadCursors.current[post.chatId.value]
+    val haptics = LocalHapticFeedback.current
     val isUnread = !expanded && post.parentId == null && post.isUnreadAt(cursor)
     val unreadAlpha by androidx.compose.animation.core.animateFloatAsState(
         targetValue = if (isUnread) 1f else 0f,
@@ -280,7 +283,10 @@ fun PostCard(
                         commentCount = post.commentCount,
                         reactions = post.reactions,
                         onCommentsClick = { interactions.onPostClick(post) },
-                        onReactionTap = { item -> interactions.onReactionToggle(post, item) },
+                        onReactionTap = { item ->
+                            haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                            interactions.onReactionToggle(post, item)
+                        },
                     )
                 }
                 }

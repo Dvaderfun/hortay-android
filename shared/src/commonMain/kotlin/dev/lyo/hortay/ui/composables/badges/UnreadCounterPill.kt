@@ -26,8 +26,8 @@ import dev.lyo.hortay.ui.icons.Symbol
 import dev.lyo.hortay.ui.theme.HortayExpressive
 import dev.lyo.hortay.ui.theme.MorphShape
 import hortay.shared.generated.resources.Res
-import hortay.shared.generated.resources.unread_remaining
-import hortay.shared.generated.resources.unread_remaining_overflow
+import hortay.shared.generated.resources.new_posts
+import hortay.shared.generated.resources.new_posts_overflow
 
 /**
  * Ambient jump-to-next-unread chip in `OldestUnreadFirst` mode, bottom-end
@@ -111,8 +111,8 @@ fun UnreadCounterPill(
     val label = unreadRemainingLabel(ctx, count)
     BadgedBox(
         // mergeDescendants collapses the FAB + Symbol + Badge into a single
-        // accessibility node so TalkBack reads "12 непрочитаних лишилось" once
-        // instead of stuttering through the badge digits and the icon label.
+        // accessibility node so TalkBack reads "12 нових постів" once instead
+        // of stuttering through the badge digits and the icon label.
         modifier = modifier
             .scale(enterScale)
             .semantics(mergeDescendants = true) { contentDescription = label },
@@ -154,15 +154,14 @@ fun UnreadCounterPill(
 }
 
 /**
- * Plural-aware semantic label for screen readers / talkback ("12 непрочитаних
- * лишилось"). The visible badge only shows the bare number — short for
- * glanceability, matching Telegram's pattern — but the FAB's merged
- * `contentDescription` carries the full localised phrase so a11y users get
- * the same meaning.
+ * Plural-aware semantic label for screen readers / talkback ("12 нових постів").
+ * Reuses [new_posts] / [new_posts_overflow] — same wording the [NewPostsPill]
+ * uses. Silhouette and anchor disambiguate visually; the linguistic merge
+ * keeps the vocabulary small.
  */
 private fun unreadRemainingLabel(res: dev.lyo.hortay.data.StringResolver, n: Int): String {
-    if (n > 99) return res.getString(Res.string.unread_remaining_overflow)
-    return res.getQuantityString(Res.plurals.unread_remaining, n, n)
+    if (n > 99) return res.getString(Res.string.new_posts_overflow)
+    return res.getQuantityString(Res.plurals.new_posts, n, n)
 }
 
 private fun countText(n: Int): String = if (n > 99) "99+" else n.toString()

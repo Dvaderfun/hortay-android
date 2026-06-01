@@ -281,6 +281,7 @@ class TdClient private constructor(
                     nextChannelLabel = info.nextType?.toLabel(strings, phone),
                     resendAvailableInSec = info.timeout,
                     isNumeric = info.type.isNumeric(),
+                    deliveredInApp = info.type is TdApi.AuthenticationCodeTypeTelegramMessage,
                 )
             }
             is TdApi.AuthorizationStateWaitPassword -> _authStage.value =

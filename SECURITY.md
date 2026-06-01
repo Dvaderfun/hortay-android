@@ -13,7 +13,7 @@ Do not file public issues for security reports.
 
 In scope:
 
-- The app itself (`:app` and the `:libtdlib` integration).
+- The app itself (`:androidApp`, `:shared`, and the `:libtdlib` integration).
 - The `t.me/s/` HTML parser in guest mode (untrusted input).
 - Local data persistence (DataStore, the `web.db` SQLDelight database).
 

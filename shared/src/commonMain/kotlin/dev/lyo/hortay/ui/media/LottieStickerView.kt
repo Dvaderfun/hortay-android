@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -113,17 +114,27 @@ fun LottieStickerView(
         isPlaying = isPlaying,
     )
 
+    // TRANSPARENT-content reveal (see [MediaReveal] KDoc): the static thumb fades OUT as
+    // the animation fades in, rather than hard-cutting when `composition` flips non-null.
+    // `revealed` = the composition parsed (first real animation frame is paintable). The
+    // thumb stays composed through the fade + linger via [rememberPlaceholderLinger] keyed
+    // on the media identity, so an in-place sticker swap re-arms it.
+    val revealed = composition != null
+    val revealAlpha = rememberRevealAlpha(revealed)
+    val showThumb = rememberPlaceholderLinger(revealed, key = fileId ?: remoteUrl)
     Box(modifier = modifier) {
-        if (thumb != null && composition == null) {
-            TdMediaImage(
-                media = thumb,
-                contentDescription = contentDescription,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Fit,
-                placeholderColor = null,
-                showProgress = false,
-                priority = priority,
-            )
+        if (thumb != null && showThumb) {
+            Box(Modifier.fillMaxSize().graphicsLayer { alpha = 1f - revealAlpha }) {
+                TdMediaImage(
+                    media = thumb,
+                    contentDescription = contentDescription,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit,
+                    placeholderColor = null,
+                    showProgress = false,
+                    priority = priority,
+                )
+            }
         }
         composition?.let { comp ->
             Image(
@@ -132,7 +143,7 @@ fun LottieStickerView(
                     progress = { progress },
                 ),
                 contentDescription = contentDescription,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().graphicsLayer { alpha = revealAlpha },
                 colorFilter = repaintColor?.let {
                     ColorFilter.tint(color = it, blendMode = BlendMode.SrcAtop)
                 },

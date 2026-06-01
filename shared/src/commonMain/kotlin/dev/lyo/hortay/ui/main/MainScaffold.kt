@@ -198,11 +198,11 @@ fun MainScaffold(
     // we resume; a flooded bus drops oldest (see [UserMessageBus]) so we never queue
     // a stale apology that no longer reflects the current state.
     val snackbarHostState = remember { SnackbarHostState() }
-    LaunchedEffect(Unit) {
-        userMessages.messages.collect { msg ->
-            snackbarHostState.showSnackbar(message = msg.text)
-        }
-    }
+    UserMessageSnackbarRelay(
+        userMessages = userMessages,
+        guestMode = guestMode,
+        hostState = snackbarHostState,
+    )
 
     val res = remember { dev.lyo.hortay.data.ComposeResourcesStringResolver() }
 
@@ -427,6 +427,7 @@ fun MainScaffold(
             LocalReadCursors provides cursorHolder,
             dev.lyo.hortay.ui.media.LocalInlineVideoAutoplay provides inlineVideoAutoplay,
             LocalUserProfileOpener provides userProfileOpener,
+            LocalUserMessageBus provides userMessages,
         ) {
             Scaffold(
                 modifier = Modifier.fillMaxSize(),

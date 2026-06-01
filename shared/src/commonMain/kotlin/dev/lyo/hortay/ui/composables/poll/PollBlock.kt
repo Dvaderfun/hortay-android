@@ -47,7 +47,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -302,6 +304,7 @@ private fun PollDescription(content: PostContent.Poll) {
 
 @Composable
 private fun PollOptionsList(content: PostContent.Poll, voting: PollVoting?) {
+    val haptics = LocalHapticFeedback.current
     val multi = (content.kind as? PollKind.Regular)?.allowsMultipleAnswers == true
     // Local val so Kotlin's smart-cast carries through the lambda capture below — using
     // `voting` directly inside the lambda would force a `voting?.` even though `canVote`
@@ -323,6 +326,7 @@ private fun PollOptionsList(content: PostContent.Poll, voting: PollVoting?) {
                 multiSelect = multi,
                 onTap = if (canVote && v != null) {
                     {
+                        haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
                         if (multi) {
                             staged.value = if (option.index in staged.value) {
                                 staged.value - option.index
@@ -347,6 +351,7 @@ private fun PollOptionsList(content: PostContent.Poll, voting: PollVoting?) {
                 Spacer(Modifier.height(8.dp))
                 Button(
                     onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
                         v?.onCommit(staged.value.sorted().toIntArray())
                         staged.value = emptySet()
                     },

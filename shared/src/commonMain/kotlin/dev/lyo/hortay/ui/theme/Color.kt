@@ -92,3 +92,5 @@ val DarkOutlineVariant = Color(0xFF47465A)
 val DarkInverseSurface = Color(0xFFE5E1F0)
 val DarkInverseOnSurface = Color(0xFF303038)
 val DarkInversePrimary = Color(0xFF5A5BA8)
+
+val PremiumGold = Color(0xFFE9B33B)

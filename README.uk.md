@@ -46,13 +46,13 @@ Gradle wrapper закомічено — окремий `gradle wrapper` не п�
 
 ## Стек
 
-AGP 9.2.0 · Gradle 9.4.1 · Kotlin 2.3.10 (K2) · Compose BOM 2026.04.01 · Material 3 1.5.0-alpha19 · minSdk 26 / targetSdk 36 · TDLib запінено в `scripts/tdlib-version.txt` · Coroutines 1.10.1 · Coil 3.3.0 · SQLDelight 2.3 (тільки гостьовий режим) · DataStore 1.2.0
+AGP 9.2.0 · Gradle 9.5.1 · Kotlin 2.3.10 (K2) · Compose Multiplatform 1.12.0-alpha01 · Material 3 1.5.0-alpha19 · Koin 4.2.1 · minSdk 26 / targetSdk 36 · TDLib запінено в `scripts/tdlib-version.txt` · Coroutines 1.10.1 · Coil 3.3.0 · SQLDelight 2.3.2 (тільки гостьовий режим) · Ktor 3.5.0 · DataStore 1.2.0
 
 ## Архітектура
 
 Розклад модулів, load-bearing рішення і правила роботи з TDLib — у [ARCHITECTURE.md](ARCHITECTURE.md).
 
-Коротко: single-Activity, тільки Compose, три модулі — `:app`, `:libtdlib` (vendored TDLib JNI), `:baselineprofile`. Manual DI через `AppGraph`. Без Hilt, без Retrofit, без Firebase.
+Коротко: KMP/CMP, single-Activity, тільки Compose — `:androidApp` (оболонка), `:shared` (KMP-бібліотека з усім UI + даними), `:libtdlib` (vendored TDLib JNI), `:iosApp` (Xcode оболонка), `:baselineprofile`. DI через Koin 4.x. Без Hilt, без Retrofit, без Firebase.
 
 ## Контрибуції
 

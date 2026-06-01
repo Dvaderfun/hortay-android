@@ -23,6 +23,7 @@ import dev.lyo.hortay.data.IgnoredChannelsStore
 import dev.lyo.hortay.data.LinkDialogState
 import dev.lyo.hortay.data.LocaleStore
 import dev.lyo.hortay.data.MediaCache
+import dev.lyo.hortay.data.ProfileAccentResolver
 import dev.lyo.hortay.data.NavStack
 import dev.lyo.hortay.data.SettingsStore
 import dev.lyo.hortay.data.StartupCoordinator
@@ -53,6 +54,7 @@ import dev.lyo.hortay.ui.report.GuestReportDelegator
 import dev.lyo.hortay.ui.report.GuestReportOutcome
 import dev.lyo.hortay.ui.report.LocalGuestReportDelegate
 import dev.lyo.hortay.ui.theme.HortayTheme
+import dev.lyo.hortay.ui.theme.LocalProfileAccent
 import dev.lyo.hortay.ui.theme.LocalStatusBarController
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
@@ -116,6 +118,7 @@ class MainActivity : ComponentActivity() {
             val nav = koinInject<NavStack>()
             val appScopeCompose = koinInject<CoroutineScope>()
             val mediaCache = koinInject<MediaCache>()
+            val profileAccent = koinInject<ProfileAccentResolver>()
             val customEmoji = koinInject<CustomEmojiRepository>()
             val stickerOutline = koinInject<StickerOutlineStore>()
             val videoPlayerPool = koinInject<VideoPlayerPool>()
@@ -139,6 +142,7 @@ class MainActivity : ComponentActivity() {
             HortayTheme {
                 CompositionLocalProvider(
                     LocalMediaCache provides mediaCache,
+                    LocalProfileAccent provides profileAccent,
                     LocalCustomEmoji provides customEmoji,
                     LocalStickerOutline provides { id -> stickerOutline.load(id) },
                     LocalVideoPlayerPool provides videoPlayerPool,
@@ -225,6 +229,7 @@ class MainActivity : ComponentActivity() {
                                     webRepository = webRepository,
                                     webClient = webClient,
                                     settingsStore = settingsStore,
+                                    userMessages = userMessages,
                                     linkDialogs = linkDialogs,
                                     deepLinkRouter = deepLinkRouterCompose,
                                     nav = nav,

@@ -1,41 +1,71 @@
 package dev.lyo.hortay.ui.composables.text
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import dev.lyo.hortay.data.FormattedText
+import dev.lyo.hortay.ui.icons.Symbol
+import hortay.shared.generated.resources.Res
+import hortay.shared.generated.resources.post_show_less
+import hortay.shared.generated.resources.post_show_more
+import org.jetbrains.compose.resources.stringResource
+import kotlin.math.floor
 
 /**
- * Renderer for [FormattedText] that handles inline styles via AnnotatedString AND lifts
- * BlockQuote ranges into separate quoted rows with a Telegram-style 2dp left bar.
+ * When non-null, tapping "Show more" on a clamped post opens the post-detail (comments)
+ * screen instead of expanding the body inline — the same destination a card tap reaches.
+ * Supplied by the auth feed / channel LazyColumn (both feed orders) so "open the post" is one
+ * action. `null` off the feed and in guest mode, where there's no post-detail to open and
+ * "Show more" falls back to an in-place inline expand. Lives in `ui.composables.text` so the
+ * timeline's `ExpandableText` can read it without this package depending on `ui.timeline`.
+ */
+internal val LocalShowFullPost = compositionLocalOf<(() -> Unit)?> { null }
+
+/**
+ * Renderer for [FormattedText]. Block quotes / code blocks render the SAME way on every
+ * surface — feed, channel, comments, full post — as padded [BlockBox] composables. A post
+ * carrying a block is split into alternating plain-text / block segments stacked in a Column.
  *
- * Rationale for the split: BlockQuote is a *paragraph-level* affordance — a left bar plus
- * indentation. AnnotatedString can colour text but cannot draw a bar that wraps across
- * lines, so quoted ranges have to leave the inline flow and become their own composables.
+ * Clamping is POST-WIDE, not per-element: on a clamped surface (finite [maxLines]) the whole
+ * segmented column is wrapped in [ClampedPost], which caps it to ~`maxLines × line-height` and
+ * shows exactly ONE "Show more". Plain-text segments render uncapped (the outer clamp is
+ * the only clamp), so the post reads as a single unit and the cut can fall anywhere — including
+ * inside a quote box — matching Telegram. The cut is SNAPPED to the nearest line boundary of
+ * whatever segment straddles the budget, so it never bisects a glyph row.
  *
- * The segmented path runs ONLY on detail surfaces ([maxLines] == [Int.MAX_VALUE]). On feed
- * surfaces (any finite [maxLines]) we fall through to the inline path even when quote
- * spans exist — otherwise a long post / caption with even one quote span would bypass
- * the [maxLines] clamp and the "Показати більше" toggle. Inline quote ranges still read
- * as quotes through the muted-colour SpanStyle from FormattedTextRenderer; the 2dp bar
- * is reserved for detail surfaces where the user has committed to reading the full post.
+ * Why post-wide and not per-element: per-element clamping splits one post into N+1 toggles once
+ * a block divides the body, and the collapsed height balloons to `lines × (N+1)`. The cut is
+ * snapped to the straddling segment's line boundary by [ClampedPost]; [BlockBox] is rendered
+ * NON-INTERACTIVE while the post is collapsed (no chevron to fight the outer clip), and chevrons
+ * return only once the post is expanded inline or on a full-reading surface.
  */
 @Composable
 fun RichText(
@@ -44,191 +74,420 @@ fun RichText(
     maxLines: Int,
     renderer: (@Composable (RenderableText, TextStyle, Int) -> Unit),
 ) {
-    val quoteRanges = remember(formatted) { formatted.blockQuoteRanges() }
-    if (quoteRanges.isEmpty() || maxLines != Int.MAX_VALUE) {
-        renderer(rememberRenderableText(formatted), style, maxLines)
+    // Trim blank edges of the whole body first (stray leading / trailing newlines and
+    // spaces TDLib or the web parser leave behind), so no surface renders a post with
+    // empty lines hanging off the top or bottom.
+    val src = remember(formatted) { formatted.trimmedBlankEdges() }
+    val blocks = remember(src) { src.blockRanges() }
+    // No top-level block → one [Text] with the caller's clamp + "Show more".
+    if (blocks.isEmpty()) {
+        renderer(rememberRenderableText(src), style, maxLines)
         return
     }
 
-    // Build the alternating text / quote segments once; each segment is its own slice of
-    // the original FormattedText (start, end), so AnnotatedString styling carries over.
-    val segments = remember(formatted, quoteRanges) {
-        buildSegments(formatted, quoteRanges)
+    val segments = remember(src, blocks) { buildSegments(src, blocks) }
+
+    if (maxLines == Int.MAX_VALUE) {
+        // Full-reading surface (open post / comments): no outer clamp, blocks interactive.
+        Column {
+            segments.forEachIndexed { idx, segment ->
+                if (idx > 0) Spacer(Modifier.height(SEGMENT_GAP))
+                SegmentSlot(segment, style, interactive = true, renderer)
+            }
+        }
+    } else {
+        // Clamped surface (feed / channel / caption): one post-level height clamp + ONE toggle.
+        ClampedPost(key = src, maxLines = maxLines, style = style, segments = segments, renderer = renderer)
     }
+}
+
+/** Inter-segment vertical gap (plain text ↔ block box). Shared by the full-reading Column and
+ *  [ClampedPost]'s manual layout so both stack segments identically. */
+private val SEGMENT_GAP = 8.dp
+
+/**
+ * One body segment: a plain-text run ([Segment.block] == null, rendered through the caller's
+ * [renderer] at MAX so it never grows a "Show more" of its own — the only toggle is
+ * post-level) or a quote / code [BlockBox]. [interactive] = "the post is fully shown": a clamped
+ * preview passes `false` so blocks are frozen (no chevron to fight the outer clip).
+ */
+@Composable
+private fun SegmentSlot(
+    segment: Segment,
+    style: TextStyle,
+    interactive: Boolean,
+    renderer: @Composable (RenderableText, TextStyle, Int) -> Unit,
+) {
+    val block = segment.block
+    if (block != null) {
+        BlockBox(text = segment.text, style = style, blockStyle = block, interactive = interactive)
+    } else {
+        renderer(rememberRenderableText(segment.text), style, Int.MAX_VALUE)
+    }
+}
+
+/**
+ * Caps a segmented post (text + quote/code boxes) to roughly [maxLines] worth of height and
+ * reveals it whole with a single "Show more". There is no single backing [Text] to carry
+ * a line clamp, so this lays the [segments] out itself (one [SegmentSlot] per segment, stacked
+ * with [SEGMENT_GAP]) and clips the column to the budget when it overflows.
+ *
+ * Why it owns the layout: to clip on a CLEAN line boundary it has to know, for the segment that
+ * straddles the budget, where that segment's text lines sit. Seeing each segment's measured
+ * height and computing its inset lets the clip land on the last line that fully fits.
+ *
+ * [expanded] is forwarded as each block's `interactive` flag so quote/code chevrons stay dormant
+ * while the post is a clamped preview. Tapping the toggle opens the full post via
+ * [LocalShowFullPost] when present (feed / channel), else expands in place (guest mode / captions).
+ */
+@Composable
+private fun ClampedPost(
+    key: Any,
+    maxLines: Int,
+    style: TextStyle,
+    segments: List<Segment>,
+    renderer: @Composable (RenderableText, TextStyle, Int) -> Unit,
+) {
+    var expanded by remember(key) { mutableStateOf(false) }
+    var overflow by remember(key) { mutableStateOf(false) }
+    val showFullPost = LocalShowFullPost.current
+    val density = LocalDensity.current
+
+    val bodyLine = when {
+        style.lineHeight.isSp -> style.lineHeight
+        style.fontSize.isSp -> style.fontSize * 1.4f
+        else -> 20.sp
+    }
+    val codeHeader = MaterialTheme.typography.labelSmall
+    val codeHeaderLine = when {
+        codeHeader.lineHeight.isSp -> codeHeader.lineHeight
+        codeHeader.fontSize.isSp -> codeHeader.fontSize * 1.4f
+        else -> 16.sp
+    }
+    val lineHeightPx = with(density) { bodyLine.toPx() }
+    val maxHeightPx = (lineHeightPx * maxLines).toInt()
+    val gapPx = with(density) { SEGMENT_GAP.toPx() }.toInt()
+    val blockPadPx = with(density) { BLOCK_VPAD.toPx() }
+    val codeHeaderPx = with(density) { (codeHeaderLine.toPx() + CODE_HEADER_GAP.toPx()) }
+    // Distance from each segment's TOP edge to its first text line (0 for plain text, the box's
+    // top padding for a quote, plus the language-header strip for a code block) and from its
+    // BOTTOM text line to its bottom edge. Used to snap the clip onto a line boundary.
+    val topInsets = segments.map { seg ->
+        when (val b = seg.block) {
+            is FormattedText.Style.Pre -> blockPadPx + (if (!b.language.isNullOrBlank()) codeHeaderPx else 0f)
+            is FormattedText.Style.BlockQuote -> blockPadPx
+            else -> 0f
+        }
+    }
+    val bottomInsets = segments.map { if (it.block != null) blockPadPx else 0f }
 
     Column {
-        segments.forEachIndexed { idx, segment ->
-            if (idx > 0) {
-                // Insert a manual 8 dp Spacer ONLY when the segment boundary
-                // doesn't already carry a natural paragraph break in the
-                // source text. If the previous segment ends with `\n` or this
-                // one starts with `\n` (the walker injects `\n\n` around block
-                // elements and the source's own `<br><br>` survives the
-                // normaliser), the rendered Text already produces a blank
-                // line on that side — adding another Spacer on top stacks two
-                // visible gaps and reads as "double newline before quote".
-                // The conditional preserves source-faithful whitespace
-                // ("як в оригіналі") without doubling.
-                val prevText = segments[idx - 1].text.text
-                val curText = segment.text.text
-                val naturalBreak = prevText.endsWith('\n') || curText.startsWith('\n')
-                if (!naturalBreak) Spacer(Modifier.height(8.dp))
+        Layout(
+            modifier = Modifier.clipToBounds(),
+            content = { segments.forEach { SegmentSlot(it, style, interactive = expanded, renderer) } },
+        ) { measurables, constraints ->
+            val placeables = measurables.map {
+                it.measure(constraints.copy(minHeight = 0, maxHeight = Constraints.Infinity))
             }
-            val rt = rememberRenderableText(segment.text)
-            if (segment.isQuote) QuoteRow(rt.text, rt.inlineContent, style)
-            else renderer(rt, style, Int.MAX_VALUE)
+            val width = placeables.maxOfOrNull { it.width } ?: 0
+            val full = placeables.sumOf { it.height } + gapPx * (placeables.size - 1).coerceAtLeast(0)
+            val over = full > maxHeightPx
+            // The toggle sits OUTSIDE this Layout, so flipping it never changes what this Layout
+            // measures — `over` converges on the second pass and never loops.
+            if (overflow != over) overflow = over
+
+            val clipH = if (expanded || !over) {
+                full
+            } else {
+                // Walk segments top-to-bottom; find the one that straddles the budget and snap the
+                // cut to its last fully-visible text line.
+                var y = 0
+                var cut = 0
+                for (i in placeables.indices) {
+                    val childTop = if (i == 0) 0 else y + gapPx
+                    val childBottom = childTop + placeables[i].height
+                    if (maxHeightPx >= childBottom) { cut = childBottom; y = childBottom; continue }
+                    cut = when {
+                        // Budget falls in the gap above this segment → end at the previous one.
+                        maxHeightPx <= childTop -> y
+                        else -> {
+                            val textTop = childTop + topInsets[i]
+                            val textHeight = placeables[i].height - topInsets[i] - bottomInsets[i]
+                            val visibleText = maxHeightPx - textTop
+                            when {
+                                // Budget lands above the first text line (inside the box's top
+                                // inset) → show nothing of this segment.
+                                visibleText <= 0f -> childTop
+                                // Every text line fits; the budget fell in the bottom inset →
+                                // keep the whole segment, padding and all.
+                                visibleText >= textHeight -> childBottom
+                                else -> (textTop + floor(visibleText / lineHeightPx) * lineHeightPx).toInt()
+                            }
+                        }
+                    }
+                    break
+                }
+                cut.coerceIn(0, full)
+            }
+
+            layout(width, clipH) {
+                var y = 0
+                placeables.forEachIndexed { i, p ->
+                    if (i > 0) y += gapPx
+                    p.place(0, y)
+                    y += p.height
+                }
+            }
+        }
+        if (!expanded && overflow) {
+            Text(
+                text = stringResource(Res.string.post_show_more),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .padding(top = 4.dp)
+                    .clickable {
+                        if (showFullPost != null) showFullPost() else expanded = true
+                    },
+            )
         }
     }
 }
 
+/** Lines an explicitly-collapsible quote previews at on an interactive surface before its
+ *  chevron reveals the rest, so a long collapsible quote teases compactly. */
+private const val COLLAPSED_QUOTE_LINES = 3
+
+/** Top + bottom padding inside a [BlockBox]. Shared with [ClampedPost]'s inset math so the cut
+ *  snaps onto the box's real text-line grid; changing it here keeps the snap correct. */
+private val BLOCK_VPAD = 8.dp
+
+/** Gap between a code block's language header and its body. Part of a code segment's top inset. */
+private val CODE_HEADER_GAP = 4.dp
+
+/**
+ * A padded block quote or code block. Renders identically on every surface (feed, channel,
+ * comments, full post).
+ *
+ *  * **Quote** — accent bar + `primary @ 10%` tint, a quote-mark glyph in the top-right
+ *    corner, body at full readability.
+ *  * **Code** — `surfaceContainerHigh` box, monospace body, optional language header.
+ *
+ * An explicitly-collapsible quote always previews at [COLLAPSED_QUOTE_LINES] (feed AND detail) —
+ * collapsing shrinks, so it never fights the outer clip. [interactive] decides only whether a
+ * block carries its own chevron and whether non-collapsible blocks clamp.
+ */
 @Composable
-private fun QuoteRow(
-    text: AnnotatedString,
-    inlineContent: Map<String, InlineTextContent>,
+private fun BlockBox(
+    text: FormattedText,
     style: TextStyle,
+    blockStyle: FormattedText.Style,
+    interactive: Boolean,
 ) {
-    Row(modifier = Modifier.height(IntrinsicSize.Min)) {
-        Box(
-            modifier = Modifier
-                .width(2.dp)
-                .fillMaxHeight()
-                .background(
-                    color = MaterialTheme.colorScheme.primary,
-                    shape = RoundedCornerShape(1.dp),
-                ),
-        )
-        Spacer(Modifier.width(10.dp))
-        Text(
-            text = text,
-            inlineContent = inlineContent,
-            style = style,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(vertical = 2.dp),
+    val isCode = blockStyle is FormattedText.Style.Pre
+    val expandable = (blockStyle as? FormattedText.Style.BlockQuote)?.expandable == true
+    val language = (blockStyle as? FormattedText.Style.Pre)?.language
+
+    var expanded by remember(text) { mutableStateOf(false) }
+    var canExpand by remember(text) { mutableStateOf(false) }
+    // Tapping a clamped feed card opens the post (auth feed / channel set this); in guest mode
+    // it's null — there's no detail screen, so a collapsed quote on a short guest post would be
+    // unreachable. Only collapse a non-interactive quote when this escape hatch exists.
+    val canOpenPost = LocalShowFullPost.current != null
+    val effectiveMax = when {
+        expanded -> Int.MAX_VALUE
+        expandable && (interactive || canOpenPost) -> COLLAPSED_QUOTE_LINES
+        else -> Int.MAX_VALUE
+    }
+    val chevronToggles = interactive
+    val showChevron = canExpand && (interactive || canOpenPost)
+    val expandLabel = stringResource(if (expanded) Res.string.post_show_less else Res.string.post_show_more)
+
+    val accent = MaterialTheme.colorScheme.primary
+    val boxBg = if (isCode) MaterialTheme.colorScheme.surfaceContainerHigh else accent.copy(alpha = 0.10f)
+    val contentStyle = if (isCode) style.copy(fontFamily = FontFamily.Monospace) else style
+    val rt = rememberRenderableText(text)
+    // Right gutter clears the corner affordances: a quote always carries the top-right
+    // quote glyph; the expand chevron shares that strip on the bottom-right. Code has no
+    // quote glyph, so it only reserves the gutter when the chevron is present.
+    val endPad = when {
+        !isCode -> 26.dp
+        showChevron -> 26.dp
+        else -> 12.dp
+    }
+
+    val body: @Composable () -> Unit = {
+        LinkAwareText(
+            renderable = rt,
+            style = contentStyle,
+            maxLines = effectiveMax,
+            overflow = TextOverflow.Ellipsis,
+            onTextLayout = { layout ->
+                if (!expanded && layout.hasVisualOverflow) canExpand = true
+            },
         )
     }
-}
 
-private data class Segment(val text: FormattedText, val isQuote: Boolean)
-
-/**
- * Collapse and de-overlap blockquote ranges; the result is a sorted list of
- * non-overlapping `[start, end)` pairs that mark the quoted regions of [text].
- */
-private fun FormattedText.blockQuoteRanges(): List<IntRange> {
-    val raw = spans
-        .filter { it.style is FormattedText.Style.BlockQuote }
-        .map { it.start.coerceIn(0, text.length)..it.end.coerceIn(0, text.length) }
-        .filter { it.first < it.last }
-        .sortedBy { it.first }
-    if (raw.size <= 1) return raw
-
-    val merged = mutableListOf<IntRange>()
-    var current = raw.first()
-    for (next in raw.drop(1)) {
-        current = if (next.first <= current.last) {
-            current.first..maxOf(current.last, next.last)
+    // The accent bar is painted with drawBehind (full box height) rather than a fillMaxHeight
+    // child under IntrinsicSize.Min: with the box sized to its content, pairing IntrinsicSize.Min
+    // with content-driven width forced a double intrinsic measure that flickered the box on every
+    // collapse/expand toggle. drawBehind sizes off the laid-out height directly.
+    Box(
+        modifier = Modifier
+            .clip(MaterialTheme.shapes.extraSmall)
+            .background(boxBg)
+            .then(
+                if (isCode) {
+                    Modifier
+                } else {
+                    Modifier.drawBehind { drawRect(accent, size = Size(3.dp.toPx(), size.height)) }
+                },
+            )
+            .then(
+                if (showChevron && chevronToggles) {
+                    Modifier.clickable(role = Role.Button, onClickLabel = expandLabel) { expanded = !expanded }
+                } else {
+                    Modifier
+                },
+            ),
+    ) {
+        if (isCode) {
+            Column(
+                modifier = Modifier.padding(start = 12.dp, end = endPad, top = BLOCK_VPAD, bottom = BLOCK_VPAD),
+            ) {
+                if (!language.isNullOrBlank()) {
+                    Text(
+                        text = language,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(CODE_HEADER_GAP))
+                }
+                body()
+            }
         } else {
-            merged += current
-            next
+            // Content inset past the drawn 3.dp bar (start = 13) so text never touches it.
+            Box(modifier = Modifier.padding(start = 13.dp, end = endPad, top = BLOCK_VPAD, bottom = BLOCK_VPAD)) {
+                body()
+            }
+            // Quote marker — a faint quote-mark glyph in the top-right corner.
+            Symbol(
+                name = "format_quote",
+                tint = accent.copy(alpha = 0.55f),
+                size = 16.dp,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 6.dp, end = 8.dp),
+            )
+        }
+        if (showChevron) {
+            // Chevron: down ("›" rotated 90°) when collapsed = "expand", up (270°) when
+            // expanded = "collapse". Reuses the bundled `chevron_right` drawable. In a feed
+            // preview it stays the collapsed (down) form as a passive "there's more" cue.
+            Symbol(
+                name = "chevron_right",
+                tint = (if (isCode) MaterialTheme.colorScheme.onSurfaceVariant else accent).copy(alpha = 0.7f),
+                size = 16.dp,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(bottom = 6.dp, end = 8.dp)
+                    .rotate(if (expanded) 270f else 90f),
+            )
         }
     }
-    merged += current
-    return merged
+}
+
+/** A piece of the body: plain text ([block] == null) or a [block] quote / code run. */
+private data class Segment(val text: FormattedText, val block: FormattedText.Style?)
+
+private data class BlockRange(val start: Int, val end: Int, val style: FormattedText.Style)
+
+/**
+ * Top-level block ranges (quotes / code), de-overlapped greedily outer-first. A block
+ * nested inside another (rare) is dropped here and renders inline within its parent box.
+ */
+private fun FormattedText.blockRanges(): List<BlockRange> {
+    val raw = spans
+        .mapNotNull { sp ->
+            val isBlock = sp.style is FormattedText.Style.BlockQuote || sp.style is FormattedText.Style.Pre
+            if (!isBlock) return@mapNotNull null
+            val st = sp.start.coerceIn(0, text.length)
+            val en = sp.end.coerceIn(st, text.length)
+            if (st >= en) null else BlockRange(st, en, sp.style)
+        }
+        .sortedWith(compareBy({ it.start }, { -(it.end - it.start) }))
+    if (raw.isEmpty()) return emptyList()
+
+    val out = mutableListOf<BlockRange>()
+    var lastEnd = -1
+    for (b in raw) {
+        if (b.start >= lastEnd) {
+            out += b
+            lastEnd = b.end
+        }
+    }
+    return out.sortedBy { it.start }
 }
 
 /**
- * Slice [source] into alternating non-quote / quote pieces. Each piece is a
- * [FormattedText] whose own spans are re-anchored relative to the slice start.
- *
- * Boundary trim: at quote↔non-quote junctions we keep AT MOST ONE `\n` of the
- * paragraph-break run that the walker injected around the block element. The
- * normaliser caps consecutive newlines at 2, but Compose's Text composable
- * renders `text\n\n` as THREE lines tall (the second `\n` reserves an empty
- * line) — visually two blank rows above the quote where HTML browsers render
- * one. Browsers collapse trailing block-boundary whitespace; we replicate that
- * by cutting the slice off after the first newline of the trailing run (and,
- * mirror, before the last newline of the leading run on the post-quote side).
- *
- * What we DON'T do: drop the newline entirely. That would make text run flush
- * against the left bar — the previous regression "тепер при квотах
- * пропадають преноси". One `\n` keeps the natural HTML paragraph-break visual,
- * matching the source intent without doubling it.
+ * Slice [source] into alternating plain-text / block pieces. Each piece is a
+ * [FormattedText] whose spans are re-anchored to the slice, with its blank edges trimmed.
+ * Empty pieces are dropped.
  */
-private fun buildSegments(source: FormattedText, quoteRanges: List<IntRange>): List<Segment> {
+private fun buildSegments(source: FormattedText, blocks: List<BlockRange>): List<Segment> {
     val out = mutableListOf<Segment>()
     var cursor = 0
-    for (range in quoteRanges) {
-        if (cursor < range.first) {
-            val end = trimToSingleTrailingNewline(source.text, cursor, range.first)
-            if (end > cursor) {
-                out += Segment(source.slice(cursor, end), isQuote = false)
-            }
-        }
-        out += Segment(source.slice(range.first, range.last), isQuote = true)
-        cursor = range.last
+    fun addPlain(start: Int, end: Int) {
+        if (start >= end) return
+        val seg = source.slice(start, end).trimmedBlankEdges()
+        if (seg.text.isNotEmpty()) out += Segment(seg, block = null)
     }
-    if (cursor < source.text.length) {
-        val start = trimToSingleLeadingNewline(source.text, cursor, source.text.length)
-        if (start < source.text.length) {
-            out += Segment(source.slice(start, source.text.length), isQuote = false)
-        }
+    for (b in blocks) {
+        addPlain(cursor, b.start)
+        val blockSeg = source.slice(b.start, b.end).trimmedBlankEdges()
+        if (blockSeg.text.isNotEmpty()) out += Segment(blockSeg, block = b.style)
+        cursor = b.end
     }
-    return out.filter { it.text.text.isNotEmpty() }
+    addPlain(cursor, source.text.length)
+    return out
+}
+
+/** Drop leading / trailing whitespace (spaces, tabs, newlines) and re-anchor every span. */
+private fun FormattedText.trimmedBlankEdges(): FormattedText {
+    if (text.isEmpty()) return this
+    var s = 0
+    var e = text.length
+    while (s < e && text[s].isWhitespace()) s++
+    while (e > s && text[e - 1].isWhitespace()) e--
+    if (s == 0 && e == text.length) return this
+    if (s >= e) return FormattedText.Empty
+    val sub = text.substring(s, e)
+    val newSpans = spans.mapNotNull { sp ->
+        val ns = (sp.start - s).coerceAtLeast(0)
+        val ne = (sp.end - s).coerceAtMost(e - s)
+        if (ne <= ns) null else FormattedText.Span(ns, ne, sp.style)
+    }
+    return FormattedText(sub, newSpans)
 }
 
 /**
- * Walks back from [end] over trailing newlines and inline whitespace inside
- * `[start, end)`. Keeps at most one `\n` — the slice's effective end is the
- * position right after the FIRST newline encountered in the run (counting
- * from [end] backwards), so a `text\n\n` source ends up as `text\n` slice,
- * a `text\n` source stays `text\n`, and a `text` source stays `text`.
- */
-private fun trimToSingleTrailingNewline(text: String, start: Int, end: Int): Int {
-    var i = end
-    var firstNewlinePos = -1
-    while (i > start) {
-        val c = text[i - 1]
-        if (c == '\n') firstNewlinePos = i - 1
-        else if (c != ' ' && c != '\t') break
-        i--
-    }
-    return if (firstNewlinePos >= 0) firstNewlinePos + 1 else end
-}
-
-/**
- * Mirror of [trimToSingleTrailingNewline] — walks forward from [start] over
- * the leading whitespace run and lands the slice's effective start AT the
- * LAST newline in the run, so `\n\nfollowing` slices as `\nfollowing`.
- */
-private fun trimToSingleLeadingNewline(text: String, start: Int, end: Int): Int {
-    var i = start
-    var lastNewlinePos = -1
-    while (i < end) {
-        val c = text[i]
-        if (c == '\n') lastNewlinePos = i
-        else if (c != ' ' && c != '\t') break
-        i++
-    }
-    return if (lastNewlinePos >= 0) lastNewlinePos else start
-}
-
-/**
- * Substring of a [FormattedText] preserving overlapping spans (clipped to the slice
- * boundaries and re-anchored). Spans that fall entirely outside `[start, end)` are
- * dropped; BlockQuote spans inside a quoted segment are stripped because the QuoteRow
- * already conveys that styling visually.
+ * Substring preserving overlapping spans (clipped + re-anchored). The block-type wrapper
+ * span covering the WHOLE slice is dropped — [BlockBox] provides that styling — while
+ * inner spans (including a nested block, which then renders inline) are kept.
  */
 private fun FormattedText.slice(start: Int, end: Int): FormattedText {
     val s = start.coerceIn(0, text.length)
     val e = end.coerceIn(s, text.length)
     if (s == e) return FormattedText.Empty
     val slicedText = text.substring(s, e)
+    val sliceLen = e - s
     val slicedSpans = spans.mapNotNull { span ->
-        if (span.style is FormattedText.Style.BlockQuote) return@mapNotNull null
         val newStart = (span.start - s).coerceAtLeast(0)
-        val newEnd = (span.end - s).coerceAtMost(e - s)
-        if (newEnd <= newStart) null
-        else FormattedText.Span(newStart, newEnd, span.style)
+        val newEnd = (span.end - s).coerceAtMost(sliceLen)
+        if (newEnd <= newStart) return@mapNotNull null
+        val isBlock = span.style is FormattedText.Style.BlockQuote || span.style is FormattedText.Style.Pre
+        if (isBlock && newStart == 0 && newEnd == sliceLen) return@mapNotNull null
+        FormattedText.Span(newStart, newEnd, span.style)
     }
     return FormattedText(slicedText, slicedSpans)
 }

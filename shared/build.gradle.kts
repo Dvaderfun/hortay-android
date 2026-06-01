@@ -76,6 +76,8 @@ kotlin {
 
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.serialization.json)
+            implementation(libs.kotlinx.serialization.protobuf)
+            implementation(libs.multiplatform.diff)
             implementation(libs.kotlinx.collections.immutable)
             implementation(libs.kotlinx.datetime)
             implementation(libs.kotlinx.atomicfu)
@@ -310,6 +312,18 @@ sqldelight {
             // documents the move.
             srcDirs("src/commonMain/sqldelight")
             schemaOutputDirectory.set(file("src/commonMain/sqldelight/databases"))
+        }
+        // Post-archive database — snapshots of edited/deleted channel posts. Kept in a
+        // SEPARATE source root (`sqldelight-archive`, a sibling of `sqldelight`) so the
+        // WebDatabase generator above — which scans the whole `src/commonMain/sqldelight`
+        // tree — never pulls archive .sq into web.db's package (duplicate-declaration). The
+        // archive DB survives logout (distinct lifecycle from web cache).
+        create("ArchiveDatabase") {
+            packageName.set("dev.lyo.hortay.data.archive.db")
+            verifyMigrations.set(true)
+            generateAsync.set(false)
+            srcDirs("src/commonMain/sqldelight-archive")
+            schemaOutputDirectory.set(file("src/commonMain/sqldelight-archive/databases"))
         }
     }
 }

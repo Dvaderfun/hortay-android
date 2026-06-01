@@ -159,6 +159,7 @@ fun MainViewController(): UIViewController = ComposeUIViewController {
                         webRepository = webRepository,
                         webClient = webClient,
                         settingsStore = settingsStore,
+                        userMessages = userMessages,
                         linkDialogs = linkDialogs,
                         deepLinkRouter = deepLinkRouter,
                         nav = nav,

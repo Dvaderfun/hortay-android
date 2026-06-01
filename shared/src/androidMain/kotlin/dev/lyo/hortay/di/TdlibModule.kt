@@ -16,7 +16,10 @@ import dev.lyo.hortay.data.MessageMapper
 import dev.lyo.hortay.data.NavStack
 import dev.lyo.hortay.data.SettingsStore
 import dev.lyo.hortay.data.StartupCoordinator
+import dev.lyo.hortay.data.ProfileAccentRegistry
+import dev.lyo.hortay.data.ProfileAccentResolver
 import dev.lyo.hortay.data.StatsRepository
+import dev.lyo.hortay.data.proxy.ProxyRepository
 import dev.lyo.hortay.data.StringResolver
 import dev.lyo.hortay.data.TdClient
 import dev.lyo.hortay.data.TdLifecycleBridge
@@ -203,6 +206,24 @@ val tdlibModule = module {
             authStage = get<TdClient>().authStage,
             scope = get<CoroutineScope>(),
         ).also { it.bind() }
+    }
+
+    // ---- Proxy (eager — its init launches the pool refresh + failover watchdog) -----------
+    single(createdAtStart = true) {
+        ProxyRepository(
+            sender = get<TdSender>(),
+            connection = get<TdClient>().connection,
+            userMessages = get<UserMessageBus>(),
+            scope = get<CoroutineScope>(),
+            res = get<StringResolver>(),
+        )
+    }
+
+    // ---- Profile accent palette (eager — collects the one-shot UpdateProfileAccentColors) --
+    single<ProfileAccentResolver>(createdAtStart = true) {
+        ProfileAccentRegistry().also {
+            it.bind(get<TdClient>().updates, get<TdClient>().loggedOut, get<CoroutineScope>())
+        }
     }
 
     // ---- Reporting ---------------------------------------------------------

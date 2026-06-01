@@ -93,6 +93,7 @@ fun FullScreenMediaViewer(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
+        TransparentDialogWindow()
         val pagerState = rememberPagerState(initialPage = initialIndex.coerceIn(0, items.lastIndex)) { items.size }
 
         val density = LocalDensity.current
@@ -104,8 +105,7 @@ fun FullScreenMediaViewer(
             scope.launch { offsetY.snapTo(offsetY.value + delta) }
         }
 
-        // Background dims as the user drags away — gives a sense of "you're pulling the sheet off".
-        val backgroundAlpha = (1f - (abs(offsetY.value) / maxFadePx)).coerceIn(0.4f, 1f)
+        val backgroundAlpha = (1f - (abs(offsetY.value) / maxFadePx)).coerceIn(0f, 1f)
 
         Box(
             modifier = Modifier
@@ -513,9 +513,7 @@ private fun ZoomableImage(item: AlbumItem.Photo) {
             media = item.fullscreen,
             contentDescription = null,
             contentScale = ContentScale.Fit,
-            // Transparent placeholder so the inline layer underneath bleeds through
-            // during the fullscreen variant's download window.
-            placeholderColor = if (sameTier) MaterialTheme.colorScheme.surfaceContainerHigh else null,
+            placeholderColor = null,
             priority = DownloadPriority.Foreground,
             modifier = zoom,
         )

@@ -33,6 +33,10 @@ data class UserProfile(
     val avatarFileId: Int?,
     val verification: SenderVerification?,
     val isPremium: Boolean,
+    val emojiStatusId: Long?,
+    /** TDLib `User.profileAccentColorId` (-1 when the user hasn't picked one). Resolved to
+     *  actual colours by `ProfileAccentRegistry` via `LocalProfileAccent`. */
+    val profileAccentColorId: Int,
     val isBot: Boolean,
     val isSupport: Boolean,
     val isContact: Boolean,

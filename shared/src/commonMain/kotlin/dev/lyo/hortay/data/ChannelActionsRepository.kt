@@ -277,6 +277,8 @@ class ChannelActionsRepository(
             avatarFileId = user.profilePhoto?.small?.id,
             verification = user.verificationStatus?.toUserMark(),
             isPremium = user.isPremium,
+            emojiStatusId = resolveEmojiStatusId(user.emojiStatus),
+            profileAccentColorId = user.profileAccentColorId,
             isBot = user.type is TdApi.UserTypeBot,
             isSupport = user.isSupport,
             isContact = user.isContact,
