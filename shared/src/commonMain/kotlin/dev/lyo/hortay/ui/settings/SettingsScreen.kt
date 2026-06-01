@@ -666,7 +666,7 @@ private fun SettingsMain(
 }
 
 @Composable
-private fun SectionLabel(text: String) {
+internal fun SectionLabel(text: String) {
     // M3E grouped-list section header. titleSmall SemiBold reads as a list-section
     // delimiter rather than a chip-style label; the primary tint keeps the brand
     // accent the original design leaned on. Padding lifts the label off the row
@@ -951,7 +951,7 @@ private fun formatBytes(b: Long, res: dev.lyo.hortay.data.StringResolver): Strin
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun SettingsRow(
+internal fun SettingsRow(
     symbol: String,
     title: String,
     subtitle: String? = null,
