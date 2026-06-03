@@ -14,7 +14,7 @@ import kotlinx.atomicfu.atomic
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import dev.lyo.hortay.ioDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -294,7 +294,7 @@ class ArchiveRepository(
         db.postSnapshotQueries
             .selectRevisions(chat.kind.name, chat.key, messageKey)
             .asFlow()
-            .mapToList(Dispatchers.IO)
+            .mapToList(ioDispatcher)
             .map { rows -> rows.map(::toDomain).toPersistentList() }
 
     fun observe(filter: ArchiveFilter): Flow<ImmutableList<PostSnapshot>> =
@@ -303,12 +303,12 @@ class ArchiveRepository(
             kind = filter.kind?.name,
             isComment = filter.scope?.toIsCommentFlag(),
             query = filter.query?.let { "%$it%" },
-        ).asFlow().mapToList(Dispatchers.IO)
+        ).asFlow().mapToList(ioDispatcher)
             .map { rows -> rows.map(::toDomain).toPersistentList() }
 
     fun observeChannelIndex(): Flow<ImmutableList<ArchivedChannelEntry>> =
         db.archivedChannelQueries.countByChannel()
-            .asFlow().mapToList(Dispatchers.IO)
+            .asFlow().mapToList(ioDispatcher)
             .map { rows ->
                 rows.map { r ->
                     ArchivedChannelEntry(
@@ -381,13 +381,13 @@ class ArchiveRepository(
      */
     fun observeTdlibTombstones(): Flow<ImmutableList<TombstoneRecord>> =
         db.postSnapshotQueries.selectTombstonesJoined()
-            .asFlow().mapToList(Dispatchers.IO)
+            .asFlow().mapToList(ioDispatcher)
             .map { rows -> rows.mapNotNull(::buildTombstoneFromJoinedRow).toPersistentList() }
 
     /** Emits a `(chatId, messageId) → revisionCount` map to seed [revisionCount] on cold start. */
     fun observeTdlibRevisionCounts(): Flow<Map<Pair<Long, Long>, Int>> =
         db.postSnapshotQueries.selectTdlibVersionCounts()
-            .asFlow().mapToList(Dispatchers.IO)
+            .asFlow().mapToList(ioDispatcher)
             .map { rows ->
                 val out = HashMap<Pair<Long, Long>, Int>(rows.size)
                 rows.forEach { r ->
