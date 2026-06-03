@@ -177,7 +177,7 @@ internal object MessageContentMapper {
 
         // Service / system events — surfaced as a Service payload so callers can choose to
         // skip them (channel feed) or render them inline (discussion threads).
-        is TdApi.MessagePinMessage -> PostContent.Service(ServiceEvent.PinnedMessage(content.messageId))
+        is TdApi.MessagePinMessage -> PostContent.Service(ServiceEvent.PinnedMessage(MessageId(content.messageId)))
         is TdApi.MessageChatBoost -> PostContent.Service(ServiceEvent.ChannelBoosted(content.boostCount))
         is TdApi.MessageGiveawayCreated -> PostContent.Service(ServiceEvent.GiveawayStarted)
         is TdApi.MessageScreenshotTaken -> PostContent.Service(ServiceEvent.ScreenshotTaken)

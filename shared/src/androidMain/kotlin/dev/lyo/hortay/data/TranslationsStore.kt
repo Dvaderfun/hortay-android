@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import org.drinkless.tdlib.TdApi
+import dev.lyo.hortay.tdlib.TdApi
 import java.util.Locale
 import hortay.shared.generated.resources.Res
 import hortay.shared.generated.resources.op_translate
@@ -77,7 +77,7 @@ class TranslationsStore(
         ).launchIn(scope)
     }
 
-    override suspend fun translate(chatId: Long, messageId: Long): Boolean {
+    override suspend fun translate(chatId: ChatId, messageId: MessageId): Boolean {
         val target = preferredTargetLanguage()
         val key = TranslationKey(chatId, messageId, target)
         if (_translations.value.containsKey(key)) return true
@@ -88,7 +88,7 @@ class TranslationsStore(
             // populated the map while we waited.
             if (_translations.value.containsKey(key)) return@withLock true
             val attempt = runCatching {
-                td.send(TdApi.TranslateMessageText(chatId, messageId, target, /* tone */ null))
+                td.send(TdApi.TranslateMessageText(chatId.value, messageId.value, target, ""))
             }.warnUnlessCancelled(TAG, "translate($chatId, $messageId, $target)")
             val result = attempt.getOrElse { err ->
                 err.surfaceTo(userMessages, res, Res.string.op_translate, connection.value)
@@ -102,7 +102,7 @@ class TranslationsStore(
     }
 
     /** Drop cached translations for this message in the **current** target language. */
-    override fun clear(chatId: Long, messageId: Long) {
+    override fun clear(chatId: ChatId, messageId: MessageId) {
         val target = preferredTargetLanguage()
         val key = TranslationKey(chatId, messageId, target)
         _translations.update { it - key }
@@ -115,15 +115,15 @@ class TranslationsStore(
      */
     private fun invalidate(chatId: Long, messageId: Long) {
         _translations.update { current ->
-            val toRemove = current.keys.filter { it.chatId == chatId && it.messageId == messageId }
+            val toRemove = current.keys.filter { it.chatId == ChatId(chatId) && it.messageId == MessageId(messageId) }
             if (toRemove.isEmpty()) current else current - toRemove.toSet()
         }
     }
 
-    override fun isTranslated(chatId: Long, messageId: Long): Boolean =
+    override fun isTranslated(chatId: ChatId, messageId: MessageId): Boolean =
         translation(chatId, messageId) != null
 
-    override fun translation(chatId: Long, messageId: Long): FormattedText? {
+    override fun translation(chatId: ChatId, messageId: MessageId): FormattedText? {
         val target = preferredTargetLanguage()
         return _translations.value[TranslationKey(chatId, messageId, target)]
     }

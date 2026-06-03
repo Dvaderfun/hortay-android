@@ -30,7 +30,7 @@ object PostFilterStrategy {
         // Without the secondary key, two posts with `date = 1715607123` would
         // swap places between refreshes, reading as "feed jumps" or "post
         // disappeared and came back lower" in the UI.
-        .sortedWith(compareByDescending<TimelinePost> { it.date }.thenByDescending { it.id })
+        .sortedWith(compareByDescending<TimelinePost> { it.date }.thenByDescending { it.id.value })
 
     /**
      * Group by `(chatId, mediaAlbumId)` and collapse each non-trivial group into one
@@ -77,7 +77,7 @@ object PostFilterStrategy {
         // TDLib message ids are monotonic per chat, and an album lives in one chat
         // by construction (groupBy { chatId to mediaAlbumId }), so `sortedBy { id }`
         // is canonical chronological order with no ties.
-        val sorted = members.sortedBy { it.id }
+        val sorted = members.sortedBy { it.id.value }
         val anchor = sorted.first()
 
         val items = sorted.flatMap { post ->

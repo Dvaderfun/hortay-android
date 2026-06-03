@@ -1,3 +1,5 @@
+@file:JvmName("AuthErrorMessagesAndroid")
+
 package dev.lyo.hortay.data
 
 /**

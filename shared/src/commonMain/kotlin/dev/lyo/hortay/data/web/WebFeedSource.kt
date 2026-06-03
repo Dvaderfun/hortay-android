@@ -123,10 +123,10 @@ class WebFeedSource(
             // chatId comparison (not username) so the same hidden set works
             // unchanged across TDLib + guest modes (see [IgnoredChannelsStore]
             // for the cross-mode chatId design).
-            ignoredChannels?.ignored ?: flowOf(persistentSetOf()),
+            ignoredChannels?.ignored ?: flowOf(persistentSetOf<Long>()),
         ) { feed, ignored ->
             if (ignored.isEmpty()) feed
-            else feed.filter { it.chatId !in ignored }.toPersistentList()
+            else feed.filter { it.chatId.value !in ignored }.toPersistentList()
         }
             // WhileSubscribed(5s) instead of Eagerly so authenticated users
             // who never enter guest mode don't pay for the SQL query at

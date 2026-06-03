@@ -55,6 +55,27 @@ internal object JavaTdApiConverter {
             }.getOrNull() ?: return null
         }
 
+    /**
+     * TDLib's tdjson wire format keys fields in snake_case; the Kotlin TdApi
+     * mirror declares them via `@SerialName` (e.g. `chat_id`, `calling_codes`).
+     * Java TdApi field names are camelCase (`chatId`), so both directions of the
+     * round-trip must translate the key, or every multi-word field silently
+     * drops to its default (empty feed, empty country list, …).
+     */
+    private val snakeCache = ConcurrentHashMap<String, String>()
+    private fun camelToSnake(name: String): String = snakeCache.getOrPut(name) {
+        buildString {
+            for (c in name) {
+                if (c.isUpperCase()) {
+                    append('_')
+                    append(c.lowercaseChar())
+                } else {
+                    append(c)
+                }
+            }
+        }
+    }
+
     // ── Java TdApi → JsonElement ────────────────────────────────────────
 
     fun toJson(obj: TdApi.Object): JsonElement = buildJsonObject(obj)
@@ -65,7 +86,7 @@ internal object JavaTdApiConverter {
         val map = LinkedHashMap<String, JsonElement>()
         map["@type"] = JsonPrimitive(typeName)
         for (field in instanceFields(clazz)) {
-            map[field.name] = valueToJson(field.get(obj), field.type)
+            map[camelToSnake(field.name)] = valueToJson(field.get(obj), field.type)
         }
         return JsonObject(map)
     }
@@ -84,16 +105,13 @@ internal object JavaTdApiConverter {
         value is LongArray -> JsonArray(value.map { JsonPrimitive(it) })
         value is DoubleArray -> JsonArray(value.map { JsonPrimitive(it) })
         value is BooleanArray -> JsonArray(value.map { JsonPrimitive(it) })
-        value is Array<*> -> JsonArray(value.map { elem ->
-            when (elem) {
-                null -> JsonNull
-                is TdApi.Object -> buildJsonObject(elem)
-                is String -> JsonPrimitive(elem)
-                is Int -> JsonPrimitive(elem)
-                is Long -> JsonPrimitive(elem)
-                else -> JsonPrimitive(elem.toString())
-            }
-        })
+        // Recurse so nested containers survive: TDLib ships fields typed
+        // Array<Array<…>> / Array<IntArray> / Array<LongArray> (e.g. nested
+        // vectors). The old per-element `when` fell through to
+        // `elem.toString()` for any inner array, emitting a string literal
+        // where the Kotlin mirror expects a JsonArray → decode threw on every
+        // update carrying one, stalling the whole update pipeline.
+        value is Array<*> -> JsonArray(value.map { elem -> valueToJson(elem, Any::class.java) })
         else -> JsonPrimitive(value.toString())
     }
 
@@ -105,7 +123,7 @@ internal object JavaTdApiConverter {
         val clazz = resolveClass(typeName) ?: return null
         val instance = clazz.getDeclaredConstructor().newInstance() as TdApi.Object
         for (field in instanceFields(clazz)) {
-            val jsonValue = obj[field.name] ?: continue
+            val jsonValue = obj[camelToSnake(field.name)] ?: continue
             if (jsonValue is JsonNull) continue
             field.set(instance, jsonToValue(jsonValue, field.type, field.genericType))
         }

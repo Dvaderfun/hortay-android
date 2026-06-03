@@ -25,7 +25,7 @@ internal fun applyChatTitleToFeed(
 ): PersistentList<TimelinePost> = current.mutate { list ->
     for (i in list.indices) {
         val post = list[i]
-        if (post.chatId != chatId) continue
+        if (post.chatId.value != chatId) continue
         // Channel-as-sender post: senderName IS the channel name → refresh
         // it. Non-anonymous post (channelContext != null): senderName is the
         // admin / foreign chat — leave it alone, but update the
@@ -46,7 +46,7 @@ internal fun applyChatPhotoToFeed(
 ): PersistentList<TimelinePost> = current.mutate { list ->
     for (i in list.indices) {
         val post = list[i]
-        if (post.chatId != chatId) continue
+        if (post.chatId.value != chatId) continue
         // Same channel-as-sender vs personal-author split as
         // [applyChatTitleToFeed]: only the channel-as-sender row's `avatar*`
         // fields belong to this chat. Non-anonymous posts carry the

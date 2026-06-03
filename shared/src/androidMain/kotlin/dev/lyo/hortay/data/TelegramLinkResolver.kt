@@ -5,7 +5,7 @@ import android.util.LruCache
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.launch
-import org.drinkless.tdlib.TdApi
+import dev.lyo.hortay.tdlib.TdApi
 
 /**
  * Authoritative parser for "the user just clicked a Telegram link, what should we do?".
@@ -108,8 +108,8 @@ class TelegramLinkResolver(private val td: TdSender) {
                 val message = info.message
                 if (info.chatId == 0L || message == null) DeepLink.External(rawUrl)
                 else DeepLink.Message(
-                    chatId = info.chatId,
-                    messageId = message.id,
+                    chatId = ChatId(info.chatId),
+                    messageId = MessageId(message.id),
                     originalUrl = rawUrl,
                 )
             }
@@ -275,7 +275,7 @@ class TelegramLinkResolver(private val td: TdSender) {
                 raw?.let {
                     val chatId = "-100$it".toLongOrNull() ?: return@let null
                     DeepLink.PrivateChannel(
-                        chatId = chatId,
+                        chatId = ChatId(chatId),
                         serverPostId = post,
                         originalUrl = rawUrl,
                     )
@@ -304,7 +304,7 @@ class TelegramLinkResolver(private val td: TdSender) {
                     val msg = segments.getOrNull(2)?.toLongOrNull()
                     chatId?.let {
                         DeepLink.PrivateChannel(
-                            chatId = it,
+                            chatId = ChatId(it),
                             serverPostId = msg,
                             originalUrl = rawUrl,
                         )

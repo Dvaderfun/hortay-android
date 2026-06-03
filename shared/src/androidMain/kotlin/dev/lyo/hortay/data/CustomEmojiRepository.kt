@@ -16,7 +16,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import org.drinkless.tdlib.TdApi
+import dev.lyo.hortay.tdlib.TdApi
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -119,7 +119,7 @@ actual class CustomEmojiRepository(
         // anyway and parallelising just adds JNI contention.
         withContext(ioDispatcher) {
             for (chunk in drained.chunked(MAX_IDS_PER_CALL)) {
-                val request = TdApi.GetCustomEmojiStickers(chunk.toLongArray())
+                val request = TdApi.GetCustomEmojiStickers(chunk.toTypedArray())
                 val result = runCatching { td.send(request) }
                     .warnUnlessCancelled(TAG, "GetCustomEmojiStickers(${chunk.size})")
                     .getOrNull() ?: continue

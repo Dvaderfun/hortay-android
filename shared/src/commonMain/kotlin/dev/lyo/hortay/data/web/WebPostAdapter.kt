@@ -1,4 +1,6 @@
 package dev.lyo.hortay.data.web
+import dev.lyo.hortay.data.ChatId
+import dev.lyo.hortay.data.MessageId
 
 import dev.lyo.hortay.data.AlbumItem
 import dev.lyo.hortay.data.FormattedText
@@ -81,8 +83,8 @@ object WebPostAdapter {
         val tdWebPreview = webPreview?.let { tdWebPreviewFrom(it) }
         val content = buildContent(formatted, mediaList, tdWebPreview, strings)
         return TimelinePost(
-            id = seq,
-            chatId = stableChatId(channelUsername),
+            id = MessageId(seq),
+            chatId = ChatId(stableChatId(channelUsername)),
             mediaAlbumId = 0L,
             senderName = channelTitle,
             senderHandle = "@$channelUsername",
@@ -103,7 +105,7 @@ object WebPostAdapter {
                 ForwardOrigin.Channel(
                     channelName = it.channelName,
                     authorSignature = null,
-                    sourceChatId = stableChatId(it.channelLink.substringAfterLast('/')),
+                    sourceChatId = ChatId(stableChatId(it.channelLink.substringAfterLast('/'))),
                     sourceHandle = null,
                     sourceMessageId = null,
                 )

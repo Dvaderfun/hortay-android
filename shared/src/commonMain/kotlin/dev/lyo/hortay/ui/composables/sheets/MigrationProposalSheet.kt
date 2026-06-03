@@ -93,7 +93,19 @@ fun MigrationProposalSheet(
         onDismissRequest = {
             // Block dismiss while migration is running — losing the sheet
             // mid-run hides progress feedback and could orphan the user.
-            if (!inFlight) onDismiss()
+            //
+            // Swipe-to-dismiss counts as "skip": it must clear the coordinator's
+            // pending proposal (same as the skip button) so MainActivity drops
+            // the sheet from composition. The host's `onDismiss` is a no-op, so
+            // calling it alone leaves `pendingProposal` non-null — the hidden
+            // ModalBottomSheet and its full-screen scrim stay mounted and
+            // swallow every touch, which reads as the whole app freezing.
+            if (!inFlight) {
+                scope.launch {
+                    coordinator.dismiss()
+                    onDismiss()
+                }
+            }
         },
         sheetState = sheetState,
     ) {

@@ -50,7 +50,12 @@ android {
             val unstripped = file("build/tdlib-unstripped")
             val hasUnstripped = unstripped.exists() &&
                 unstripped.walkTopDown().any { it.name == "libtdjni.so" }
-            jniLibs.srcDirs(if (hasUnstripped) "build/tdlib-unstripped" else "src/main/jniLibs")
+            // setSrcDirs (replace) not srcDirs (append): the default convention
+            // dir src/main/jniLibs is already a source. Appending the overlay
+            // would feed BOTH copies of libtdjni.so to mergeJniLibFolders, which
+            // AGP 9 rejects as a duplicate resource (it no longer does
+            // "last srcDir wins"). Replace the set so exactly one source remains.
+            jniLibs.setSrcDirs(listOf(if (hasUnstripped) "build/tdlib-unstripped" else "src/main/jniLibs"))
         }
     }
 }

@@ -239,7 +239,7 @@ val tdlibModule = module {
     // ---- Profile accent palette (eager — collects the one-shot UpdateProfileAccentColors) --
     single<ProfileAccentResolver>(createdAtStart = true) {
         ProfileAccentRegistry().also {
-            it.bind(get<TdClient>().updates, get<TdClient>().loggedOut, get<CoroutineScope>())
+            it.bind(get<TdSender>().updates, get<TdClient>().loggedOut, get<CoroutineScope>())
         }
     }
 

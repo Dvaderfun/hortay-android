@@ -707,20 +707,20 @@ class CommentsRepository(
         val redirect: Map<Long, Long> = buildMap {
             for (p in merged) {
                 if (p.albumMessageIds.isNotEmpty()) {
-                    for (memberId in p.albumMessageIds) put(memberId, p.id)
+                    for (memberId in p.albumMessageIds) put(memberId.value, p.id.value)
                 } else {
-                    put(p.id, p.id)
+                    put(p.id.value, p.id.value)
                 }
             }
         }
 
-        val mapped: Map<Long, TimelinePost> = merged.associateBy { it.id }
+        val mapped: Map<Long, TimelinePost> = merged.associateBy { it.id.value }
 
         // Group by parent. The conversation root (the channel-post mirror) becomes the
         // virtual depth-0 parent; ids that no longer exist in the thread (deleted /
         // out-of-window) collapse under it too.
         val children: Map<Long, List<TimelinePost>> = merged.groupBy { post ->
-            val rawReplyId = post.parentId
+            val rawReplyId = post.parentId?.value
             val canonicalReplyId = rawReplyId?.let { redirect[it] ?: it }
             if (canonicalReplyId != null && canonicalReplyId != rootMessageId && canonicalReplyId in mapped) {
                 canonicalReplyId
@@ -736,7 +736,7 @@ class CommentsRepository(
                     depth = depth.coerceAtMost(MAX_DEPTH),
                     isLastSibling = idx == siblings.lastIndex,
                 )
-                walk(msg.id, depth + 1)
+                walk(msg.id.value, depth + 1)
             }
         }
         walk(0L, 0)

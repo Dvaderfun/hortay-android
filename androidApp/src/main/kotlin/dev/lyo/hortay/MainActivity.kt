@@ -58,7 +58,7 @@ import dev.lyo.hortay.ui.theme.LocalProfileAccent
 import dev.lyo.hortay.ui.theme.LocalStatusBarController
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
-import dev.lyo.hortay.ui.web.MigrationProposalSheet
+import dev.lyo.hortay.ui.composables.sheets.MigrationProposalSheet
 import dev.lyo.hortay.ui.web.WebModeScaffold
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.CoroutineScope

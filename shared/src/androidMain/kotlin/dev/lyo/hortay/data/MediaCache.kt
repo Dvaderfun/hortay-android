@@ -19,7 +19,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.drinkless.tdlib.TdApi
+import dev.lyo.hortay.tdlib.TdApi
 import java.util.concurrent.ConcurrentHashMap
 import hortay.shared.generated.resources.Res
 import hortay.shared.generated.resources.media_load_stalled

@@ -4,7 +4,7 @@ import dev.lyo.hortay.tdlib.TdApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
@@ -35,6 +35,10 @@ internal class AndroidTdSenderAdapter(
     private val json = Json {
         ignoreUnknownKeys = true
         encodeDefaults = false
+        // TDLib marks many object fields "may be null", but the generated Kotlin
+        // mirror types them non-null with a default. Coerce null → default on
+        // decode instead of throwing.
+        coerceInputValues = true
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -48,9 +52,15 @@ internal class AndroidTdSenderAdapter(
     }
 
     override val updates: SharedFlow<TdApi.Update> = tdClient.updates
-        .map { javaUpdate ->
-            val updateJson = JavaTdApiConverter.toJson(javaUpdate)
-            json.decodeFromJsonElement<TdApi.Object>(updateJson) as TdApi.Update
+        .mapNotNull { javaUpdate ->
+            // Never let one undecodable update kill the stream: a throw here
+            // cancels the shareIn upstream and silently stops ALL updates (the
+            // app then freezes on stale data). Drop the offending update — the
+            // load-bearing ones (messages, chats, files) decode fine.
+            runCatching {
+                val updateJson = JavaTdApiConverter.toJson(javaUpdate)
+                json.decodeFromJsonElement<TdApi.Object>(updateJson) as TdApi.Update
+            }.getOrNull()
         }
         .shareIn(scope, SharingStarted.Eagerly, replay = 0)
 }

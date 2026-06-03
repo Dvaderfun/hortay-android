@@ -4,6 +4,7 @@
 )
 
 package dev.lyo.hortay.ui.web
+import dev.lyo.hortay.ui.composables.sheets.AddChannelSheet
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn

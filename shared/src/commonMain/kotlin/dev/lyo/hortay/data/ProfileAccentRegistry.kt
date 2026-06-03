@@ -22,7 +22,7 @@ internal fun Int.rgbToOpaqueArgb(): Int = 0xFF000000.toInt() or (this and 0x00FF
  */
 internal fun TdApi.ProfileAccentColor.backgroundArgb(dark: Boolean): IntArray {
     val variant = if (dark) darkThemeColors else lightThemeColors
-    return (variant?.backgroundColors ?: IntArray(0)).map { it.rgbToOpaqueArgb() }.toIntArray()
+    return variant.backgroundColors.map { it.rgbToOpaqueArgb() }.toIntArray()
 }
 
 /**
@@ -32,8 +32,8 @@ internal fun TdApi.ProfileAccentColor.backgroundArgb(dark: Boolean): IntArray {
  */
 internal fun TdApi.ProfileAccentColor.ringArgb(dark: Boolean): IntArray {
     val variant = if (dark) darkThemeColors else lightThemeColors
-    val story = variant?.storyColors ?: IntArray(0)
-    val source = if (story.isNotEmpty()) story else (variant?.paletteColors ?: IntArray(0))
+    val story = variant.storyColors
+    val source = if (story.isNotEmpty()) story else variant.paletteColors
     return source.map { it.rgbToOpaqueArgb() }.toIntArray()
 }
 

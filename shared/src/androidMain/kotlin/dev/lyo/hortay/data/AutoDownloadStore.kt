@@ -15,7 +15,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import org.drinkless.tdlib.TdApi
+import dev.lyo.hortay.tdlib.TdApi
 
 /**
  * Per-network auto-download policy backed by TDLib's native `autoDownloadSettings`

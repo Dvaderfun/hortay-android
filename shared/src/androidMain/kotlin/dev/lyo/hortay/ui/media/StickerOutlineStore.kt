@@ -6,7 +6,7 @@ import androidx.compose.ui.graphics.vector.PathParser
 import dev.lyo.hortay.data.TdSender
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.drinkless.tdlib.TdApi
+import dev.lyo.hortay.tdlib.TdApi
 import java.util.Collections
 import java.util.LinkedHashMap
 

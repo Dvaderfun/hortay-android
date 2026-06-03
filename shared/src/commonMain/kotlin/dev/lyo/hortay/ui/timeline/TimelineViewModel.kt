@@ -1,4 +1,5 @@
 package dev.lyo.hortay.ui.timeline
+import kotlin.time.Duration.Companion.hours
 
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.snapshots.SnapshotStateMap
@@ -350,7 +351,7 @@ class TimelineViewModel(
         // 6 h covers typical offline-and-back-in-the-evening cases while
         // catching deeper backfills (a user opening a channel they hadn't
         // looked at in days) as stale.
-        val PENDING_NEW_RECENCY_WINDOW_MS = kotlin.time.Duration.Companion.hours(6).inWholeMilliseconds
+        val PENDING_NEW_RECENCY_WINDOW_MS = 6.hours.inWholeMilliseconds
     }
 }
 

@@ -4,6 +4,7 @@
 )
 
 package dev.lyo.hortay.ui.timeline
+import kotlin.time.Duration.Companion.days
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -1914,7 +1915,7 @@ private const val COLD_START_CURSOR_GRACE_MS = 800L
  * resume. The boundary divider above this floor is unaffected — it tracks the
  * read-edge for display, not the landing target.
  */
-private val BOUNDARY_RECENCY_WINDOW_MS = kotlin.time.Duration.Companion.days(7).inWholeMilliseconds
+private val BOUNDARY_RECENCY_WINDOW_MS = 7.days.inWholeMilliseconds
 
 /** Avatars in the "X нових постів" pill — same cap as the original VM-side limit. */
 private const val MAX_PILL_BADGES = 3
