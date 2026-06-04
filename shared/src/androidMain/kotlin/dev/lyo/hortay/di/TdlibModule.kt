@@ -127,6 +127,8 @@ val tdlibModule = module {
             foreground = get<TdLifecycleBridge>().foreground,
             res = get<StringResolver>(),
             ignoredChannels = getOrNull(),
+            archiveRepository = getOrNull<ArchiveRepository>(),
+            archiveMediaStore = getOrNull<ArchivedMediaStore>(),
         )
     }
 
