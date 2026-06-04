@@ -19,6 +19,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import dev.lyo.hortay.tdlib.TdApi
+import dev.lyo.hortay.data.archive.ArchiveRepository
+import dev.lyo.hortay.data.archive.ArchivedMediaStore
+import dev.lyo.hortay.data.archive.ChatRef
+import dev.lyo.hortay.data.archive.MediaFileFromContent
+import dev.lyo.hortay.data.archive.PendingEditBuffer
+import dev.lyo.hortay.data.archive.TdlibContentMetaExtractor
 import hortay.shared.generated.resources.Res
 import hortay.shared.generated.resources.comments_unavailable
 
@@ -54,9 +60,14 @@ class CommentsRepository(
     private val mapper: MessageMapper,
     private val scope: CoroutineScope,
     private val res: StringResolver,
+    private val archiveRepository: ArchiveRepository? = null,
+    private val archiveMediaStore: ArchivedMediaStore? = null,
 ) {
 
     private val unavailableMsg: String get() = res.getString(Res.string.comments_unavailable)
+
+    /** UMC<->UME pairing buffer for comment archive capture; same rationale as the post side. */
+    private val pendingCommentEdits = PendingEditBuffer()
 
 
     private data class ResolvedAnchor(val threadChatId: Long, val rootId: Long)
@@ -556,12 +567,66 @@ class CommentsRepository(
             else {
                 val idx = live.indexOfFirst { it.id == upd.messageId }
                 if (idx == -1) false
-                else { live[idx].content = upd.newContent; true }
+                else {
+                    // Archive: stash new content; capture is gated on a paired
+                    // UpdateMessageEdited(editDate>0) below — bare UMC never archives.
+                    if (archiveRepository != null) {
+                        pendingCommentEdits.stash(upd.chatId, upd.messageId, upd.newContent)
+                    }
+                    live[idx].content = upd.newContent
+                    true
+                }
+            }
+        }
+        is TdApi.UpdateMessageEdited -> {
+            if (upd.chatId != anchor.threadChatId) false
+            else {
+                val idx = live.indexOfFirst { it.id == upd.messageId }
+                if (idx == -1 || upd.editDate <= 0) false
+                else {
+                    live[idx].editDate = upd.editDate
+                    // Archive: commit the paired UMC (or GetMessage fallback) as a comment edit.
+                    val archive = archiveRepository
+                    if (archive != null) {
+                        val buffered = pendingCommentEdits.commitOnEdited(upd.chatId, upd.messageId)
+                        scope.launch {
+                            val content: TdApi.MessageContent = buffered
+                                ?: runCatching { td.send(TdApi.GetMessage(upd.chatId, upd.messageId)) }
+                                    .getOrNull()?.content ?: return@launch
+                            val mediaSha = archiveMediaStore?.copyIfAvailable(MediaFileFromContent.extract(content))
+                            val baseMeta = TdlibContentMetaExtractor.extract(content)
+                            val meta = if (mediaSha != null && baseMeta.mediaRef != null) {
+                                baseMeta.copy(mediaRef = baseMeta.mediaRef.copy(localArchiveSha = mediaSha))
+                            } else baseMeta
+                            archive.captureTdlibEdit(
+                                chat = ChatRef.tdlib(upd.chatId),
+                                messageKey = upd.messageId.toString(),
+                                albumKey = null,
+                                editedAtMs = upd.editDate.toLong() * 1000L,
+                                meta = meta,
+                                isComment = true,
+                            )
+                        }
+                    }
+                    true
+                }
             }
         }
         is TdApi.UpdateDeleteMessages -> {
             if (upd.chatId != anchor.threadChatId || !upd.isPermanent) false
             else {
+                // Archive: capture comment deletions before mutating the live list.
+                if (archiveRepository != null) {
+                    val keys = upd.messageIds.map { it.toString() }
+                    if (keys.isNotEmpty()) scope.launch {
+                        archiveRepository.captureTdlibDelete(
+                            chat = ChatRef.tdlib(upd.chatId),
+                            messageKeys = keys,
+                            albumKey = null,
+                            isComment = true,
+                        )
+                    }
+                }
                 // Delete fan-in is naturally thread-safe: the only mutation is
                 // `live.removeAll { it.id in ids }`, so messages from foreign
                 // threads (different `messageThreadId`, same discussion chat)

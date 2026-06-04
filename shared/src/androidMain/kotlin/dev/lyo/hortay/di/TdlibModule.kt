@@ -132,7 +132,7 @@ val tdlibModule = module {
         )
     }
 
-    single { CommentsRepository(get<TdSender>(), get(), get<CoroutineScope>(), get<StringResolver>()) }
+    single { CommentsRepository(get<TdSender>(), get(), get<CoroutineScope>(), get<StringResolver>(), getOrNull<ArchiveRepository>(), getOrNull<ArchivedMediaStore>()) }
 
     single { ChannelActionsRepository(get<TdSender>(), get<UserMessageBus>(), get<TdClient>().connection, get<StringResolver>()) }
 
