@@ -16,9 +16,11 @@ import dev.lyo.hortay.data.archive.ChatRef
 import dev.lyo.hortay.data.archive.MediaFileFromContent
 import dev.lyo.hortay.data.archive.PendingEditBuffer
 import dev.lyo.hortay.data.archive.TdlibContentMetaExtractor
+import dev.lyo.hortay.data.archive.TombstoneRecord
 import dev.lyo.hortay.data.PostFilterStrategy
 import dev.lyo.hortay.data.ReactionKind
 import dev.lyo.hortay.data.ReactionTogglePolicy
+import dev.lyo.hortay.data.FormattedText
 import dev.lyo.hortay.data.Reactions
 import dev.lyo.hortay.data.StringResolver
 import dev.lyo.hortay.data.TdSender
@@ -33,6 +35,7 @@ import dev.lyo.hortay.tdlib.TdApi
 import kotlinx.atomicfu.atomic
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.PersistentMap
+import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.toPersistentList
@@ -49,7 +52,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -333,14 +338,88 @@ class PostsRepository(
         // No store wired (legacy callers) → empty set, filter is a no-op.
         val ignoredFlow = ignoredChannels?.ignored
             ?: kotlinx.coroutines.flow.flowOf(kotlinx.collections.immutable.persistentSetOf())
-        combine(_posts, _mainChatIds, _archivedChatIds, ignoredFlow) { all, mainIds, archivedIds, ignored ->
+        // TDLib-only DELETED snapshots reconstructed as ghost posts, merged in the same
+        // combine so chat-list gates + ignored filtering apply uniformly. Empty when no
+        // archive repo is wired or no captures exist.
+        val tombstonesFlow: Flow<ImmutableList<TombstoneRecord>> =
+            archiveRepository?.observeTdlibTombstones() ?: flowOf(persistentListOf())
+        // Revision-count map seeds the EditedChip counter for posts edited in a previous
+        // session (TDLib carries no archive metadata across relaunch).
+        val revisionCountsFlow: Flow<Map<Pair<Long, Long>, Int>> =
+            archiveRepository?.observeTdlibRevisionCounts() ?: flowOf(emptyMap())
+        // Pair the two so the downstream combine stays within Kotlin's typed 5-arg overload.
+        val archiveAuxFlow = combine(tombstonesFlow, revisionCountsFlow) { t, r -> t to r }
+        combine(_posts, _mainChatIds, _archivedChatIds, ignoredFlow, archiveAuxFlow) { all, mainIds, archivedIds, ignored, archiveAux ->
+            val (tombstones, revCounts) = archiveAux
             val subscribed = if (mainIds.isEmpty() && archivedIds.isEmpty()) all
             else all.filter { it.chatId.value in mainIds || it.chatId.value in archivedIds }
-            if (ignored.isEmpty()) subscribed.toPersistentList()
-            else subscribed.filter { it.chatId.value !in ignored }.toPersistentList()
+            val gated = if (ignored.isEmpty()) subscribed
+            else subscribed.filter { it.chatId.value !in ignored }
+            // Seed revisionCount from archive (survives relaunch); maxOf so a fresher
+            // in-memory bump from a live edit isn't clobbered by the stale db value.
+            val filtered = if (revCounts.isEmpty()) gated else gated.map { p ->
+                val seeded = revCounts[p.chatId.value to p.id.value] ?: 0
+                if (seeded > p.revisionCount) p.copy(revisionCount = seeded) else p
+            }
+            if (tombstones.isEmpty()) {
+                ghostCache.clear()
+                return@combine filtered.toPersistentList()
+            }
+            ghostCache.keys.retainAll(tombstones.mapTo(HashSet(tombstones.size)) { it.primaryMessageId })
+            // Skip any tombstone whose message is still live (TDLib hasn't propagated the
+            // delete yet); apply the same chat-list + ignored gating to ghosts.
+            val livePresence = HashSet<Long>(filtered.size).apply { filtered.forEach { add(it.id.value) } }
+            val ghosts = tombstones.asSequence()
+                .filter { t ->
+                    t.primaryMessageId !in livePresence &&
+                        (mainIds.isEmpty() && archivedIds.isEmpty() ||
+                            t.chatId in mainIds || t.chatId in archivedIds) &&
+                        t.chatId !in ignored
+                }
+                .map { reuseGhost(it) }
+                .toList()
+            if (ghosts.isEmpty()) filtered.toPersistentList()
+            else (filtered + ghosts).sortedByDescending { it.date }.toPersistentList()
         }
             .stateIn(scope, SharingStarted.Eagerly, persistentListOf())
     }
+
+    /**
+     * Reference-stable ghost memo keyed by [TombstoneRecord.primaryMessageId]. The
+     * [subscribedPosts] combine re-runs on every `_posts` emission (~1/sec during scroll
+     * via interaction-info heartbeats); the `===` reuse keeps PostCard's @Immutable skip
+     * intact instead of churning a fresh ByteArray-bearing post per ghost per heartbeat.
+     * [stateIn] collects serially, so the plain HashMap needs no synchronisation.
+     */
+    private val ghostCache = HashMap<Long, Pair<TombstoneRecord, TimelinePost>>()
+
+    private fun reuseGhost(t: TombstoneRecord): TimelinePost {
+        ghostCache[t.primaryMessageId]?.let { (rec, ghost) -> if (rec === t) return ghost }
+        return buildTombstoneGhost(t).also { ghostCache[t.primaryMessageId] = t to it }
+    }
+
+    /** Minimal deleted-post ghost; PostCard dims it + shows a DeletedBadge, tap opens the revision sheet. */
+    private fun buildTombstoneGhost(t: TombstoneRecord): TimelinePost = TimelinePost(
+        id = MessageId(t.primaryMessageId),
+        chatId = ChatId(t.chatId),
+        mediaAlbumId = 0L,
+        senderName = t.channelTitle,
+        senderHandle = t.channelHandle,
+        avatarThumb = t.channelPhotoMinithumb,
+        avatarFileId = null,
+        content = PostContent.Text(FormattedText(t.text, emptyList())),
+        views = 0,
+        date = t.originalSeenAtMs,
+        editDate = 0L,
+        forwardOrigin = null,
+        authorSignature = null,
+        reply = null,
+        reactions = Reactions(totalCount = 0, items = emptyList()),
+        commentCount = null,
+        albumMessageIds = emptyList(),
+        isDeleted = true,
+        revisionCount = 0,
+    )
 
     // Per-chat read cursors mirrored from TDLib's UpdateChatReadInbox stream and seeded
     // from UpdateNewChat. Single source of truth for "has the user read up to message X
@@ -1706,10 +1785,13 @@ class PostsRepository(
 
     private fun handleDeleted(update: TdApi.UpdateDeleteMessages) {
         if (!update.isPermanent) return
+        // One read of the gate up front: capture + feed branches share it so a Settings
+        // flip mid-handler can't strand a ghost without its snapshot (or vice versa).
+        val archiveEnabled = archiveRepository?.isEnabled() == true
 
         // Archive: per-chat 200 ms debounce, then captureTdlibDeleteSmart recovers album
         // grouping from VERSION history (cold-start catch-up has no live _posts to read).
-        if (archiveRepository?.isEnabled() == true) {
+        if (archiveEnabled && archiveRepository != null) {
             val msgIds = update.messageIds.toList()
             pendingChatDeletions.getOrPut(update.chatId) { mutableListOf() }.addAll(msgIds)
             chatDeletionTimers[update.chatId]?.cancel()
@@ -1743,7 +1825,9 @@ class PostsRepository(
                     if (post.chatId.value != update.chatId) continue
                     val albumIds = post.albumMessageIds
                     if (albumIds.isEmpty()) {
-                        if (post.id.value in ids) toRemove += i
+                        if (post.id.value in ids) {
+                            if (archiveEnabled) list[i] = post.copy(isDeleted = true) else toRemove += i
+                        }
                         continue
                     }
                     // Album: trim deleted members from items[] (mergeAlbumMembers builds
@@ -1752,7 +1836,7 @@ class PostsRepository(
                     val survivedIds = albumIds.filterNot { it.value in ids }
                     if (survivedIds.size == albumIds.size) continue
                     if (survivedIds.isEmpty()) {
-                        toRemove += i
+                        if (archiveEnabled) list[i] = post.copy(isDeleted = true) else toRemove += i
                         continue
                     }
                     val keepIdx = albumIds.withIndex()
