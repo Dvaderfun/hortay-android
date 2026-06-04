@@ -20,6 +20,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import dev.lyo.hortay.ui.archive.components.DeletedBadge
+import dev.lyo.hortay.ui.archive.components.EditedChip
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
@@ -102,6 +105,7 @@ fun PostCard(
     // tab-swap / button-press chains use, so the highlight pop reads as part of the
     // app's motion vocabulary rather than a one-off tween.
     val isHighlighted = dev.lyo.hortay.ui.media.LocalIsHighlightedItem.current
+    val openRevisions = dev.lyo.hortay.ui.archive.LocalOpenRevisions.current
     val highlightAlpha by androidx.compose.animation.core.animateFloatAsState(
         targetValue = if (isHighlighted) 0.35f else 0f,
         animationSpec = MaterialTheme.motionScheme.fastEffectsSpec(),
@@ -137,6 +141,9 @@ fun PostCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            // Deleted posts (tombstoned in-place or reconstructed ghosts) read as
+            // de-emphasised history, not live content.
+            .then(if (post.isDeleted) Modifier.alpha(0.55f) else Modifier)
             .background(highlightColor)
             .drawBehind {
                 if (unreadAlpha <= 0f) return@drawBehind
@@ -218,6 +225,9 @@ fun PostCard(
                     pinned = post.isPinned,
                     verification = post.verification,
                     onChannelClick = onSenderClick,
+                    isDeleted = post.isDeleted,
+                    revisionCount = post.revisionCount,
+                    onTapRevisions = { openRevisions(post) },
                 )
 
                 // "у Channel" subtitle for personal-author posts (TDLib's new channel mode
@@ -390,6 +400,9 @@ private fun HeaderRow(
     pinned: Boolean,
     verification: SenderVerification?,
     onChannelClick: () -> Unit,
+    isDeleted: Boolean,
+    revisionCount: Int,
+    onTapRevisions: () -> Unit,
 ) {
     val titleColor = MaterialTheme.colorScheme.onSurface
     val subColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -437,7 +450,13 @@ private fun HeaderRow(
             )
             Spacer(Modifier.width(4.dp))
         }
-        if (editDate > 0L) {
+        if (isDeleted) {
+            DeletedBadge()
+            Spacer(Modifier.width(4.dp))
+        } else if (revisionCount > 0) {
+            EditedChip(count = revisionCount, onClick = onTapRevisions)
+            Spacer(Modifier.width(4.dp))
+        } else if (editDate > 0L) {
             Symbol(
                 name = "edit",
                 contentDescription = stringResource(Res.string.post_badge_edited),
