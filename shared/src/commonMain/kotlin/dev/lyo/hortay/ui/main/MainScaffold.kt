@@ -127,6 +127,15 @@ fun MainScaffold(
 
     val scope = rememberCoroutineScope()
 
+    // Archive revision-sheet opener: a tapped EditedChip / DeletedBadge in any PostCard
+    // sets [revisionPost]; the sheet mounted at the end of this scaffold loads the
+    // message's snapshots and renders the history. Koin-resolved null-safely so
+    // no-archive builds keep the chip tap an inert no-op.
+    val koin = org.koin.compose.getKoin()
+    val archiveRepo = remember { koin.getOrNull<dev.lyo.hortay.data.archive.ArchiveRepository>() }
+    val archiveMediaStore = remember { koin.getOrNull<dev.lyo.hortay.data.archive.ArchivedMediaStore>() }
+    var revisionPost by remember { mutableStateOf<dev.lyo.hortay.data.TimelinePost?>(null) }
+
     // Nav helpers route through [AppGraph.nav]. The active tab is NOT
     // touched on push — under the nav-overlay the user's originating tab
     // (Channels, Saved, …) keeps rendering, so a predictive-back swipe
@@ -428,6 +437,7 @@ fun MainScaffold(
             dev.lyo.hortay.ui.media.LocalInlineVideoAutoplay provides inlineVideoAutoplay,
             LocalUserProfileOpener provides userProfileOpener,
             LocalUserMessageBus provides userMessages,
+            dev.lyo.hortay.ui.archive.LocalOpenRevisions provides { p -> if (archiveRepo != null) revisionPost = p },
         ) {
             Scaffold(
                 modifier = Modifier.fillMaxSize(),
@@ -686,6 +696,24 @@ fun MainScaffold(
                 onUserSheetDismiss = { pendingUserId = null },
                 onPushChannel = pushChannel,
             )
+
+            // Archive revision history for a tapped post chip/badge.
+            val rp = revisionPost
+            if (rp != null && archiveRepo != null) {
+                val revisions by archiveRepo.observeRevisions(
+                    dev.lyo.hortay.data.archive.ChatRef.tdlib(rp.chatId.value),
+                    rp.id.value.toString(),
+                ).collectAsStateWithLifecycle(initialValue = kotlinx.collections.immutable.persistentListOf())
+                val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+                dev.lyo.hortay.ui.archive.PostRevisionSheet(
+                    revisions = revisions,
+                    onDismiss = { revisionPost = null },
+                    onOpenInTelegram = {
+                        scope.launch { backend.canonicalShareUrl(rp)?.let { uriHandler.openUri(it) } }
+                    },
+                    mediaStore = archiveMediaStore,
+                )
+            }
         }
     }
 }
