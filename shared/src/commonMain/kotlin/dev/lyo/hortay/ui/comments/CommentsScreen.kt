@@ -316,7 +316,7 @@ fun CommentsScreen(
     if (!threadDisabled && backend != null) {
         val liveBackend = backend
         LaunchedEffect(listState, liveBackend, post.chatId) {
-            snapshotFlow { listState.layoutInfo.visibleItemsInfo.mapNotNull { it.key as? MessageId } }
+            snapshotFlow { listState.layoutInfo.visibleItemsInfo.mapNotNull { (it.key as? Long)?.let(::MessageId) } }
                 .distinctUntilChanged()
                 .collectLatest { ids ->
                     if (ids.isEmpty()) return@collectLatest
@@ -498,7 +498,7 @@ fun CommentsScreen(
                         )
                     }
                 } else {
-                    items(items = s.rows, key = { it.message.id }) { row ->
+                    items(items = s.rows, key = { it.message.id.value }) { row ->
                         // [s.threadChatId] is the linked discussion supergroup — the
                         // chat reactions live in for every comment. Captured fresh
                         // per `Ready` emission so a re-resolved anchor (rare, but

@@ -92,7 +92,7 @@ fun ChannelsScreen(
                 verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
                 modifier = Modifier.fillMaxSize(),
             ) {
-                itemsIndexed(items = channels, key = { _, it -> it.chatId }) { index, ch ->
+                itemsIndexed(items = channels, key = { _, it -> it.chatId.value }) { index, ch ->
                     ChannelRow(
                         channel = ch,
                         index = index,
