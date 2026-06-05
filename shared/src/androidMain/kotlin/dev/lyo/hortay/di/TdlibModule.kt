@@ -96,6 +96,7 @@ val tdlibModule = module {
             context = androidContext(),
             scope = get<CoroutineScope>(),
             settings = get<SettingsStore>(),
+            archiveSweep = getOrNull(),
         ).also { it.bind() }
     }
 

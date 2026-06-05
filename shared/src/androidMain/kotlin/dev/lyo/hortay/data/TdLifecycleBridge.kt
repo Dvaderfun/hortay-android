@@ -51,6 +51,7 @@ class TdLifecycleBridge(
     context: Context,
     private val scope: CoroutineScope,
     private val settings: SettingsStore,
+    private val archiveSweep: dev.lyo.hortay.data.archive.ArchiveSweep? = null,
 ) {
 
     private val appContext = context.applicationContext
@@ -157,6 +158,9 @@ class TdLifecycleBridge(
         // 80%-of-cap trigger or the 24h housekeeping timer is due. Catches gigabyte
         // accumulation during a long single session that never cycled foreground.
         td.maybeOptimizeStorage()
+        // Archive retention/cap sweep rides the same 24h housekeeping cadence. Fire-and-
+        // forget so it never blocks the go-online path; a no-op when archive is disabled.
+        archiveSweep?.let { sweep -> scope.launch { runCatching { sweep.run() } } }
     }
 
     /**

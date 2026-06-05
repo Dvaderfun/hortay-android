@@ -88,7 +88,6 @@ fun ArchiveSettingsScreen(
     viewModel: ArchiveSettingsViewModel,
     onBack: () -> Unit,
     onOpenArchive: () -> Unit = {},
-    onExportJson: () -> Unit = {},
 ) {
     val s by viewModel.settings.collectAsState()
     val count by viewModel.snapshotCount.collectAsState()
@@ -97,6 +96,7 @@ fun ArchiveSettingsScreen(
     var showDisableDialog by remember { mutableStateOf(false) }
     var showClearConfirm by remember { mutableStateOf(false) }
     var showExportConfirm by remember { mutableStateOf(false) }
+    val triggerExport = rememberArchiveJsonExporter { viewModel.exportTo(it) }
 
     Scaffold(
         topBar = {
@@ -273,7 +273,7 @@ fun ArchiveSettingsScreen(
             confirmButton = {
                 TextButton(onClick = {
                     showExportConfirm = false
-                    onExportJson()
+                    triggerExport()
                 }) { Text(stringResource(Res.string.archive_export_continue)) }
             },
             dismissButton = {
