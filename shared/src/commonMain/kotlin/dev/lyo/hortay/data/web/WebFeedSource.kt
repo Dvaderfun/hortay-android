@@ -76,10 +76,12 @@ class WebFeedSource(
     private val maxConcurrentFetches: Int = DEFAULT_CONCURRENCY,
     private val stalenessWindowMs: Long = DEFAULT_STALENESS_WINDOW_MS,
     private val mediaTtlMs: Long = DEFAULT_MEDIA_TTL_MS,
+    private val archiveRepository: dev.lyo.hortay.data.archive.ArchiveRepository? = null,
 ) : FeedSource {
 
     private val refreshMutex = Mutex()
     private val fetchSemaphore = Semaphore(maxConcurrentFetches)
+    private val webPostDiff = WebPostDiff()
 
     // Dedup map for UI-initiated retries: two fast taps + a background sweep
     // could otherwise launch 3 concurrent fetches for the same channel. The
@@ -340,6 +342,31 @@ class WebFeedSource(
      * kill is handled by [WebRepository.clearStaleLoading] on init; everything
      * else lands here) doesn't leave a stuck spinner in the Channels tab.
      */
+    /**
+     * Diff each freshly-fetched guest post against its stored predecessor; on a real
+     * content change (WebPostDiff ignores CDN-token rotation) capture the OLD version
+     * into the archive before [WebRepository.ingestPage] overwrites it. Fire-and-forget.
+     */
+    private suspend fun captureArchiveDiff(username: String, freshPosts: List<WebPost>, fetchedAtMs: Long) {
+        val archive = archiveRepository ?: return
+        val previousById = repository.readWebPostsForChannel(username)
+        if (previousById.isEmpty()) return
+        val chat = dev.lyo.hortay.data.archive.ChatRef.web(username)
+        for (fresh in freshPosts) {
+            val previous = previousById[fresh.id] ?: continue
+            if (webPostDiff.detectChange(previous, fresh) != null) {
+                scope.launch {
+                    archive.captureWebVersion(
+                        chat = chat,
+                        messageKey = previous.seq.toString(),
+                        previous = previous,
+                        seenAtOverrideMs = fetchedAtMs,
+                    )
+                }
+            }
+        }
+    }
+
     private suspend fun fetchOne(
         username: String,
         forceNetwork: Boolean,
@@ -352,6 +379,9 @@ class WebFeedSource(
             }
             when (result) {
                 is FetchResult.Page -> {
+                    if (archiveRepository?.isEnabled() == true) {
+                        captureArchiveDiff(username, result.page.posts, fetchedAtMs)
+                    }
                     repository.ingestPage(
                         page = result.page,
                         etag = result.etag,

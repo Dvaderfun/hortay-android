@@ -45,6 +45,7 @@ val webModule = module {
             subscriptions = get<SubscriptionsStore>(),
             scope = get<CoroutineScope>(),
             ignoredChannels = get<IgnoredChannelsStore>(),
+            archiveRepository = getOrNull(),
         )
     }
 }

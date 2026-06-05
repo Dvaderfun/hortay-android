@@ -605,6 +605,24 @@ class WebRepository(
         )
     }
 
+    /** Raw stored WebPosts for a channel, keyed by id — the diff-on-refresh archive baseline. */
+    suspend fun readWebPostsForChannel(username: String): Map<String, WebPost> =
+        withContext(ioDispatcher) {
+            postQueries.selectRawByChannel(username).executeAsList().associate { row ->
+                row.id to WebPost(
+                    id = row.id,
+                    seq = row.seq,
+                    publishedAt = row.published_at_iso,
+                    textHtml = row.text_html,
+                    media = decodeMedia(row.media_json),
+                    webPreview = row.web_preview_json?.let { decodePreview(it) },
+                    forwardedFrom = row.forwarded_from_json?.let { decodeForward(it) },
+                    views = null,
+                    reactions = persistentListOf(),
+                )
+            }
+        }
+
     private fun decodeMedia(jsonStr: String): PersistentList<WebMedia> = runCatching {
         json.decodeFromString(mediaListSerializer, jsonStr).toPersistentList()
     }.getOrElse {
