@@ -24,6 +24,15 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
+ * Dwell-ack visibility threshold: a post must have at least this fraction of its
+ * (viewport-clamped) span on screen — see [visibleFraction] — to be eligible for
+ * a read-ack. 0.6 is the canonical "60% of the card is on screen" rule; the
+ * clamp inside [visibleFraction] degrades it to "60% of the viewport occupied"
+ * for posts taller than the viewport so long-form posts still ack.
+ */
+internal const val READ_DWELL_VISIBLE_FRACTION = 0.6f
+
+/**
  * Locates the (chatId, messageId) target in [items]. Returns the row index, or
  * -1 when not found. Albums hit on any member id.
  */
@@ -110,10 +119,11 @@ fun rememberPendingScrollToMessage(
  * list **idle**, then dispatches [markAsRead] for the posts that are *fully* on
  * screen and haven't already been acked.
  *
- * "Fully on screen" = the post's bounds sit entirely inside
- * `[viewportStartOffset, viewportEndOffset]`. Loosely-visible items (the row
- * peeking 5–20% out the bottom edge after a `smartScrollTo`, the row just sliding
- * off the top during a flick) are excluded — counting them as "read" caused the
+ * "On screen" = at least [READ_DWELL_VISIBLE_FRACTION] of the post's
+ * (viewport-clamped) span is inside `[viewportStartOffset, viewportEndOffset]`
+ * — see [visibleFraction]. Loosely-visible items (the row peeking out the bottom
+ * edge after a `smartScrollTo`, the row just sliding off the top during a flick)
+ * fall under the threshold and are excluded — counting them as "read" caused the
  * "tap ↓ N → next tap skips a post" symptom: the scroll landed on X, the next
  * row X+1 got dwell-acked while still partially visible, so the next jump
  * resolved to X+2 instead of X+1.
@@ -125,9 +135,10 @@ fun rememberPendingScrollToMessage(
  * mid-screen would do the same. Gating on idle defers the timer until motion
  * settles, matching the user-intent reading of "I stopped here".
  *
- * Posts taller than the viewport can never satisfy strict containment — they get
- * a fallback: counted as visible while at least half the viewport is occupied by
- * the post. Without it, long-form posts would never get marked read.
+ * Posts taller than the viewport can never satisfy 60%-of-themselves; the
+ * [visibleFraction] divisor clamps to the viewport for them, so the rule
+ * degrades to "60% of the viewport occupied by this post". Without that clamp,
+ * long-form posts would never get marked read.
  *
  * @param listState Drives the viewport snapshotFlow.
  * @param displayedItems Current LazyColumn data source; read through
@@ -179,21 +190,23 @@ fun rememberReadAckDwell(
                 // of the post is visually hidden behind the bar.
                 val vStart = info.viewportStartOffset + info.beforeContentPadding
                 val vEnd = info.viewportEndOffset - info.afterContentPadding
-                val viewportSize = (vEnd - vStart).coerceAtLeast(1)
                 val scrolling = listState.isScrollInProgress
                 val keys = info.visibleItemsInfo.mapNotNull { item ->
-                    val itemEnd = item.offset + item.size
-                    val fullyVisible = item.offset >= vStart && itemEnd <= vEnd
-                    // Posts taller than the viewport can never satisfy strict
-                    // containment. Allow them through once they occupy at least
-                    // half of the viewport — otherwise long-form posts would
-                    // never get marked read.
-                    val visibleSpan =
-                        (minOf(itemEnd, vEnd) - maxOf(item.offset, vStart))
-                            .coerceAtLeast(0)
-                    val dominatesViewport =
-                        item.size >= viewportSize && visibleSpan * 2 >= viewportSize
-                    if (fullyVisible || dominatesViewport) item.key else null
+                    // [visibleFraction] clamps its divisor to min(itemSize,
+                    // viewport): a short card needs 60% of ITSELF on screen,
+                    // a post taller than the viewport needs 60% of the VIEWPORT
+                    // occupied by it — so long-form posts can still dwell-ack
+                    // and the 28 dp [UnreadBoundaryRow] above the boundary post
+                    // in OldestUnreadFirst can't strand them just under the
+                    // threshold. Replaces the prior `fullyVisible ||
+                    // dominatesViewport` split with one continuous rule.
+                    val fraction = visibleFraction(
+                        itemStart = item.offset,
+                        itemEnd = item.offset + item.size,
+                        vStart = vStart,
+                        vEnd = vEnd,
+                    )
+                    if (fraction >= READ_DWELL_VISIBLE_FRACTION) item.key else null
                 }
                 keys to scrolling
             }
