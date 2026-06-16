@@ -4,10 +4,7 @@ package dev.lyo.hortay.ui.media
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.interop.UIKitView
 import kotlinx.coroutines.delay
@@ -256,6 +253,29 @@ actual class VideoPlayerPool {
  * label and buffering overlay all read those flows. First-frame is approximated
  * via `AVPlayerLayer.readyForDisplay` on the same tick.
  */
+/**
+ * UIView whose only job is to keep its single [AVPlayerLayer] sublayer sized to
+ * its bounds. The deprecated [UIKitView] IGNORES a custom `onResize`, and its
+ * `update` runs before Compose lays the host out — so the only reliable place to
+ * track the final size is the view's own `layoutSubviews` (the runtime explicitly
+ * directs you here). Without it the layer stays at its 1×1 seed and the video
+ * reads as transparent. The CATransaction kills the implicit CALayer frame
+ * animation so the video doesn't visibly scale into place on each layout pass.
+ */
+private class PlayerContainerView(
+    val playerLayer: AVPlayerLayer,
+) : UIView(frame = CGRectMake(0.0, 0.0, 1.0, 1.0)) {
+    init { layer.addSublayer(playerLayer) }
+
+    override fun layoutSubviews() {
+        super.layoutSubviews()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        playerLayer.setFrame(bounds)
+        CATransaction.commit()
+    }
+}
+
 @Composable
 actual fun VideoPlayerView(
     player: VideoPlayer,
@@ -263,40 +283,22 @@ actual fun VideoPlayerView(
     aspectRatio: Float,
     resizeMode: VideoResizeMode,
 ) {
-    var layer by remember(player) { mutableStateOf<AVPlayerLayer?>(null) }
-    UIKitView(
-        modifier = modifier,
-        factory = {
-            val container = UIView(frame = CGRectMake(0.0, 0.0, 1.0, 1.0))
-            val playerLayer = AVPlayerLayer.playerLayerWithPlayer(player.avPlayer)
-            playerLayer.setFrame(container.bounds)
-            playerLayer.videoGravity = when (resizeMode) {
+    val playerLayer = remember(player) {
+        AVPlayerLayer.playerLayerWithPlayer(player.avPlayer).apply {
+            videoGravity = when (resizeMode) {
                 VideoResizeMode.Fit -> AVLayerVideoGravityResizeAspect
                 VideoResizeMode.Zoom -> AVLayerVideoGravityResizeAspectFill
             }
-            container.layer.addSublayer(playerLayer)
-            layer = playerLayer
-            container
-        },
-        update = { container ->
-            (container.layer.sublayers?.firstOrNull() as? AVPlayerLayer)?.setFrame(container.bounds)
-        },
-        // Authoritative sizing: Compose lays the host view out AFTER factory/update
-        // run against a 1×1 seed frame, so without re-syncing here the AVPlayerLayer
-        // stays ~1×1 and the video surface reads as transparent. Fired with the real
-        // bounds on every layout pass. Disable the implicit CALayer frame animation
-        // so the video doesn't visibly slide/scale into place on first paint.
-        onResize = { view, _ ->
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            (view.layer.sublayers?.firstOrNull() as? AVPlayerLayer)?.setFrame(view.bounds)
-            CATransaction.commit()
-        },
+        }
+    }
+    UIKitView(
+        modifier = modifier,
+        factory = { PlayerContainerView(playerLayer) },
     )
     LaunchedEffect(player) {
         while (isActive) {
             player.pollSync()
-            if (layer?.readyForDisplay == true) player.markFirstFrame()
+            if (playerLayer.readyForDisplay) player.markFirstFrame()
             delay(POLL_INTERVAL_MS)
         }
     }
