@@ -45,6 +45,9 @@ actual class VideoPlayer internal constructor(
     private val _firstFrameRendered = MutableStateFlow(false)
     private val _isMuted = MutableStateFlow(exo.volume == 0f)
 
+    /** Current source URI, for the no-op-on-same-URI contract (see [setSource]). */
+    private var currentUri: String? = null
+
     actual val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
     actual val playbackState: StateFlow<PlaybackState> = _playbackState.asStateFlow()
     actual val durationMs: StateFlow<Long> = _durationMs.asStateFlow()
@@ -93,6 +96,12 @@ actual class VideoPlayer internal constructor(
     init { exo.addListener(listener) }
 
     actual fun setSource(uri: String) {
+        // Honour the documented no-op-on-same-URI contract: TdVideoPlayer's
+        // source-swap effect re-fires on every MediaState re-emission, and a
+        // re-setMediaItem+prepare on the SAME path tears down and re-prepares
+        // the decoder — a visible rebuffer flash mid-watch.
+        if (uri == currentUri) return
+        currentUri = uri
         exo.setMediaItem(MediaItem.fromUri(uri))
         exo.prepare()
         // Reset the per-source latches so a sticker swap can re-gate its thumb
@@ -114,6 +123,7 @@ actual class VideoPlayer internal constructor(
     internal fun resetForPool() {
         exo.stop()
         exo.clearMediaItems()
+        currentUri = null
         exo.playWhenReady = false
         exo.repeatMode = Player.REPEAT_MODE_OFF
         exo.volume = if (mutedAtAcquire) 0f else 1f

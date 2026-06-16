@@ -3,12 +3,18 @@
 package dev.lyo.hortay.ui.media
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.interop.UIKitView
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import platform.AVFoundation.AVLayerVideoGravityResizeAspect
 import platform.AVFoundation.AVLayerVideoGravityResizeAspectFill
 import platform.AVFoundation.AVPlayer
@@ -36,19 +42,21 @@ import platform.Foundation.NSNotificationCenter
 import platform.Foundation.NSOperationQueue
 import platform.Foundation.NSURL
 import platform.UIKit.UIView
+import platform.darwin.NSObjectProtocol
 
 /**
- * iOS actual for [VideoPlayer] — minimal AVPlayer wrapper. Sufficient for
- * guest-mode video playback (web-mode CDN streams over HTTPS). State flows
- * update from a polling task that ticks while a view is attached; AVPlayer
- * has KVO for `status` / `timeControlStatus` but raw KVO bridging from
- * Kotlin/Native is verbose enough that polling is the cheaper first pass.
- * Upgrade to KVO via NSObjectProtocol callbacks in a follow-up if the polling
- * cadence costs anything measurable.
+ * iOS actual for [VideoPlayer] — minimal AVPlayer wrapper. AVPlayer exposes KVO
+ * for `status` / `timeControlStatus`, but raw KVO bridging from Kotlin/Native is
+ * verbose, so the state flows are refreshed by a polling tick instead — driven
+ * by a coroutine in [VideoPlayerView] that calls [pollSync] while a view is
+ * attached (NOT by chance recompositions; an earlier cut only ticked inside the
+ * UIKitView `update` block, which never re-runs during steady playback, so the
+ * whole control surface froze at its mount-time values). Upgrade to KVO via
+ * NSObjectProtocol callbacks if the poll cadence ever costs anything measurable.
  *
- * Compared to Android, iOS exposes nothing for first-frame detection out of
- * the box — `AVPlayerLayer.readyForDisplay` is the closest signal; the actual
- * [VideoPlayerView] reads it and latches [firstFrameRendered].
+ * Compared to Android, iOS exposes nothing for first-frame detection out of the
+ * box — `AVPlayerLayer.readyForDisplay` is the closest signal; [VideoPlayerView]
+ * reads it on each tick and latches [firstFrameRendered].
  */
 actual class VideoPlayer internal constructor(
     internal val avPlayer: AVPlayer,
@@ -71,18 +79,29 @@ actual class VideoPlayer internal constructor(
     private var pendingPlay = false
     private var pendingRepeatOne = false
 
+    /** Current source URI, for the no-op-on-same-URI contract (see [setSource]). */
+    private var currentUri: String? = null
+
+    /**
+     * End-of-item observer token. Scoped to THIS player's current item (not the
+     * global `object = null`, which fires for every player and cross-talks the
+     * loop/Ended logic) and re-installed per source so it never leaks across a
+     * swap; removed in [resetForPool].
+     */
+    private var endObserver: NSObjectProtocol? = null
+
     actual var playWhenReady: Boolean
         get() = pendingPlay
         set(value) {
             pendingPlay = value
-            if (value) avPlayer.play() else avPlayer.pause()
+            if (value) play() else pause()
         }
 
     actual var repeatModeOne: Boolean
         get() = pendingRepeatOne
         set(value) {
             pendingRepeatOne = value
-            // Drive loop manually via NSNotificationCenter (see init).
+            // Drive loop manually via NSNotificationCenter (see installEndObserver).
             avPlayer.actionAtItemEnd = AVPlayerActionAtItemEndNone
         }
 
@@ -93,12 +112,11 @@ actual class VideoPlayer internal constructor(
             _isMuted.value = value
         }
 
-    init {
-        // Loop hookup: when the current item plays to end, seek back to zero if
-        // repeatModeOne is set, else mark Ended.
-        NSNotificationCenter.defaultCenter.addObserverForName(
+    private fun installEndObserver(item: AVPlayerItem) {
+        endObserver?.let { NSNotificationCenter.defaultCenter.removeObserver(it) }
+        endObserver = NSNotificationCenter.defaultCenter.addObserverForName(
             name = AVPlayerItemDidPlayToEndTimeNotification,
-            `object` = null,
+            `object` = item,
             queue = NSOperationQueue.mainQueue,
         ) { _ ->
             if (pendingRepeatOne) {
@@ -111,7 +129,7 @@ actual class VideoPlayer internal constructor(
         }
     }
 
-    /** Called from VideoPlayerView's tick to refresh polled state. */
+    /** Called from [VideoPlayerView]'s tick to refresh polled state. */
     internal fun pollSync() {
         _isPlaying.value = avPlayer.timeControlStatus == AVPlayerTimeControlStatusPlaying
         _playbackState.value = when (avPlayer.timeControlStatus) {
@@ -134,13 +152,17 @@ actual class VideoPlayer internal constructor(
     internal fun markFirstFrame() { _firstFrameRendered.value = true }
 
     actual fun setSource(uri: String) {
+        if (uri == currentUri) return // honour the documented no-op-on-same-URI contract
         val url = NSURL.URLWithString(uri) ?: return
+        currentUri = uri
         val item = AVPlayerItem.playerItemWithURL(url)
         avPlayer.replaceCurrentItemWithPlayerItem(item)
+        installEndObserver(item)
         _firstFrameRendered.value = false
         _videoAspect.value = 0f
+        _durationMs.value = 0L
         _playbackState.value = PlaybackState.Buffering
-        if (pendingPlay) avPlayer.play()
+        if (pendingPlay) play()
     }
 
     actual fun play() {
@@ -160,6 +182,26 @@ actual class VideoPlayer internal constructor(
     actual fun currentPositionMs(): Long {
         val secs = CMTimeGetSeconds(avPlayer.currentTime())
         return if (secs.isNaN() || !secs.isFinite()) 0L else (secs * 1000).toLong()
+    }
+
+    /**
+     * Reset to a clean state for a pool handback (mirrors Android's). Removes
+     * the end observer so a pooled or dropped instance never leaks it, and
+     * clears [currentUri] so the next acquire re-loads even the same URI.
+     */
+    internal fun resetForPool() {
+        avPlayer.pause()
+        avPlayer.replaceCurrentItemWithPlayerItem(null)
+        endObserver?.let { NSNotificationCenter.defaultCenter.removeObserver(it) }
+        endObserver = null
+        currentUri = null
+        pendingPlay = false
+        pendingRepeatOne = false
+        _isPlaying.value = false
+        _playbackState.value = PlaybackState.Idle
+        _durationMs.value = 0L
+        _videoAspect.value = 0f
+        _firstFrameRendered.value = false
     }
 }
 
@@ -183,13 +225,16 @@ actual class VideoPlayerPool {
     }
 
     actual fun release(player: VideoPlayer, muted: Boolean) {
-        player.avPlayer.pause()
-        player.avPlayer.replaceCurrentItemWithPlayerItem(null)
+        // resetForPool stops playback, clears the item and removes the end
+        // observer — so an overflow instance that isn't pooled is dropped
+        // clean (no leaked observer).
+        player.resetForPool()
         val pool = if (muted) mutedAvailable else audioAvailable
         if (pool.size < DEFAULT_MAX_SIZE) pool.addLast(player)
     }
 
     actual fun shutdown() {
+        (mutedAvailable + audioAvailable).forEach { it.resetForPool() }
         mutedAvailable.clear()
         audioAvailable.clear()
     }
@@ -200,9 +245,15 @@ actual class VideoPlayerPool {
 /**
  * iOS actual for [VideoPlayerView]. Hosts an `AVPlayerLayer` inside a `UIView`
  * via `UIKitView`. The layer's `videoGravity` maps [VideoResizeMode] onto
- * `AVLayerVideoGravity.resizeAspect` / `resizeAspectFill`. First-frame signal
- * is approximated via `AVPlayerLayer.readyForDisplay` (flips shortly after the
- * first frame composites).
+ * `AVLayerVideoGravity.resizeAspect` / `resizeAspectFill`.
+ *
+ * A coroutine pumps [VideoPlayer.pollSync] every [POLL_INTERVAL_MS] while
+ * attached — AVPlayer has no push updates wired (KVO deferred), so without it
+ * every state flow (isPlaying / playbackState / duration / firstFrame) would
+ * only refresh on a chance recomposition of THIS node, which never happens
+ * during steady playback. The controls' slider, play/pause glyph, duration
+ * label and buffering overlay all read those flows. First-frame is approximated
+ * via `AVPlayerLayer.readyForDisplay` on the same tick.
  */
 @Composable
 actual fun VideoPlayerView(
@@ -211,34 +262,35 @@ actual fun VideoPlayerView(
     aspectRatio: Float,
     resizeMode: VideoResizeMode,
 ) {
+    var layer by remember(player) { mutableStateOf<AVPlayerLayer?>(null) }
     UIKitView(
         modifier = modifier,
         factory = {
             val container = UIView(frame = CGRectMake(0.0, 0.0, 1.0, 1.0))
-            val layer = AVPlayerLayer.playerLayerWithPlayer(player.avPlayer)
-            layer.setFrame(container.bounds)
-            layer.videoGravity = when (resizeMode) {
+            val playerLayer = AVPlayerLayer.playerLayerWithPlayer(player.avPlayer)
+            playerLayer.setFrame(container.bounds)
+            playerLayer.videoGravity = when (resizeMode) {
                 VideoResizeMode.Fit -> AVLayerVideoGravityResizeAspect
                 VideoResizeMode.Zoom -> AVLayerVideoGravityResizeAspectFill
             }
-            container.layer.addSublayer(layer)
+            container.layer.addSublayer(playerLayer)
+            layer = playerLayer
             container
         },
         update = { container ->
-            val layer = container.layer.sublayers?.firstOrNull() as? AVPlayerLayer
-            layer?.setFrame(container.bounds)
-            // Approximate first-frame: AVPlayerLayer.readyForDisplay flips
-            // shortly after the first frame composits to screen.
-            if (layer?.readyForDisplay == true) player.markFirstFrame()
-            // Refresh polled flows on every recompose tick.
-            player.pollSync()
+            (container.layer.sublayers?.firstOrNull() as? AVPlayerLayer)?.setFrame(container.bounds)
         },
     )
-    DisposableEffect(player) {
-        onDispose {
-            // No explicit detach: AVPlayerLayer holds the AVPlayer reference;
-            // when the host view disposes the layer is released and the player
-            // returns to its pool via the caller's onDispose.
+    LaunchedEffect(player) {
+        while (isActive) {
+            player.pollSync()
+            if (layer?.readyForDisplay == true) player.markFirstFrame()
+            delay(POLL_INTERVAL_MS)
         }
     }
 }
+
+// 150 ms keeps the play/pause glyph, duration and buffering overlay visually
+// in step without waking the main queue 10×/s; the slider's position has its
+// own 100 ms loop in VideoPlayerControls.
+private const val POLL_INTERVAL_MS = 150L

@@ -29,6 +29,9 @@
 - Roaming cellular is now reported to Telegram as roaming rather than plain mobile, so per-network data limits and traffic stats stay accurate.
 - An album of documents or audio files no longer renders as a blank card.
 - Brand typography renders identically on every launch — including offline and on devices without Google Play Services — instead of briefly showing a fallback font and reflowing the screen.
+- iOS: video controls now stay in sync with playback — the seek bar, play/pause button, duration and buffering spinner no longer freeze at their initial state.
+- iOS: a looping or finished video no longer disturbs another video playing on the same screen.
+- Videos no longer flash a brief re-buffer when the same file re-resolves while you're watching.
 
 ### Architecture
 - Navigation substrate migrated to `androidx.navigation3` (KMP) + `org.jetbrains.androidx.navigation3:navigation3-ui` + `androidx.lifecycle:lifecycle-viewmodel-navigation3`; the bespoke `NavStack` overlay renderer is gone, replaced by `NavDisplay` with built-in per-entry SaveableStateHolder + ViewModelStoreOwner decorators.
