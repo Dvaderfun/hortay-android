@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalForeignApi::class, DelicateCoroutinesApi::class, ExperimentalCoroutinesApi::class)
+@file:OptIn(ExperimentalForeignApi::class, ExperimentalCoroutinesApi::class)
 
 package dev.lyo.hortay.tdlib
 
@@ -7,10 +7,10 @@ import dev.lyo.hortay.tdlib.native.td_create_client_id
 import dev.lyo.hortay.tdlib.native.td_execute
 import dev.lyo.hortay.tdlib.native.td_receive
 import dev.lyo.hortay.tdlib.native.td_send
+import kotlin.native.concurrent.Worker
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.toKStringFromUtf8
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
@@ -18,9 +18,7 @@ import kotlinx.coroutines.channels.consumeEach
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.newSingleThreadContext
 
 /**
  * Thin Kotlin wrapper around TDLib's `td_json_client.h` C interface, accessed
@@ -69,10 +67,14 @@ actual class TdJsonClient actual constructor(scope: CoroutineScope) {
      */
     actual val updates: SharedFlow<String> = _updates.asSharedFlow()
 
-    // Dedicated OS thread for the blocking td_receive loop. Process-lifetime —
-    // tied to [scope] (the app scope, cancelled only at process death), so it is
-    // intentionally never .close()'d; it dies with the process.
-    private val receiveThread = newSingleThreadContext("td-receive")
+    // Dedicated OS thread for the blocking td_receive loop. A raw Kotlin/Native
+    // [Worker], NOT a coroutines `newSingleThreadContext`: the latter's Native
+    // worker-dispatcher crashed at app launch on iOS with
+    // "-[OS_dispatch_mach_msg _setContext:]: unrecognized selector". td_receive
+    // is callable from any thread and the inbox Channel's trySend is thread-safe,
+    // so the coroutine side is untouched. Process-lifetime — never stopped; it
+    // dies with the process (no cancellation needed, same as the old contract).
+    private val receiveWorker = Worker.start(name = "td-receive")
 
     init {
         // Quiet TDLib's default verbosity-5 firehose BEFORE creating any client
@@ -97,12 +99,14 @@ actual class TdJsonClient actual constructor(scope: CoroutineScope) {
         // the instance alive and triggers updateAuthorizationState.
         td_send(clientId, """{"@type":"getOption","name":"version","@extra":"wake"}""")
 
-        // Receiver pump — blocks in td_receive on its OWN thread, then hands the
-        // raw JSON to the UNLIMITED inbox without ever suspending on downstream.
-        scope.launch(receiveThread) {
-            while (isActive) {
-                val raw = td_receive(POLL_TIMEOUT_S)?.toKStringFromUtf8() ?: continue
-                inbox.trySend(raw)
+        // Receiver pump — blocks in td_receive on its OWN OS thread (the raw
+        // [receiveWorker]), then hands the raw JSON to the UNLIMITED inbox via a
+        // thread-safe non-suspending trySend. Forever-loop: process-lifetime, no
+        // cancellation (the worker dies with the process).
+        receiveWorker.executeAfter(0L) {
+            while (true) {
+                val raw = td_receive(POLL_TIMEOUT_S)?.toKStringFromUtf8()
+                if (raw != null) inbox.trySend(raw)
             }
         }
 
