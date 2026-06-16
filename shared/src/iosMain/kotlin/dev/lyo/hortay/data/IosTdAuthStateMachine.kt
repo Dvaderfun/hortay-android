@@ -100,13 +100,12 @@ class IosTdAuthStateMachine(
     val connection: StateFlow<ConnectionStatus> = _connection.asStateFlow()
 
     /**
-     * Active FLOOD_WAIT deadline (epoch ms). Currently emits 0 — the iOS path
-     * doesn't yet share Android's global gate (Phase II-D1 lifts that). Auth
-     * submits still surface a friendly "Too many attempts" string through
-     * [authError]; the deadline-aware backoff arrives with the repository lift.
+     * Active FLOOD_WAIT deadline (epoch ms). Delegated to [TypedTdClient]'s
+     * global gate, which arms it on any 420/429 and lets it lapse as the
+     * deadline passes — so the connection banner's countdown reflects real
+     * throttling across every iOS RPC, not just auth submits.
      */
-    private val _floodWaitUntilMs = MutableStateFlow(0L)
-    val floodWaitUntilMs: StateFlow<Long> = _floodWaitUntilMs.asStateFlow()
+    val floodWaitUntilMs: StateFlow<Long> get() = client.floodWaitUntilMs
 
     // Last phone the user attempted, kept so the WaitCode stage can render the
     // destination even when TDLib doesn't echo it back in `codeInfo`.
