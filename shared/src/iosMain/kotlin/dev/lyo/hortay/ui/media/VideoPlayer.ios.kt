@@ -38,6 +38,7 @@ import platform.AVFoundation.timeControlStatus
 import platform.CoreGraphics.CGRectMake
 import platform.CoreMedia.CMTimeGetSeconds
 import platform.CoreMedia.CMTimeMake
+import platform.QuartzCore.CATransaction
 import platform.Foundation.NSNotificationCenter
 import platform.Foundation.NSOperationQueue
 import platform.Foundation.NSURL
@@ -279,6 +280,17 @@ actual fun VideoPlayerView(
         },
         update = { container ->
             (container.layer.sublayers?.firstOrNull() as? AVPlayerLayer)?.setFrame(container.bounds)
+        },
+        // Authoritative sizing: Compose lays the host view out AFTER factory/update
+        // run against a 1×1 seed frame, so without re-syncing here the AVPlayerLayer
+        // stays ~1×1 and the video surface reads as transparent. Fired with the real
+        // bounds on every layout pass. Disable the implicit CALayer frame animation
+        // so the video doesn't visibly slide/scale into place on first paint.
+        onResize = { view, _ ->
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            (view.layer.sublayers?.firstOrNull() as? AVPlayerLayer)?.setFrame(view.bounds)
+            CATransaction.commit()
         },
     )
     LaunchedEffect(player) {
