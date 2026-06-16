@@ -1,30 +1,63 @@
 package dev.lyo.hortay.ui.theme
 
+import androidx.compose.ui.text.ExperimentalTextApi
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.googlefonts.Font
-import androidx.compose.ui.text.googlefonts.GoogleFont
 import dev.lyo.hortay.R
 
-private val Provider = GoogleFont.Provider(
-    providerAuthority = "com.google.android.gms.fonts",
-    providerPackage = "com.google.android.gms",
-    certificates = R.array.com_google_android_gms_fonts_certs,
+/**
+ * Android actual — the two brand families BUNDLED as variable TTFs in `res/font/`,
+ * no runtime provider, no network, no Play Services dependency.
+ *
+ * Why bundled, not the Google Fonts provider (the previous approach): the provider
+ * pulled the typefaces at runtime via Play Services. On cold/offline start — or any
+ * provider hiccup — the app painted system Roboto first, then reflowed the ENTIRE
+ * layout when the real fonts arrived (full-screen FOUT), and on Play-Services-less
+ * devices the brand type never loaded at all. Bundling makes first-frame rendering
+ * deterministic with zero reflow.
+ *
+ * Why variable fonts with PINNED weights: an earlier bundled attempt used Roboto Flex
+ * *variable* and let its default weight axis ride, which sat visually below 400 and
+ * made body copy read light against the periwinkle palette. Each [Font] entry below
+ * pins its exact [FontVariation.weight], so the renderer instances the requested
+ * weight rather than the axis default. One variable file per family carries every
+ * weight Type.kt asks for (Inter Normal/Medium/SemiBold/Bold; Plus Jakarta Sans
+ * SemiBold/Bold/ExtraBold), keeping the APK cost to a single ~860 KB + ~170 KB pair
+ * instead of seven static cuts.
+ *
+ * iOS still falls back to the system sans-serif (see `Fonts.ios.kt`) — CMP's
+ * `Res.font` resource Font can't pin a variable-font weight axis, so cross-platform
+ * bundling needs platform-specific axis control and is deferred.
+ */
+
+@OptIn(ExperimentalTextApi::class)
+private fun interFont(weight: FontWeight) = Font(
+    R.font.inter_variable,
+    weight = weight,
+    style = FontStyle.Normal,
+    variationSettings = FontVariation.Settings(FontVariation.weight(weight.weight)),
 )
 
-private val Inter = GoogleFont("Inter")
-private val PlusJakartaSans = GoogleFont("Plus Jakarta Sans")
+@OptIn(ExperimentalTextApi::class)
+private fun plusJakartaSansFont(weight: FontWeight) = Font(
+    R.font.plus_jakarta_sans_variable,
+    weight = weight,
+    style = FontStyle.Normal,
+    variationSettings = FontVariation.Settings(FontVariation.weight(weight.weight)),
+)
 
 actual val DisplayFontFamily: FontFamily = FontFamily(
-    Font(googleFont = PlusJakartaSans, fontProvider = Provider, weight = FontWeight.SemiBold, style = FontStyle.Normal),
-    Font(googleFont = PlusJakartaSans, fontProvider = Provider, weight = FontWeight.Bold, style = FontStyle.Normal),
-    Font(googleFont = PlusJakartaSans, fontProvider = Provider, weight = FontWeight.ExtraBold, style = FontStyle.Normal),
+    plusJakartaSansFont(FontWeight.SemiBold),
+    plusJakartaSansFont(FontWeight.Bold),
+    plusJakartaSansFont(FontWeight.ExtraBold),
 )
 
 actual val BodyFontFamily: FontFamily = FontFamily(
-    Font(googleFont = Inter, fontProvider = Provider, weight = FontWeight.Normal),
-    Font(googleFont = Inter, fontProvider = Provider, weight = FontWeight.Medium),
-    Font(googleFont = Inter, fontProvider = Provider, weight = FontWeight.SemiBold),
-    Font(googleFont = Inter, fontProvider = Provider, weight = FontWeight.Bold),
+    interFont(FontWeight.Normal),
+    interFont(FontWeight.Medium),
+    interFont(FontWeight.SemiBold),
+    interFont(FontWeight.Bold),
 )
