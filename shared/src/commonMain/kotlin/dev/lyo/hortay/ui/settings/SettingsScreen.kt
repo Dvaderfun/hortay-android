@@ -45,6 +45,9 @@ import hortay.shared.generated.resources.Res
 import hortay.shared.generated.resources.autodownload_entry_subtitle
 import hortay.shared.generated.resources.autodownload_entry_title
 import hortay.shared.generated.resources.autodownload_section
+import hortay.shared.generated.resources.proxy_row_subtitle
+import hortay.shared.generated.resources.proxy_section
+import hortay.shared.generated.resources.proxy_title
 import hortay.shared.generated.resources.settings_author_channel_title
 import hortay.shared.generated.resources.settings_author_developer_title
 import hortay.shared.generated.resources.settings_enter_guest_confirm_action
@@ -176,6 +179,12 @@ fun SettingsScreen(
      * [dev.lyo.hortay.data.web.WebPostAdapter.stableChatId]. Null in TDLib mode.
      */
     webChannelByChatId: ((Long) -> WebChannelDescriptor?)? = null,
+    /**
+     * Proxy support (SOCKS5 / HTTP / MTProto). Non-null only in TDLib mode —
+     * proxy targets the MTProto transport, which guest mode (anonymous
+     * `t.me/s/`) doesn't use. When null the proxy row is hidden entirely.
+     */
+    proxy: dev.lyo.hortay.data.proxy.ProxyRepository? = null,
 ) {
     // Sub-screen nav lives inside Settings — the auto-download list and category
     // screens are conceptually "deeper" pages of the same tab. Using AnimatedContent
@@ -185,10 +194,12 @@ fun SettingsScreen(
     var showHiddenChannels by rememberSaveable { mutableStateOf(false) }
     var showArchiveSettings by rememberSaveable { mutableStateOf(false) }
     var showArchiveBrowser by rememberSaveable { mutableStateOf(false) }
+    var showProxy by rememberSaveable { mutableStateOf(false) }
     BackHandler(enabled = showAutoDownload) { showAutoDownload = false }
     BackHandler(enabled = showHiddenChannels) { showHiddenChannels = false }
     BackHandler(enabled = showArchiveBrowser) { showArchiveBrowser = false }
     BackHandler(enabled = showArchiveSettings && !showArchiveBrowser) { showArchiveSettings = false }
+    BackHandler(enabled = showProxy) { showProxy = false }
 
     // M3E shared-axis-X via MotionScheme: spatial spring for the slide, effects
     // spring for the crossfade. Same physics as MaterialTheme reads on every Material
@@ -209,6 +220,7 @@ fun SettingsScreen(
         showArchiveSettings -> SettingsSection.ArchiveSettings
         showAutoDownload && autoDownload != null -> SettingsSection.AutoDownload
         showHiddenChannels && ignoredChannels != null -> SettingsSection.HiddenChannels
+        showProxy && proxy != null -> SettingsSection.Proxy
         else -> SettingsSection.Main
     }
     AnimatedContent(
@@ -251,6 +263,13 @@ fun SettingsScreen(
                 viewModel = org.koin.compose.viewmodel.koinViewModel(),
                 onBack = { showArchiveBrowser = false },
             )
+            SettingsSection.Proxy -> proxy?.let { repo ->
+                ProxyScreen(
+                    repo = repo,
+                    contentPadding = contentPadding,
+                    onBack = { showProxy = false },
+                )
+            }
             SettingsSection.Main -> SettingsMain(
                 settings = settings,
                 stats = stats,
@@ -264,6 +283,7 @@ fun SettingsScreen(
                 ignoredChannels = ignoredChannels,
                 onOpenHiddenChannels = { showHiddenChannels = true },
                 onOpenArchive = { showArchiveSettings = true },
+                onOpenProxy = proxy?.let { { showProxy = true } },
             )
         }
     }
@@ -280,6 +300,7 @@ private enum class SettingsSection(val depth: Int) {
     HiddenChannels(1),
     ArchiveSettings(1),
     ArchiveBrowser(2),
+    Proxy(1),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -297,6 +318,7 @@ private fun SettingsMain(
     ignoredChannels: IgnoredChannelsStore?,
     onOpenHiddenChannels: () -> Unit,
     onOpenArchive: () -> Unit,
+    onOpenProxy: (() -> Unit)?,
 ) {
     val scope = rememberCoroutineScope()
     val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
@@ -542,6 +564,22 @@ private fun SettingsMain(
                             scope.launch { settings.setHideOnlineStatus(next) }
                         }
                     },
+                )
+            }
+
+            // ---- Proxy section (TDLib-mode only): SOCKS5 / HTTP / MTProto -------------
+            // Lives next to Privacy because circumvention IS a privacy concern for the
+            // audience that needs it; hidden in guest mode (proxy targets the MTProto
+            // transport, which the anonymous t.me/s/ pipeline never touches).
+            onOpenProxy?.let { open ->
+                Spacer(Modifier.height(8.dp))
+                SectionLabel(stringResource(Res.string.proxy_section))
+                SettingsRow(
+                    symbol = "vpn_key",
+                    title = stringResource(Res.string.proxy_title),
+                    subtitle = stringResource(Res.string.proxy_row_subtitle),
+                    chevron = true,
+                    onClick = open,
                 )
             }
 

@@ -93,6 +93,11 @@ fun MainScaffold(
     nav: NavStack,
     appScope: CoroutineScope,
     chatReadCursors: kotlinx.coroutines.flow.Flow<dev.lyo.hortay.data.ReadCursors>,
+    /** Proxy management for the Settings → Privacy entry. TDLib mode only. */
+    proxy: dev.lyo.hortay.data.proxy.ProxyRepository? = null,
+    /** Curated catalog + TDLib discovery for the Channels-tab add sheet. */
+    suggestionsRepo: dev.lyo.hortay.data.discover.ChannelSuggestionsRepository? = null,
+    discovery: dev.lyo.hortay.data.discover.ChannelDiscoveryRepository? = null,
 ) {
     // Navigation state — plain `remember`, deliberately NOT `rememberSaveable`. Tab
     // selection and the channel back-stack reset to defaults on every fresh Activity
@@ -514,6 +519,9 @@ fun MainScaffold(
                         selectedTab = selectedTab,
                         tabStateHolder = tabStateHolder,
                         feed = feed,
+                        proxy = proxy,
+                        suggestionsRepo = suggestionsRepo,
+                        discovery = discovery,
                         backend = backend,
                         bookmarks = bookmarks,
                         ignoredChannels = ignoredChannels,

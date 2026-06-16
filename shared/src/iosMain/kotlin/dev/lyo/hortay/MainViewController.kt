@@ -107,6 +107,9 @@ fun MainViewController(): UIViewController = ComposeUIViewController {
             val userMessages = koinInject<UserMessageBus>()
             val postsRepo = koinInject<dev.lyo.hortay.data.posts.PostsRepository>()
             val startupCoordinator = koinInject<StartupCoordinator>()
+            val proxyRepository = koinInject<dev.lyo.hortay.data.proxy.ProxyRepository>()
+            val suggestionsRepo = koinInject<dev.lyo.hortay.data.discover.ChannelSuggestionsRepository>()
+            val discovery = koinInject<dev.lyo.hortay.data.discover.ChannelDiscoveryRepository>()
 
             CompositionLocalProvider(
                 LocalMediaCache provides mediaCache,
@@ -148,6 +151,9 @@ fun MainViewController(): UIViewController = ComposeUIViewController {
                         nav = nav,
                         appScope = appScope,
                         chatReadCursors = postsRepo.chatReadCursors,
+                        proxy = proxyRepository,
+                        suggestionsRepo = suggestionsRepo,
+                        discovery = discovery,
                     )
                     isGuest -> WebModeScaffold(
                         backend = backend,
@@ -164,6 +170,7 @@ fun MainViewController(): UIViewController = ComposeUIViewController {
                         deepLinkRouter = deepLinkRouter,
                         nav = nav,
                         appScope = appScope,
+                        suggestionsRepo = suggestionsRepo,
                     )
                     authStage is AuthStage.Loading -> AuthLoadingScreen()
                     else -> AuthScreen(
@@ -171,6 +178,7 @@ fun MainViewController(): UIViewController = ComposeUIViewController {
                         guestMode = guestMode,
                         scope = appScope,
                         stage = authStage,
+                        proxy = proxyRepository,
                     )
                 }
               }

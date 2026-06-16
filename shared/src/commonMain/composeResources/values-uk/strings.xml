@@ -785,6 +785,7 @@
     <string name="proxy_health_checking">Перевірка…</string>
     <string name="proxy_health_latency">%1$d мс</string>
     <string name="proxy_health_unreachable">Недоступний</string>
+    <string name="proxy_test_reachable">Доступний</string>
     <string name="proxy_error_generic">Не вдалося додати проксі</string>
     <string name="proxy_error_not_link">Це не дійсне посилання на проксі</string>
     <string name="proxy_trouble">Проблема зі з\'єднанням через проксі</string>
@@ -797,4 +798,8 @@
         <item quantity="other">%d проксі</item>
     </plurals>
     <string name="proxy_active_summary">Активний: %1$s</string>
+    <string name="discover_subscribe">Підписатися</string>
+    <string name="discover_subscribed">Підписано</string>
+    <string name="discover_search_hint">Пошук каналів</string>
+    <string name="discover_no_results">Каналів не знайдено</string>
 </resources>

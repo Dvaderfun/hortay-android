@@ -21,6 +21,19 @@ open class TdRpcException(val code: Int, message: String) : RuntimeException(mes
 fun isFloodWaitCode(code: Int): Boolean = code == 420 || code == 429
 
 /**
+ * Pulls the retry-after second count out of a TDLib flood-wait error message.
+ * Matches both wire formats — `FLOOD_WAIT_<n>` (420 / MTProto) and
+ * `retry after <n>` (429 / translated layer, verbose form
+ * "Too Many Requests: retry after <n>"). Returns null when the message carries
+ * no parseable count. Mirrors the Android `TdClient` regex so both platforms
+ * arm the flood gate identically.
+ */
+fun floodWaitSeconds(message: String?): Int? =
+    message?.let { FLOOD_WAIT_SECONDS_RX.find(it)?.groupValues?.getOrNull(1)?.toIntOrNull() }
+
+private val FLOOD_WAIT_SECONDS_RX = Regex("(?:FLOOD_WAIT_|retry after )(\\d+)")
+
+/**
  * True when this throwable is TDLib's documented silent-no-op sentinel
  * (code 406). Callers with optimistic UI (poll vote, reaction toggle) treat
  * a 406 outcome as success so the authoritative update is what flips the

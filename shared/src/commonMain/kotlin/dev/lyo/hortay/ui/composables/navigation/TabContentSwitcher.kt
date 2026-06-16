@@ -54,6 +54,9 @@ internal fun TabContentSwitcher(
     tabStateHolder: SaveableStateHolder,
     feed: FeedSource,
     backend: HortayBackend,
+    proxy: dev.lyo.hortay.data.proxy.ProxyRepository? = null,
+    suggestionsRepo: dev.lyo.hortay.data.discover.ChannelSuggestionsRepository? = null,
+    discovery: dev.lyo.hortay.data.discover.ChannelDiscoveryRepository? = null,
     bookmarks: BookmarkStore,
     ignoredChannels: IgnoredChannelsStore,
     guestMode: GuestModeStore,
@@ -124,6 +127,8 @@ internal fun TabContentSwitcher(
                     onChannelClick = { chatId ->
                         onPushChannel(chatId, null)
                     },
+                    suggestionsRepo = suggestionsRepo,
+                    discovery = discovery,
                 )
                 NavTab.Saved -> TimelineScreen(
                     feed = feed,
@@ -149,6 +154,7 @@ internal fun TabContentSwitcher(
                     contentPadding = padding,
                     ignoredChannels = ignoredChannels,
                     backend = backend,
+                    proxy = proxy,
                     onLogout = { scope.launch { backend.logOut() } },
                     // Flip the guest flag FIRST so the routing pass that follows
                     // logOut() settles on [WebModeScaffold] instead of looping

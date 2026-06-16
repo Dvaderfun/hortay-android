@@ -24,6 +24,7 @@ import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -41,6 +42,7 @@ import hortay.shared.generated.resources.Res
 import hortay.shared.generated.resources.channels_empty_helper
 import hortay.shared.generated.resources.channels_empty_title
 import hortay.shared.generated.resources.channels_title
+import hortay.shared.generated.resources.web_add_channel
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -59,11 +61,14 @@ fun ChannelsScreen(
     backend: HortayBackend,
     contentPadding: PaddingValues,
     onChannelClick: (chatId: ChatId) -> Unit,
+    suggestionsRepo: dev.lyo.hortay.data.discover.ChannelSuggestionsRepository? = null,
+    discovery: dev.lyo.hortay.data.discover.ChannelDiscoveryRepository? = null,
 ) {
     val posts by backend.feedPosts.collectAsStateWithLifecycle()
     val channels = remember(posts) { aggregate(posts) }
     val listState = rememberLazyListState()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+    var addSheetOpen by remember { androidx.compose.runtime.mutableStateOf(false) }
 
     Scaffold(
         modifier = Modifier
@@ -74,6 +79,18 @@ fun ChannelsScreen(
                 title = stringResource(Res.string.channels_title),
                 size = HortayTopBarSize.Large,
                 scrollBehavior = scrollBehavior,
+                actions = {
+                    if (suggestionsRepo != null && discovery != null) {
+                        androidx.compose.material3.IconButton(onClick = { addSheetOpen = true }) {
+                            dev.lyo.hortay.ui.icons.Symbol(
+                                name = "add",
+                                contentDescription = stringResource(Res.string.web_add_channel),
+                                tint = MaterialTheme.colorScheme.onSurface,
+                                size = 24.dp,
+                            )
+                        }
+                    }
+                },
             )
         },
         containerColor = MaterialTheme.colorScheme.background,
@@ -102,6 +119,16 @@ fun ChannelsScreen(
                 }
             }
         }
+    }
+
+    if (addSheetOpen && suggestionsRepo != null && discovery != null) {
+        dev.lyo.hortay.ui.composables.sheets.AddChannelTdSheet(
+            suggestionsRepo = suggestionsRepo,
+            discovery = discovery,
+            subscribe = { chatId -> backend.joinChat(chatId) },
+            locale = androidx.compose.ui.text.intl.Locale.current.language.lowercase(),
+            onDismiss = { addSheetOpen = false },
+        )
     }
 }
 

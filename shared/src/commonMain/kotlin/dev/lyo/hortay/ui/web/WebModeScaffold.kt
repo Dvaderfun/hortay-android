@@ -119,6 +119,7 @@ fun WebModeScaffold(
     deepLinkRouter: DeepLinkRouter,
     nav: NavStack,
     appScope: CoroutineScope,
+    suggestionsRepo: dev.lyo.hortay.data.discover.ChannelSuggestionsRepository,
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(NavTab.Feed) }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
@@ -631,6 +632,7 @@ fun WebModeScaffold(
             feedSource = webFeedSource,
             repository = webRepository,
             client = webClient,
+            suggestionsRepo = suggestionsRepo,
             locale = locale,
             // One-shot: clear the prefill on dismiss so a manual reopen lands
             // back on the clipboard auto-paste path instead of looping the user

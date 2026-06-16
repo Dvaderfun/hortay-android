@@ -89,6 +89,7 @@ val tdlibModule = module {
     // commonMain). Repositories injected with TdSender live in commonMain and
     // are shared across Android + iOS.
     single<TdSender> { AndroidTdSenderAdapter(get<TdClient>(), get<CoroutineScope>()) }
+    single { dev.lyo.hortay.data.discover.ChannelDiscoveryRepository(get<TdSender>()) }
 
     single(createdAtStart = true) {
         TdLifecycleBridge(
@@ -136,6 +137,18 @@ val tdlibModule = module {
     single { CommentsRepository(get<TdSender>(), get(), get<CoroutineScope>(), get<StringResolver>(), getOrNull<ArchiveRepository>(), getOrNull<ArchivedMediaStore>()) }
 
     single { ChannelActionsRepository(get<TdSender>(), get<UserMessageBus>(), get<TdClient>().connection, get<StringResolver>()) }
+    // Proxy pool lives in TDLib's own database — NOT cleared on logout (the user
+    // may need the proxy to reach the sign-in screen), so it is deliberately
+    // absent from LogoutCleanup.
+    single {
+        dev.lyo.hortay.data.proxy.ProxyRepository(
+            sender = get<TdSender>(),
+            connection = get<TdClient>().connection,
+            userMessages = get<UserMessageBus>(),
+            scope = get<CoroutineScope>(),
+            res = get<StringResolver>(),
+        )
+    }
 
     single { ChatFoldersRepository(get<TdSender>(), get<CoroutineScope>()) }
 

@@ -35,6 +35,15 @@ data class WebHttpCacheConfig(val cacheRootPath: String?)
 val webModule = module {
     single<WebDatabase> { WebDatabaseProvider.create() }
     single<HttpClient> { defaultWebHttpClient(cacheRootPath = get<WebHttpCacheConfig>().cacheRootPath) }
+    // Curated channel-suggestions catalog (remote, locale-aware). Shared by guest
+    // AND authenticated add-channel sheets — only hydration differs per mode.
+    single {
+        dev.lyo.hortay.data.discover.ChannelSuggestionsRepository(
+            http = get<HttpClient>(),
+            cacheFile = dev.lyo.hortay.applicationFilesPath("suggestions_catalog.json"),
+            appVersionCode = dev.lyo.hortay.BuildKonfig.VERSION_CODE,
+        )
+    }
     single { WebTelegramClient(get()) }
     single { WebCustomEmojiResolver(get()) }
     single { WebRepository(db = get(), strings = get<StringResolver>()) }

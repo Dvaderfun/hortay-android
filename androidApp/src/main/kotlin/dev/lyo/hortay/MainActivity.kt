@@ -108,6 +108,9 @@ class MainActivity : ComponentActivity() {
             val tdClient = koinInject<TdClient>()
             val backend = koinInject<HortayBackend>()
             val postsRepository = koinInject<PostsRepository>()
+            val proxyRepository = koinInject<dev.lyo.hortay.data.proxy.ProxyRepository>()
+            val suggestionsRepo = koinInject<dev.lyo.hortay.data.discover.ChannelSuggestionsRepository>()
+            val discovery = koinInject<dev.lyo.hortay.data.discover.ChannelDiscoveryRepository>()
             val bookmarks = koinInject<BookmarkStore>()
             val ignoredChannels = koinInject<IgnoredChannelsStore>()
             val guestMode = koinInject<GuestModeStore>()
@@ -212,6 +215,9 @@ class MainActivity : ComponentActivity() {
                                     nav = nav,
                                     appScope = appScopeCompose,
                                     chatReadCursors = postsRepository.chatReadCursors,
+                                    proxy = proxyRepository,
+                                    suggestionsRepo = suggestionsRepo,
+                                    discovery = discovery,
                                 )
                             }
                             // Guest mode also needs MediaViewerHost: TimelineScreen reads
@@ -234,6 +240,7 @@ class MainActivity : ComponentActivity() {
                                     deepLinkRouter = deepLinkRouterCompose,
                                     nav = nav,
                                     appScope = appScopeCompose,
+                                    suggestionsRepo = suggestionsRepo,
                                 )
                             }
                             else -> AuthScreen(
@@ -241,6 +248,7 @@ class MainActivity : ComponentActivity() {
                                 guestMode = guestMode,
                                 scope = appScopeCompose,
                                 stage = auth,
+                                proxy = proxyRepository,
                             )
                         }
 

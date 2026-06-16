@@ -1,4 +1,7 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+@file:OptIn(
+    androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class,
+    androidx.compose.ui.ExperimentalComposeUiApi::class,
+)
 
 package dev.lyo.hortay.ui.auth
 import dev.lyo.hortay.ui.composables.sheets.CountryPickerSheet
@@ -15,6 +18,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -46,6 +50,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -68,6 +73,7 @@ import dev.lyo.hortay.data.Country
 import dev.lyo.hortay.data.HortayBackend
 import dev.lyo.hortay.data.StringResolver
 import dev.lyo.hortay.data.web.GuestModeStore
+import dev.lyo.hortay.ui.settings.ProxyScreen
 import dev.lyo.hortay.ui.icons.Symbol
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
@@ -79,6 +85,7 @@ import hortay.shared.generated.resources.auth_change_number
 import hortay.shared.generated.resources.auth_code_hint_telegram
 import hortay.shared.generated.resources.auth_code_placeholder
 import hortay.shared.generated.resources.auth_continue
+import hortay.shared.generated.resources.proxy_title
 import hortay.shared.generated.resources.auth_continue_without_login
 import hortay.shared.generated.resources.auth_country_label
 import hortay.shared.generated.resources.auth_country_loading
@@ -132,8 +139,16 @@ fun AuthScreen(
     guestMode: GuestModeStore,
     scope: CoroutineScope,
     stage: AuthStage,
+    /**
+     * Proxy entry point BEFORE sign-in — TDLib's `addProxy` works
+     * pre-authorization (tdlib/td#300), so a user on a network that blocks
+     * Telegram can configure a proxy to reach the sign-in flow at all.
+     * Null hides the affordance (e.g. previews / stripped builds).
+     */
+    proxy: dev.lyo.hortay.data.proxy.ProxyRepository? = null,
 ) {
     val authError by backend.authError.collectAsStateWithLifecycle()
+    var showProxy by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
@@ -204,7 +219,34 @@ fun AuthScreen(
                 }
             }
 
+            if (proxy != null && stage is AuthStage.WaitPhone) {
+                Spacer(Modifier.height(24.dp))
+                TextButton(
+                    onClick = { showProxy = true },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Symbol(name = "vpn_key", contentDescription = null, size = 18.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(Res.string.proxy_title))
+                }
+            }
+
             Spacer(Modifier.height(40.dp))
+        }
+
+        if (proxy != null && showProxy) {
+            // AuthScreen is the root with no back stack, so the system back gesture
+            // would leave the app. This handler — composed only while the overlay is
+            // up — intercepts back to dismiss the proxy screen instead, and
+            // unregisters when it closes.
+            BackHandler { showProxy = false }
+            Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                ProxyScreen(
+                    repo = proxy,
+                    contentPadding = PaddingValues(),
+                    onBack = { showProxy = false },
+                )
+            }
         }
     }
 }
