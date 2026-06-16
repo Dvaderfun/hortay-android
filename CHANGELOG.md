@@ -24,6 +24,7 @@
 - iOS: the signed-in feed no longer gets stuck on "Connecting…" with empty placeholders after login, including on accounts with many channels and folders.
 - iOS: returning to the app reconnects and refreshes the feed instead of staying frozen.
 - iOS: animated stickers and custom emoji with gradients no longer crash the app.
+- Roaming cellular is now reported to Telegram as roaming rather than plain mobile, so per-network data limits and traffic stats stay accurate.
 
 ### Architecture
 - Navigation substrate migrated to `androidx.navigation3` (KMP) + `org.jetbrains.androidx.navigation3:navigation3-ui` + `androidx.lifecycle:lifecycle-viewmodel-navigation3`; the bespoke `NavStack` overlay renderer is gone, replaced by `NavDisplay` with built-in per-entry SaveableStateHolder + ViewModelStoreOwner decorators.
@@ -33,6 +34,7 @@
 - Toolchain and dependencies brought current: Kotlin 2.4.0, AGP 9.2.1, coroutines 1.11.0, kotlinx-serialization 1.11.0, kotlinx-datetime 0.8.0, Coil 3.5.0-beta01, OkHttp 5.4.0, Okio 3.17.0.
 - Automated dependency updates and vulnerability scanning via Dependabot and OSV-Scanner.
 - Version catalog restructured into commented sections; unused libraries (Airbnb Lottie, jsoup, KSP) removed; androidx.browser moved into the catalog and updated to 1.10.0.
+- TDLib now builds against OpenSSL 3.5.7 (current 3.5 LTS line) instead of the end-of-life 1.1.1w.
 
 ## [0.6.0] — 2026-05-19
 
