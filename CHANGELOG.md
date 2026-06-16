@@ -5,16 +5,34 @@
 ## [Unreleased]
 
 ### Added
+- Connect through a proxy — add SOCKS5, HTTP or MTProto servers by pasting a Telegram proxy link or entering the details by hand, pick the active one, and check each server's reachability and latency.
+- Proxy can be set up on the sign-in screen too, so you can get online to sign in from a network that blocks Telegram.
+- If the active proxy stops responding, the app automatically switches to the next working one in your list instead of getting stuck.
+- Find and add channels without leaving Hortay — search public channels by name when signed in, and pick from curated suggestions grouped by topic (news, technology, culture, science, humour…) in both signed-in and guest modes.
+- Channel suggestions now show each channel's avatar, real name and subscriber count.
 - Profile sheets tint the avatar ring with the person's Telegram profile colour.
 
 ### Changed
+- The suggested channels are a refreshed, verified set loaded from an online list — Ukrainian channels first for Ukrainian readers, an international set otherwise — so it stays current without an app update.
 - Block quotes and code blocks now render the same way on every surface — feed, channel, comments and the open post — as padded blocks, with collapsible quotes and a one-tap "Show more" that opens the post instead of splitting into several toggles.
 - Photos, stickers, custom emoji and GIFs now fade in over their preview instead of popping, and avatars no longer flash a letter before their picture loads.
 - Tapping a reaction or voting in a poll now gives a light haptic tap.
 - The code screen now explains that the login code arrives inside Telegram on another signed-in device, not by SMS.
 
+### Fixed
+- In guest mode, typing a channel name or link by hand into "Add channel" now starts the search — tap the keyboard's search key or the "Find" button — instead of only working when a link was auto-filled from the clipboard.
+- iOS: the signed-in feed no longer gets stuck on "Connecting…" with empty placeholders after login, including on accounts with many channels and folders.
+- iOS: returning to the app reconnects and refreshes the feed instead of staying frozen.
+- iOS: animated stickers and custom emoji with gradients no longer crash the app.
+
 ### Architecture
 - Navigation substrate migrated to `androidx.navigation3` (KMP) + `org.jetbrains.androidx.navigation3:navigation3-ui` + `androidx.lifecycle:lifecycle-viewmodel-navigation3`; the bespoke `NavStack` overlay renderer is gone, replaced by `NavDisplay` with built-in per-entry SaveableStateHolder + ViewModelStoreOwner decorators.
+
+### Build
+- StrictMode (main-thread disk/network I/O and leaked-resource detection) in debug builds.
+- Toolchain and dependencies brought current: Kotlin 2.4.0, AGP 9.2.1, coroutines 1.11.0, kotlinx-serialization 1.11.0, kotlinx-datetime 0.8.0, Coil 3.5.0-beta01, OkHttp 5.4.0, Okio 3.17.0.
+- Automated dependency updates and vulnerability scanning via Dependabot and OSV-Scanner.
+- Version catalog restructured into commented sections; unused libraries (Airbnb Lottie, jsoup, KSP) removed; androidx.browser moved into the catalog and updated to 1.10.0.
 
 ## [0.6.0] — 2026-05-19
 
