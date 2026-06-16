@@ -7,6 +7,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.interop.UIKitView
+import kotlinx.cinterop.BetaInteropApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -35,11 +36,11 @@ import platform.AVFoundation.timeControlStatus
 import platform.CoreGraphics.CGRectMake
 import platform.CoreMedia.CMTimeGetSeconds
 import platform.CoreMedia.CMTimeMake
-import platform.QuartzCore.CATransaction
 import platform.Foundation.NSNotificationCenter
 import platform.Foundation.NSOperationQueue
 import platform.Foundation.NSURL
 import platform.UIKit.UIView
+import platform.UIKit.UIViewMeta
 import platform.darwin.NSObjectProtocol
 
 /**
@@ -254,26 +255,28 @@ actual class VideoPlayerPool {
  * via `AVPlayerLayer.readyForDisplay` on the same tick.
  */
 /**
- * UIView whose only job is to keep its single [AVPlayerLayer] sublayer sized to
- * its bounds. The deprecated [UIKitView] IGNORES a custom `onResize`, and its
- * `update` runs before Compose lays the host out — so the only reliable place to
- * track the final size is the view's own `layoutSubviews` (the runtime explicitly
- * directs you here). Without it the layer stays at its 1×1 seed and the video
- * reads as transparent. The CATransaction kills the implicit CALayer frame
- * animation so the video doesn't visibly scale into place on each layout pass.
+ * UIView whose **backing layer IS the AVPlayerLayer** (via the `+layerClass`
+ * override). This is the canonical iOS video-view pattern and the robust choice
+ * inside CMP interop:
+ *
+ *  - The system's CALayer video receiver (`FigUseVideoReceiverForCALayer`)
+ *    targets the view's own backing layer, so the decoded frames actually
+ *    composite — an AVPlayerLayer added as a *sublayer* of a generic UIView
+ *    rendered transparent here.
+ *  - A backing layer always tracks the view's bounds, so there's no manual
+ *    frame-sync to get wrong (the deprecated UIKitView ignores `onResize`, and
+ *    its `update` runs pre-layout — both dead ends we hit before).
+ *
+ * Kotlin/Native overrides the ObjC class method `+layerClass` by having the
+ * companion extend [UIViewMeta].
  */
-private class PlayerContainerView(
-    val playerLayer: AVPlayerLayer,
-) : UIView(frame = CGRectMake(0.0, 0.0, 1.0, 1.0)) {
-    init { layer.addSublayer(playerLayer) }
-
-    override fun layoutSubviews() {
-        super.layoutSubviews()
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        playerLayer.setFrame(bounds)
-        CATransaction.commit()
+@OptIn(BetaInteropApi::class)
+private class PlayerContainerView : UIView(frame = CGRectMake(0.0, 0.0, 1.0, 1.0)) {
+    companion object : UIViewMeta() {
+        override fun layerClass() = AVPlayerLayer
     }
+
+    val playerLayer: AVPlayerLayer get() = layer as AVPlayerLayer
 }
 
 @Composable
@@ -283,9 +286,10 @@ actual fun VideoPlayerView(
     aspectRatio: Float,
     resizeMode: VideoResizeMode,
 ) {
-    val playerLayer = remember(player) {
-        AVPlayerLayer.playerLayerWithPlayer(player.avPlayer).apply {
-            videoGravity = when (resizeMode) {
+    val view = remember(player) {
+        PlayerContainerView().apply {
+            playerLayer.player = player.avPlayer
+            playerLayer.videoGravity = when (resizeMode) {
                 VideoResizeMode.Fit -> AVLayerVideoGravityResizeAspect
                 VideoResizeMode.Zoom -> AVLayerVideoGravityResizeAspectFill
             }
@@ -293,12 +297,12 @@ actual fun VideoPlayerView(
     }
     UIKitView(
         modifier = modifier,
-        factory = { PlayerContainerView(playerLayer) },
+        factory = { view },
     )
     LaunchedEffect(player) {
         while (isActive) {
             player.pollSync()
-            if (playerLayer.readyForDisplay) player.markFirstFrame()
+            if (view.playerLayer.readyForDisplay) player.markFirstFrame()
             delay(POLL_INTERVAL_MS)
         }
     }
