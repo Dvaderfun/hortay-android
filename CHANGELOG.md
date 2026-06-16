@@ -13,6 +13,7 @@
 - Profile sheets tint the avatar ring with the person's Telegram profile colour.
 
 ### Changed
+- Refreshed the app's icons to a softer, more modern rounded set throughout the interface.
 - The suggested channels are a refreshed, verified set loaded from an online list — Ukrainian channels first for Ukrainian readers, an international set otherwise — so it stays current without an app update.
 - Block quotes and code blocks now render the same way on every surface — feed, channel, comments and the open post — as padded blocks, with collapsible quotes and a one-tap "Show more" that opens the post instead of splitting into several toggles.
 - Photos, stickers, custom emoji and GIFs now fade in over their preview instead of popping, and avatars no longer flash a letter before their picture loads.
