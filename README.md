@@ -48,7 +48,7 @@ The Gradle wrapper is checked in — no separate `gradle wrapper` step
 
 ## Stack
 
-AGP 9.2.0 · Gradle 9.5.1 · Kotlin 2.3.10 (K2) · Compose Multiplatform 1.12.0-alpha01 · Material 3 1.5.0-alpha19 · Koin 4.2.1 · minSdk 26 / targetSdk 36 · TDLib pinned in `scripts/tdlib-version.txt` · Coroutines 1.10.1 · Coil 3.3.0 · SQLDelight 2.3.2 (guest mode only) · Ktor 3.5.0 · DataStore 1.2.0
+AGP 9.2.1 · Gradle 9.5.1 · Kotlin 2.4.0 (K2) · Compose Multiplatform 1.12.0-alpha01 · Material 3 1.5.0-alpha19 · Koin 4.2.1 · minSdk 26 / targetSdk 36 · TDLib pinned in `scripts/tdlib-version.txt` · Coroutines 1.11.0 · Coil 3.5.0-beta01 · SQLDelight 2.3.2 (guest mode only) · Ktor 3.5.0 · DataStore 1.2.1
 
 ## Architecture
 

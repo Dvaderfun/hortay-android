@@ -169,7 +169,7 @@ adb logcat -s TdClient MediaCache PostsRepository ChatPresence
 adb shell run-as dev.lyo.hortay tail -f files/td-logs/td.log  # TDLib internal log (debug builds, LOG_VERBOSITY=1)
 ```
 
-Toolchain: JDK 21, Gradle 9.5.1, AGP 9.2.0, Kotlin 2.3.10 (K2), Compose Multiplatform 1.12.0-alpha01, Koin 4.2.1, SQLDelight 2.3.2.2, Ktor 3.5.0, Coil 3.3.0. Compose Compiler via `org.jetbrains.kotlin.plugin.compose`.
+Toolchain: JDK 21, Gradle 9.5.1, AGP 9.2.1, Kotlin 2.4.0 (K2), Compose Multiplatform 1.12.0-alpha01, Koin 4.2.1, SQLDelight 2.3.2, Ktor 3.5.0, Coil 3.5.0-beta01. Compose Compiler via `org.jetbrains.kotlin.plugin.compose`.
 
 ### Verifying rules
 

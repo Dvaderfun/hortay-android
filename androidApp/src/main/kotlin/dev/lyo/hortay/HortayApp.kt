@@ -2,6 +2,7 @@ package dev.lyo.hortay
 
 import android.app.Application
 import android.content.Context
+import android.os.StrictMode
 import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
@@ -41,6 +42,7 @@ class HortayApp : Application(), SingletonImageLoader.Factory {
 
     override fun onCreate() {
         super.onCreate()
+        if (BuildConfig.DEBUG) enableStrictMode()
         // PlatformContextHolder must init BEFORE Koin starts — the KMP
         // createPreferencesDataStore factory reads its app context to
         // resolve filesDir for the .preferences_pb on-disk file. Stores
@@ -74,6 +76,30 @@ class HortayApp : Application(), SingletonImageLoader.Factory {
         // observeFeed() collector on the main thread. A no-op SELECT here
         // moves the one-time ~50-100 ms cost off the critical path.
         appScope.launch { webRepository.subscribedUsernames() }
+    }
+
+    // Catch accidental main-thread disk/network I/O and leaked Closeables/registrations
+    // early, while the codebase is clean (no runBlocking; Koin init is async). DEBUG
+    // only. penaltyLog — NOT penaltyDeath: TDLib JNI and profileinstaller produce a few
+    // benign first-launch reads, and killing the process on those would be pure noise.
+    // If a specific known-benign violation starts spamming the log, wrap its call site in
+    // StrictMode.allowThreadDiskReads() rather than relaxing the policy globally.
+    private fun enableStrictMode() {
+        StrictMode.setThreadPolicy(
+            StrictMode.ThreadPolicy.Builder()
+                .detectDiskReads()
+                .detectDiskWrites()
+                .detectNetwork()
+                .penaltyLog()
+                .build(),
+        )
+        StrictMode.setVmPolicy(
+            StrictMode.VmPolicy.Builder()
+                .detectLeakedClosableObjects()
+                .detectLeakedRegistrationObjects()
+                .penaltyLog()
+                .build(),
+        )
     }
 
     override fun newImageLoader(context: PlatformContext): ImageLoader = ImageLoader.Builder(context)

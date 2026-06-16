@@ -1,10 +1,148 @@
+# =============================================================================
+# Gradle Version Catalog — Hortay KMP/CMP (Android + iOS)
+# =============================================================================
+#
+# BOM-managed artifacts (versions intentionally omitted on individual libs):
+#   Compose (androidApp tooling): implementation(platform(libs.compose.bom))
+#
+# =============================================================================
+
 [versions]
-agp = "9.2.0"
-kotlin = "2.3.10"
-ksp = "2.3.10-2.0.0"
-composeMultiplatform = "1.12.0-alpha01"
-# JetBrains' direct Maven coords for the CMP Compose libraries. The `compose.*`
-# DSL accessor (deprecated in CMP 1.12) resolves to a stub variant that marks
+
+# ── Build toolchain ──────────────────────────────────────────────────────────
+agp                     = "9.2.1"
+kotlin                  = "2.4.0"
+compose-multiplatform   = "1.12.0-alpha01"
+
+# ── Compose BOM (Android) + Material 3 Expressive pin ────────────────────────
+compose-bom             = "2026.05.01"
+# material3 explicitly pinned to the Expressive alpha (released 2026-05-06).
+# Pre-May BOMs ship material3 1.4.0 stable, which lacks MaterialShapes,
+# LoadingIndicator, FloatingToolbar, ButtonGroup, FlexibleTopAppBar and the
+# expressive motion scheme — i.e. the entire surface this app's design refresh
+# is built on. We override the BOM-supplied version explicitly (Google's
+# documented escape hatch for ranged early-adopt of material3 ahead of the
+# next BOM cut). Held at alpha19 deliberately: CMP 1.12.0-alpha01's common
+# material3 maps to this alpha's API surface; bumping the Android pin past it
+# risks expect/actual drift. Revisit together with the next CMP alpha.
+compose-material3       = "1.5.0-alpha19"
+# graphics-shapes powers the Morph API used for shape interpolation between
+# MaterialShapes presets (e.g. Square <-> Cookie9Sided on reaction toggle).
+# Pulled transitively by material3 1.5.x, but declaring it explicitly lets the
+# theme module reference Morph / RoundedPolygon directly without depending on
+# material3's internal export surface.
+graphics-shapes         = "1.1.0"
+
+# ── AndroidX ─────────────────────────────────────────────────────────────────
+androidx-core           = "1.19.0"
+androidx-appcompat      = "1.7.1"
+androidx-activity       = "1.13.0"
+# androidx.browser — Custom Tabs for the Safety-section external links. 1.9+
+# raised minSdk to 23 (we're 26) and added Auth Tab / ephemeral-tab APIs; the
+# basic CustomTabsIntent launchUrl path this app uses is unchanged from 1.8.
+androidx-browser        = "1.10.0"
+androidx-datastore      = "1.2.1"
+androidx-splashscreen   = "1.2.0"
+media3                  = "1.10.1"
+
+# ── AndroidX Lifecycle & Navigation 3 ────────────────────────────────────────
+# lifecycle also versions lifecycle-viewmodel-navigation3 (per-NavEntry
+# ViewModelStore decorator). KMP variants (iosarm64, iossimulatorarm64)
+# published under raw `androidx.*` at Google Maven; JetBrains does NOT
+# re-publish that artifact.
+lifecycle               = "2.11.0-rc01"
+# Navigation 3 — `androidx.navigation3:navigation3-runtime` is Jetpack directly
+# (KMP variants published at Google Maven); `org.jetbrains.androidx.navigation3:
+# navigation3-ui` is the JetBrains KMP port of NavDisplay + Scene/SceneStrategy.
+# Runtime patch releases (1.1.2) land ahead of the JetBrains ui re-cut (1.1.1) —
+# hence two refs.
+navigation3-runtime     = "1.1.2"
+navigation3-ui          = "1.1.1"
+# Companion KMP back-event substrate paired with nav3. Pulled transitively by
+# navigation3-ui; declared so the version is pinned, not consumed directly —
+# Hortay keeps CMP `PredictiveBackHandler` for the overlay peek transform.
+navigation-event        = "1.1.0"
+
+# ── KotlinX ──────────────────────────────────────────────────────────────────
+kotlinx-coroutines      = "1.11.0"
+kotlinx-serialization   = "1.11.0"
+kotlinx-datetime        = "0.8.0"
+# Held at 0.4.0 deliberately: 0.5.0 renames every copy-returning method per
+# KEEP-0459 (add→adding, put→putting, …) and deprecates the old names — a
+# codebase-wide mechanical migration this Compose-stability-critical surface
+# does in one dedicated commit, not as a drive-by bump.
+kotlinx-collections     = "0.4.0"
+atomicfu                = "0.33.0"
+
+# ── Networking ───────────────────────────────────────────────────────────────
+ktor                    = "3.5.0"
+okhttp                  = "5.4.0"
+okio                    = "3.17.0"
+
+# ── Dependency injection ─────────────────────────────────────────────────────
+# Koin 4.x — KMP DI. Requires Kotlin 2.0+, CMP 1.7+. KMP compose-viewmodel
+# reads LocalViewModelStoreOwner, so the per-NavTarget ViewModelStoreOwner
+# contract carries forward unchanged via nav3's
+# rememberViewModelStoreNavEntryDecorator.
+koin                    = "4.2.1"
+
+# ── Data & parsing ───────────────────────────────────────────────────────────
+sqldelight              = "2.3.2"
+# Ksoup — KMP port of Jsoup (same DOM + selector API), HTML parsing on iOS too.
+ksoup                   = "0.2.6"
+# KMP port of java-diff-utils (Myers diff). Pure-Kotlin, all targets — used by
+# the post-archive edit-history diff.
+multiplatform-diff      = "1.3.0"
+
+# ── Media & UI ───────────────────────────────────────────────────────────────
+# Stable compottie 2.2.x targets Compose MP 1.11 and breaks on our 1.12 (skiko
+# binary mismatch — `IrLinkageError: GradientStyle.<init>` from compottie-core's
+# PlatformShader.skiko the moment a gradient sticker renders). The only
+# Compose-1.12 build is this SNAPSHOT from sonatype maven-snapshots (repo
+# scoped to this group in settings.gradle.kts). SNAPSHOT = mutable /
+# non-reproducible; pin to the stable Compose-1.12 release when it ships.
+compottie               = "2.2.1-compose-1.12-SNAPSHOT"
+coil                    = "3.5.0-beta01"
+
+# ── Debug & analysis ─────────────────────────────────────────────────────────
+leakcanary              = "2.14"
+# detekt 1.23.8 — last 1.23.x release on the 1.x line, K2 not officially
+# supported by detekt's embedded compiler yet (tracked in detekt/detekt#6198)
+# but the engine still parses Kotlin 2.x sources via the bundled K1 frontend
+# with a small number of known false-negatives on context receivers /
+# multidollar strings — acceptable trade-off until 2.0.0 lands. Re-evaluate
+# when detekt 2.x ships.
+detekt                  = "1.23.8"
+# nlopez/compose-rules — community Compose-specific lint rules. 0.4.x is the
+# line that tracks detekt 1.23.x; 0.5+/0.6+ target the detekt 2.x engine.
+detekt-rules-compose    = "0.4.22"
+
+# ── Testing & benchmarking ───────────────────────────────────────────────────
+junit5                  = "5.14.4"
+junit-platform          = "1.14.4"
+benchmark               = "1.5.0-alpha06"
+profileinstaller        = "1.4.1"
+uiautomator             = "2.4.0-beta02"
+androidx-test-ext       = "1.3.0"
+
+
+# =============================================================================
+[libraries]
+# =============================================================================
+
+# ── Compose BOM & core (version-less — managed by compose-bom) ───────────────
+compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "compose-bom" }
+compose-ui = { group = "androidx.compose.ui", name = "ui" }
+compose-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
+compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
+compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
+compose-ui-text-google-fonts = { group = "androidx.compose.ui", name = "ui-text-google-fonts" }
+compose-material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "compose-material3" }
+androidx-graphics-shapes = { group = "androidx.graphics", name = "graphics-shapes", version.ref = "graphics-shapes" }
+
+# ── Compose Multiplatform (JetBrains) ────────────────────────────────────────
+# Direct Maven coords for the CMP Compose libraries. The `compose.*` DSL
+# accessor (deprecated in CMP 1.12) resolves to a stub variant that marks
 # Material3 Expressive symbols as `internal` in the iOS klib publication.
 # Going through the direct coords exposes Expressive on iOS — `MotionScheme`,
 # `MaterialExpressiveTheme`, the *Wavy* progress indicators, ButtonGroup
@@ -12,210 +150,34 @@ composeMultiplatform = "1.12.0-alpha01"
 # Stripped widgets (LargeFlexibleTopAppBar, HorizontalFloatingToolbar,
 # MaterialShapes, LoadingIndicator) remain unavailable — those need
 # expect/actual shims with non-Expressive substitutes on iOS.
-composeBom = "2026.04.01"
-# material3 explicitly pinned to the Expressive alpha (released 2026-05-06).
-# The April BOM ships material3 1.4.0 stable, which lacks MaterialShapes,
-# LoadingIndicator, FloatingToolbar, ButtonGroup, FlexibleTopAppBar and the
-# expressive motion scheme — i.e. the entire surface this app's design refresh
-# is built on. We override the BOM-supplied version explicitly (Google's
-# documented escape hatch for ranged early-adopt of material3 ahead of the
-# next BOM cut). When the next BOM ships >=1.5.0, drop this override.
-composeMaterial3 = "1.5.0-alpha19"
-# graphics-shapes powers the Morph API used for shape interpolation between
-# MaterialShapes presets (e.g. Square <-> Cookie9Sided on reaction toggle).
-# Pulled transitively by material3 1.5.x, but declaring it explicitly lets the
-# theme module reference Morph / RoundedPolygon directly without depending on
-# material3's internal export surface.
-graphicsShapes = "1.1.0"
-coreKtx = "1.16.0"
-appcompat = "1.7.0"
-activityCompose = "1.10.0"
-lifecycle = "2.11.0-beta02"
-coroutines = "1.10.1"
-serialization = "1.7.3"
-# KMP port of java-diff-utils (Myers diff). Pure-Kotlin, all targets — used by the
-# post-archive edit-history diff. Replaces the JVM-only io.github.java-diff-utils.
-multiplatformDiff = "1.1.0"
-datastore = "1.2.1"
-coil = "3.3.0"
-splashscreen = "1.2.0"
-media3 = "1.10.0"
-immutable = "0.4.0"
-kotlinxDatetime = "0.6.2"
-atomicfu = "0.27.0"
-leakcanary = "2.14"
-lottie = "6.6.0"
-compottie = "2.2.0-beta01"
-jsoup = "1.18.3"
-ksoup = "0.2.6"
-okhttp = "4.12.0"
-ktor = "3.5.0"
-okio = "3.10.2"
-sqldelight = "2.3.2"
-# Koin 4.x — KMP DI. Requires Kotlin 2.0+, CMP 1.7+. We're on Kotlin 2.3.10 +
-# CMP 1.12, both well past the floor. KMP compose-viewmodel reads
-# LocalViewModelStoreOwner, so the existing per-NavTarget ViewModelStoreOwner
-# contract carries forward unchanged via nav3's
-# rememberViewModelStoreNavEntryDecorator.
-koin = "4.2.1"
-# Navigation 3 — JetBrains KMP port of Jetpack Navigation3 1.1.1, shipped with
-# CMP 1.12.0-alpha01. NavKey + NavBackStack + NavDisplay + Scene/SceneStrategy
-# work on every CMP target (android, ios, desktop, wasmJs). Replaces the
-# bespoke `NavStack` substrate; the Koin-singleton NavStack wrapper survives
-# because rememberNavBackStack is composition-scoped and would not outlive the
-# MainScaffold ↔ WebModeScaffold swap on guest-mode toggles.
-navigation3 = "1.1.1"
-# Companion lib for cross-platform predictive-back coordination. `NavDisplay`
-# pairs with it under the hood; we keep our existing
-# `androidx.compose.ui.backhandler.PredictiveBackHandler` for the host-driven
-# overlay peek transform, so this lib is pulled transitively but not consumed
-# directly by app code at the moment.
-navigationEvent = "1.1.0"
-# lifecycle-viewmodel-navigation3 provides
-# `rememberViewModelStoreNavEntryDecorator()` (per-NavEntry ViewModelStore
-# isolation). KMP variants (iosarm64, iossimulatorarm64) published under raw
-# `androidx.*` at Google Maven; JetBrains does NOT re-publish this artifact.
-junit5 = "5.11.4"
-junitPlatform = "1.11.4"
-kotlinxCoroutinesTest = "1.10.1"
-benchmark = "1.5.0-alpha05"
-profileinstaller = "1.4.1"
-uiautomator = "2.4.0-beta02"
-androidxTestExt = "1.3.0"
-# detekt 1.23.7 — last 1.23.x release on the 1.x line, K2 not officially supported
-# by detekt's embedded compiler yet (tracked in detekt/detekt#6198) but the engine
-# still parses Kotlin 2.x sources via the bundled K1 frontend with a small number
-# of known false-negatives on context receivers / multidollar strings — acceptable
-# trade-off until 2.0.0-alpha lands. Re-evaluate when detekt 2.x ships.
-detekt = "1.23.7"
-# nlopez/compose-rules — community Compose-specific lint rules (Modifier ordering,
-# stable params, lambda parameter naming/position, content-emitter return values,
-# etc.). 0.4.22 is the latest 0.4.x release; tracks detekt 1.23.x.
-detektRulesCompose = "0.4.22"
+jetbrains-compose-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "compose-multiplatform" }
+jetbrains-compose-foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "compose-multiplatform" }
+jetbrains-compose-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "compose-multiplatform" }
+jetbrains-compose-ui-backhandler = { module = "org.jetbrains.compose.ui:ui-backhandler", version.ref = "compose-multiplatform" }
+jetbrains-compose-material3 = { module = "org.jetbrains.compose.material3:material3", version.ref = "compose-multiplatform" }
+jetbrains-compose-components-resources = { module = "org.jetbrains.compose.components:components-resources", version.ref = "compose-multiplatform" }
 
-[libraries]
-androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
-androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
-androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
+# ── AndroidX core ────────────────────────────────────────────────────────────
+androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "androidx-core" }
+androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "androidx-appcompat" }
+androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "androidx-activity" }
+androidx-browser = { group = "androidx.browser", name = "browser", version.ref = "androidx-browser" }
+androidx-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "androidx-splashscreen" }
+androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "androidx-datastore" }
+# datastore-preferences-core is the KMP-friendly variant (no Android deps).
+# commonMain uses this; androidMain pulls the full datastore-preferences for
+# the Context-backed `preferencesDataStore` delegate (legacy stores still use it).
+androidx-datastore-preferences-core = { group = "androidx.datastore", name = "datastore-preferences-core", version.ref = "androidx-datastore" }
+
+# ── AndroidX Lifecycle ───────────────────────────────────────────────────────
 androidx-lifecycle-process = { group = "androidx.lifecycle", name = "lifecycle-process", version.ref = "lifecycle" }
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycle" }
 androidx-lifecycle-viewmodel-compose = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-compose", version.ref = "lifecycle" }
 androidx-lifecycle-runtime-compose = { group = "androidx.lifecycle", name = "lifecycle-runtime-compose", version.ref = "lifecycle" }
-androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
-# datastore-preferences-core is the KMP-friendly variant (no Android deps).
-# commonMain uses this; androidMain pulls the full datastore-preferences for
-# the Context-backed `preferencesDataStore` delegate (legacy stores still use it).
-androidx-datastore-preferences-core = { group = "androidx.datastore", name = "datastore-preferences-core", version.ref = "datastore" }
-androidx-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "splashscreen" }
 
-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
-compose-ui = { group = "androidx.compose.ui", name = "ui" }
-compose-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
-compose-material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "composeMaterial3" }
-androidx-graphics-shapes = { group = "androidx.graphics", name = "graphics-shapes", version.ref = "graphicsShapes" }
-compose-ui-text-google-fonts = { group = "androidx.compose.ui", name = "ui-text-google-fonts" }
-
-kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
-kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }
-kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serialization" }
-# ProtoBuf format for kotlinx.serialization — KMP-native, used for compact on-disk
-# post-archive snapshot blobs (ContentBlobCodec).
-kotlinx-serialization-protobuf = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-protobuf", version.ref = "serialization" }
-# KMP port of java-diff-utils — post-archive edit-history diff (PostDiff).
-multiplatform-diff = { module = "io.github.petertrr:kotlin-multiplatform-diff", version.ref = "multiplatformDiff" }
-
-coil-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref = "coil" }
-# Coil network fetcher. ktor3 variant uses Ktor HttpClient (KMP) — required
-# for iOS where OkHttp doesn't link. Engine picked per-platform automatically
-# via the Ktor client engines already on the classpath (OkHttp on Android,
-# Darwin on iOS). Replaces coil-network-okhttp from Phase 1.
-coil-network-ktor3 = { group = "io.coil-kt.coil3", name = "coil-network-ktor3", version.ref = "coil" }
-coil-gif = { group = "io.coil-kt.coil3", name = "coil-gif", version.ref = "coil" }
-coil-video = { group = "io.coil-kt.coil3", name = "coil-video", version.ref = "coil" }
-
-media3-exoplayer = { group = "androidx.media3", name = "media3-exoplayer", version.ref = "media3" }
-media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "media3" }
-media3-common = { group = "androidx.media3", name = "media3-common", version.ref = "media3" }
-
-kotlinx-collections-immutable = { group = "org.jetbrains.kotlinx", name = "kotlinx-collections-immutable", version.ref = "immutable" }
-
-jetbrains-compose-runtime     = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "composeMultiplatform" }
-jetbrains-compose-foundation  = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "composeMultiplatform" }
-jetbrains-compose-ui          = { module = "org.jetbrains.compose.ui:ui", version.ref = "composeMultiplatform" }
-jetbrains-compose-ui-backhandler = { module = "org.jetbrains.compose.ui:ui-backhandler", version.ref = "composeMultiplatform" }
-jetbrains-compose-material3   = { module = "org.jetbrains.compose.material3:material3", version.ref = "composeMultiplatform" }
-jetbrains-compose-components-resources = { module = "org.jetbrains.compose.components:components-resources", version.ref = "composeMultiplatform" }
-kotlinx-datetime = { group = "org.jetbrains.kotlinx", name = "kotlinx-datetime", version.ref = "kotlinxDatetime" }
-kotlinx-atomicfu = { group = "org.jetbrains.kotlinx", name = "atomicfu", version.ref = "atomicfu" }
-
-leakcanary-android = { group = "com.squareup.leakcanary", name = "leakcanary-android", version.ref = "leakcanary" }
-
-lottie-compose = { group = "com.airbnb.android", name = "lottie-compose", version.ref = "lottie" }
-# Compottie — KMP Lottie renderer (pure Kotlin, no platform delegates). Replaces
-# com.airbnb.android:lottie-compose so TGS animations work on iOS. compottie-network
-# adds URL-based LottieCompositionSpec.Url loading; compottie-dot covers
-# dotLottie if needed later.
-compottie = { group = "io.github.alexzhirkevich", name = "compottie", version.ref = "compottie" }
-compottie-network = { group = "io.github.alexzhirkevich", name = "compottie-network", version.ref = "compottie" }
-
-jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
-# Ksoup — KMP port of Jsoup. Replaces jsoup so HTML parsing works on iOS too.
-# Same DOM + selector API; mostly drop-in import swap.
-ksoup = { group = "com.fleeksoft.ksoup", name = "ksoup", version.ref = "ksoup" }
-okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
-
-# Ktor 3.x — KMP HTTP client. Core in commonMain; engines per-platform
-# (OkHttp on Android — keeps OkHttp's disk cache + connection pooling under
-# the hood; Darwin on iOS — uses NSURLSession). Replaces direct OkHttp
-# usage in WebTelegramClient / WebCustomEmojiResolver / LottieUrlStore so
-# they compile on iOS too.
-ktor-client-core = { group = "io.ktor", name = "ktor-client-core", version.ref = "ktor" }
-ktor-client-okhttp = { group = "io.ktor", name = "ktor-client-okhttp", version.ref = "ktor" }
-ktor-client-darwin = { group = "io.ktor", name = "ktor-client-darwin", version.ref = "ktor" }
-ktor-client-content-negotiation = { group = "io.ktor", name = "ktor-client-content-negotiation", version.ref = "ktor" }
-ktor-serialization-kotlinx-json = { group = "io.ktor", name = "ktor-serialization-kotlinx-json", version.ref = "ktor" }
-
-# Okio — KMP filesystem abstraction. Used by DataStore's KMP factory
-# (PreferenceDataStoreFactory.createWithPath) and elsewhere where common code
-# needs a platform-neutral path / file handle.
-okio = { group = "com.squareup.okio", name = "okio", version.ref = "okio" }
-
-# SQLDelight 2.x — typed SQL DAO for the anonymous web-mode database (web.db).
-# Android driver provides AndroidSqliteDriver wrapping AOSP SQLiteOpenHelper;
-# coroutines-extensions exposes asFlow()/mapToList() helpers for StateFlow plumbing.
-sqldelight-android-driver = { group = "app.cash.sqldelight", name = "android-driver", version.ref = "sqldelight" }
-# Native driver for iOS targets. Same schema/queries, different SQLite backend
-# (sqlite3 system lib on iOS instead of Android's SupportSQLiteOpenHelper).
-sqldelight-native-driver = { group = "app.cash.sqldelight", name = "native-driver", version.ref = "sqldelight" }
-sqldelight-coroutines-extensions = { group = "app.cash.sqldelight", name = "coroutines-extensions", version.ref = "sqldelight" }
-
-junit-jupiter = { group = "org.junit.jupiter", name = "junit-jupiter", version.ref = "junit5" }
-junit-platform-launcher = { group = "org.junit.platform", name = "junit-platform-launcher", version.ref = "junitPlatform" }
-kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "kotlinxCoroutinesTest" }
-
-androidx-profileinstaller = { group = "androidx.profileinstaller", name = "profileinstaller", version.ref = "profileinstaller" }
-androidx-benchmark-macro-junit4 = { group = "androidx.benchmark", name = "benchmark-macro-junit4", version.ref = "benchmark" }
-androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidxTestExt" }
-androidx-test-uiautomator = { group = "androidx.test.uiautomator", name = "uiautomator", version.ref = "uiautomator" }
-
-# Detekt Compose rules — loaded into the detekt classpath via `detektPlugins(...)`
-# in shared/build.gradle.kts. Not an `implementation` dep — it never reaches the APK.
-detekt-rules-compose = { group = "io.nlopez.compose.rules", name = "detekt", version.ref = "detektRulesCompose" }
-
-# Koin — KMP DI. `koin-core` is platform-agnostic; `koin-android` adds the
-# Application-bound startKoin { androidContext(this) } DSL; `koin-compose`
-# provides KMP koinInject() / KoinContext { … }; `koin-compose-viewmodel`
-# provides KMP koinViewModel() reading LocalViewModelStoreOwner. `koin-test`
-# enables verify() on module graphs (CI gate).
-koin-core = { group = "io.insert-koin", name = "koin-core", version.ref = "koin" }
-koin-android = { group = "io.insert-koin", name = "koin-android", version.ref = "koin" }
-koin-compose = { group = "io.insert-koin", name = "koin-compose", version.ref = "koin" }
-koin-compose-viewmodel = { group = "io.insert-koin", name = "koin-compose-viewmodel", version.ref = "koin" }
-
-# Navigation 3. Two groups:
-#  - `androidx.navigation3:navigation3-runtime` — Jetpack 1.1.1 directly. KMP
+# ── Navigation 3 ─────────────────────────────────────────────────────────────
+# Two groups:
+#  - `androidx.navigation3:navigation3-runtime` — Jetpack directly. KMP
 #    variants (iosarm64, iossimulatorarm64) ARE published here, despite the
 #    androidx group name; the JetBrains repo does NOT re-publish the runtime.
 #  - `org.jetbrains.androidx.navigation3:navigation3-ui` — JetBrains KMP port of
@@ -226,9 +188,9 @@ koin-compose-viewmodel = { group = "io.insert-koin", name = "koin-compose-viewmo
 # substrate paired with nav3. Hortay keeps the existing CMP
 # `PredictiveBackHandler` for the host-driven overlay peek transform — see
 # ARCHITECTURE.md rule on nav3.
-navigation3-runtime = { module = "androidx.navigation3:navigation3-runtime", version.ref = "navigation3" }
-jetbrains-navigation3-ui = { module = "org.jetbrains.androidx.navigation3:navigation3-ui", version.ref = "navigation3" }
-jetbrains-navigationevent-compose = { module = "org.jetbrains.androidx.navigationevent:navigationevent-compose", version.ref = "navigationEvent" }
+navigation3-runtime = { module = "androidx.navigation3:navigation3-runtime", version.ref = "navigation3-runtime" }
+jetbrains-navigation3-ui = { module = "org.jetbrains.androidx.navigation3:navigation3-ui", version.ref = "navigation3-ui" }
+jetbrains-navigationevent-compose = { module = "org.jetbrains.androidx.navigationevent:navigationevent-compose", version.ref = "navigation-event" }
 # Per-NavEntry ViewModelStore decorator. Without this we'd have to hand-roll
 # the equivalent — nav3-runtime ships only `rememberSaveableStateHolderNavEntryDecorator`;
 # the VM decorator lives in this companion artifact (raw `androidx.lifecycle`
@@ -236,7 +198,98 @@ jetbrains-navigationevent-compose = { module = "org.jetbrains.androidx.navigatio
 # natively, no JetBrains fork needed).
 lifecycle-viewmodel-navigation3 = { module = "androidx.lifecycle:lifecycle-viewmodel-navigation3", version.ref = "lifecycle" }
 
+# ── KotlinX ──────────────────────────────────────────────────────────────────
+kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
+kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "kotlinx-coroutines" }
+kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }
+kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
+# ProtoBuf format for kotlinx.serialization — KMP-native, used for compact
+# on-disk post-archive snapshot blobs (ContentBlobCodec).
+kotlinx-serialization-protobuf = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-protobuf", version.ref = "kotlinx-serialization" }
+kotlinx-collections-immutable = { group = "org.jetbrains.kotlinx", name = "kotlinx-collections-immutable", version.ref = "kotlinx-collections" }
+kotlinx-datetime = { group = "org.jetbrains.kotlinx", name = "kotlinx-datetime", version.ref = "kotlinx-datetime" }
+kotlinx-atomicfu = { group = "org.jetbrains.kotlinx", name = "atomicfu", version.ref = "atomicfu" }
+
+# ── Networking (Ktor / OkHttp / Okio) ────────────────────────────────────────
+# Ktor 3.x — KMP HTTP client. Core in commonMain; engines per-platform
+# (OkHttp on Android — keeps OkHttp's disk cache + connection pooling under
+# the hood; Darwin on iOS — uses NSURLSession). Replaces direct OkHttp
+# usage in WebTelegramClient / WebCustomEmojiResolver / LottieUrlStore so
+# they compile on iOS too.
+ktor-client-core = { group = "io.ktor", name = "ktor-client-core", version.ref = "ktor" }
+ktor-client-okhttp = { group = "io.ktor", name = "ktor-client-okhttp", version.ref = "ktor" }
+ktor-client-darwin = { group = "io.ktor", name = "ktor-client-darwin", version.ref = "ktor" }
+ktor-client-content-negotiation = { group = "io.ktor", name = "ktor-client-content-negotiation", version.ref = "ktor" }
+ktor-serialization-kotlinx-json = { group = "io.ktor", name = "ktor-serialization-kotlinx-json", version.ref = "ktor" }
+okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+# Okio — KMP filesystem abstraction. Used by DataStore's KMP factory
+# (PreferenceDataStoreFactory.createWithPath) and elsewhere where common code
+# needs a platform-neutral path / file handle.
+okio = { group = "com.squareup.okio", name = "okio", version.ref = "okio" }
+
+# ── Data & parsing ───────────────────────────────────────────────────────────
+# SQLDelight 2.x — typed SQL DAO for the anonymous web-mode database (web.db).
+# Android driver provides AndroidSqliteDriver wrapping AOSP SQLiteOpenHelper;
+# coroutines-extensions exposes asFlow()/mapToList() helpers for StateFlow plumbing.
+sqldelight-android-driver = { group = "app.cash.sqldelight", name = "android-driver", version.ref = "sqldelight" }
+# Native driver for iOS targets. Same schema/queries, different SQLite backend
+# (sqlite3 system lib on iOS instead of Android's SupportSQLiteOpenHelper).
+sqldelight-native-driver = { group = "app.cash.sqldelight", name = "native-driver", version.ref = "sqldelight" }
+sqldelight-coroutines-extensions = { group = "app.cash.sqldelight", name = "coroutines-extensions", version.ref = "sqldelight" }
+# Ksoup — KMP port of Jsoup. Replaces jsoup so HTML parsing works on iOS too.
+# Same DOM + selector API; mostly drop-in import swap.
+ksoup = { group = "com.fleeksoft.ksoup", name = "ksoup", version.ref = "ksoup" }
+# KMP port of java-diff-utils — post-archive edit-history diff (PostDiff).
+multiplatform-diff = { module = "io.github.petertrr:kotlin-multiplatform-diff", version.ref = "multiplatform-diff" }
+
+# ── Media & UI ───────────────────────────────────────────────────────────────
+coil-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref = "coil" }
+# Coil network fetcher. ktor3 variant uses Ktor HttpClient (KMP) — required
+# for iOS where OkHttp doesn't link. Engine picked per-platform automatically
+# via the Ktor client engines already on the classpath (OkHttp on Android,
+# Darwin on iOS). Replaces coil-network-okhttp from Phase 1.
+coil-network-ktor3 = { group = "io.coil-kt.coil3", name = "coil-network-ktor3", version.ref = "coil" }
+coil-gif = { group = "io.coil-kt.coil3", name = "coil-gif", version.ref = "coil" }
+coil-video = { group = "io.coil-kt.coil3", name = "coil-video", version.ref = "coil" }
+media3-exoplayer = { group = "androidx.media3", name = "media3-exoplayer", version.ref = "media3" }
+media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "media3" }
+media3-common = { group = "androidx.media3", name = "media3-common", version.ref = "media3" }
+# Compottie — KMP Lottie renderer (pure Kotlin, no platform delegates). Replaces
+# com.airbnb.android:lottie-compose so TGS animations work on iOS. compottie-network
+# adds URL-based LottieCompositionSpec.Url loading; compottie-dot covers
+# dotLottie if needed later.
+compottie = { group = "io.github.alexzhirkevich", name = "compottie", version.ref = "compottie" }
+compottie-network = { group = "io.github.alexzhirkevich", name = "compottie-network", version.ref = "compottie" }
+
+# ── Dependency injection (Koin) ──────────────────────────────────────────────
+# `koin-core` is platform-agnostic; `koin-android` adds the Application-bound
+# startKoin { androidContext(this) } DSL; `koin-compose` provides KMP
+# koinInject() / KoinContext { … }; `koin-compose-viewmodel` provides KMP
+# koinViewModel() reading LocalViewModelStoreOwner.
+koin-core = { group = "io.insert-koin", name = "koin-core", version.ref = "koin" }
+koin-android = { group = "io.insert-koin", name = "koin-android", version.ref = "koin" }
+koin-compose = { group = "io.insert-koin", name = "koin-compose", version.ref = "koin" }
+koin-compose-viewmodel = { group = "io.insert-koin", name = "koin-compose-viewmodel", version.ref = "koin" }
+
+# ── Debug & analysis ─────────────────────────────────────────────────────────
+leakcanary-android = { group = "com.squareup.leakcanary", name = "leakcanary-android", version.ref = "leakcanary" }
+# Detekt Compose rules — loaded into the detekt classpath via `detektPlugins(...)`
+# in shared/build.gradle.kts. Not an `implementation` dep — it never reaches the APK.
+detekt-rules-compose = { group = "io.nlopez.compose.rules", name = "detekt", version.ref = "detekt-rules-compose" }
+
+# ── Testing & benchmarking ───────────────────────────────────────────────────
+junit-jupiter = { group = "org.junit.jupiter", name = "junit-jupiter", version.ref = "junit5" }
+junit-platform-launcher = { group = "org.junit.platform", name = "junit-platform-launcher", version.ref = "junit-platform" }
+androidx-profileinstaller = { group = "androidx.profileinstaller", name = "profileinstaller", version.ref = "profileinstaller" }
+androidx-benchmark-macro-junit4 = { group = "androidx.benchmark", name = "benchmark-macro-junit4", version.ref = "benchmark" }
+androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidx-test-ext" }
+androidx-test-uiautomator = { group = "androidx.test.uiautomator", name = "uiautomator", version.ref = "uiautomator" }
+
+
+# =============================================================================
 [plugins]
+# =============================================================================
+
 android-application = { id = "com.android.application", version.ref = "agp" }
 android-library = { id = "com.android.library", version.ref = "agp" }
 android-test = { id = "com.android.test", version.ref = "agp" }
@@ -244,7 +297,7 @@ android-multiplatform-library = { id = "com.android.kotlin.multiplatform.library
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
-compose-multiplatform = { id = "org.jetbrains.compose", version.ref = "composeMultiplatform" }
+compose-multiplatform = { id = "org.jetbrains.compose", version.ref = "compose-multiplatform" }
 baselineprofile = { id = "androidx.baselineprofile", version.ref = "benchmark" }
 sqldelight = { id = "app.cash.sqldelight", version.ref = "sqldelight" }
 detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }

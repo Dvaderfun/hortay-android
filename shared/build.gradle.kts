@@ -47,6 +47,15 @@ kotlin {
         binaries.framework {
             baseName = "Shared"
             isStatic = true
+            // Load-bearing on the 8 GB dev Mac: the OPTIMIZED release link of
+            // this module (200+ CMP files + the 33k-line generated TdApi.kt)
+            // OOMs the Kotlin/Native backend ("Java heap space" / GC-overhead)
+            // at every heap size the machine can host — verified on Kotlin
+            // 2.3.10 and 2.4.0, in-process and dedicated-daemon (5g/6g).
+            // Unoptimized linking fits easily. Runtime cost is real (slower
+            // JSON decode pipeline on cold start) — remove this override when
+            // release links move to CI / bigger hardware.
+            optimized = false
         }
         compilations.getByName("main").cinterops.create("tdjson") {
             defFile = project.file("src/iosArm64Main/cinterop/tdjson.def")
@@ -177,7 +186,7 @@ kotlin {
             implementation(libs.okhttp)
             implementation(libs.ktor.client.okhttp)
 
-            implementation("androidx.browser:browser:1.8.0")
+            implementation(libs.androidx.browser)
 
             implementation(libs.sqldelight.android.driver)
 
