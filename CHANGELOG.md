@@ -18,6 +18,7 @@
 - Photos, stickers, custom emoji and GIFs now fade in over their preview instead of popping, and avatars no longer flash a letter before their picture loads.
 - Tapping a reaction or voting in a poll now gives a light haptic tap.
 - The code screen now explains that the login code arrives inside Telegram on another signed-in device, not by SMS.
+- Sender names now read at least as large as the post body, restoring the author → message reading hierarchy.
 
 ### Fixed
 - In guest mode, typing a channel name or link by hand into "Add channel" now starts the search — tap the keyboard's search key or the "Find" button — instead of only working when a link was auto-filled from the clipboard.
