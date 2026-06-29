@@ -2,28 +2,41 @@
 
 package dev.lyo.hortay.ui.media
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.interop.UIKitView
-import kotlinx.cinterop.BetaInteropApi
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.toComposeImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.usePinned
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
-import platform.AVFoundation.AVLayerVideoGravityResizeAspect
-import platform.AVFoundation.AVLayerVideoGravityResizeAspectFill
+import kotlinx.coroutines.withContext
+import org.jetbrains.skia.ColorAlphaType
+import org.jetbrains.skia.ColorType
+import org.jetbrains.skia.Image as SkiaImage
+import org.jetbrains.skia.ImageInfo
 import platform.AVFoundation.AVPlayer
 import platform.AVFoundation.AVPlayerActionAtItemEndNone
 import platform.AVFoundation.AVPlayerItem
 import platform.AVFoundation.AVPlayerItemDidPlayToEndTimeNotification
-import platform.AVFoundation.AVPlayerLayer
+import platform.AVFoundation.AVPlayerItemVideoOutput
 import platform.AVFoundation.AVPlayerTimeControlStatusPaused
 import platform.AVFoundation.AVPlayerTimeControlStatusPlaying
 import platform.AVFoundation.AVPlayerTimeControlStatusWaitingToPlayAtSpecifiedRate
 import platform.AVFoundation.actionAtItemEnd
+import platform.AVFoundation.addOutput
 import platform.AVFoundation.currentItem
 import platform.AVFoundation.currentTime
 import platform.AVFoundation.duration
@@ -33,29 +46,42 @@ import platform.AVFoundation.play
 import platform.AVFoundation.replaceCurrentItemWithPlayerItem
 import platform.AVFoundation.seekToTime
 import platform.AVFoundation.timeControlStatus
+import platform.CoreGraphics.CGColorSpaceCreateDeviceRGB
 import platform.CoreGraphics.CGRectMake
+import platform.CoreImage.CIContext
+import platform.CoreImage.CIImage
+import platform.CoreImage.kCIFormatRGBA8
 import platform.CoreMedia.CMTimeGetSeconds
 import platform.CoreMedia.CMTimeMake
+import platform.CoreVideo.CVPixelBufferGetHeight
+import platform.CoreVideo.CVPixelBufferGetWidth
+import platform.CoreVideo.CVPixelBufferRef
+import platform.CoreVideo.CVPixelBufferRelease
+import platform.CoreVideo.kCVPixelBufferPixelFormatTypeKey
+import platform.CoreVideo.kCVPixelFormatType_32BGRA
 import platform.Foundation.NSNotificationCenter
 import platform.Foundation.NSOperationQueue
 import platform.Foundation.NSURL
-import platform.UIKit.UIView
-import platform.UIKit.UIViewMeta
+import platform.QuartzCore.CACurrentMediaTime
 import platform.darwin.NSObjectProtocol
 
 /**
- * iOS actual for [VideoPlayer] — minimal AVPlayer wrapper. AVPlayer exposes KVO
- * for `status` / `timeControlStatus`, but raw KVO bridging from Kotlin/Native is
- * verbose, so the state flows are refreshed by a polling tick instead — driven
- * by a coroutine in [VideoPlayerView] that calls [pollSync] while a view is
- * attached (NOT by chance recompositions; an earlier cut only ticked inside the
- * UIKitView `update` block, which never re-runs during steady playback, so the
- * whole control surface froze at its mount-time values). Upgrade to KVO via
- * NSObjectProtocol callbacks if the poll cadence ever costs anything measurable.
+ * iOS actual for [VideoPlayer] — an AVPlayer wrapper that renders through a
+ * **manual frame pump**, not a UIKit-hosted AVPlayerLayer/AVPlayerViewController.
  *
- * Compared to Android, iOS exposes nothing for first-frame detection out of the
- * box — `AVPlayerLayer.readyForDisplay` is the closest signal; [VideoPlayerView]
- * reads it on each tick and latches [firstFrameRendered].
+ * Why: inside Compose Multiplatform's iOS interop (CMP 1.12-alpha, iOS 27) a
+ * hardware-decoded AVPlayer surface never composited — verified exhaustively:
+ * AVPlayerLayer as a sublayer AND as a view's backing layer both stayed
+ * transparent, and AVPlayerViewController (both interop APIs) played audio with a
+ * ReadyToPlay item but showed a black picture. The frames render out-of-process
+ * (FigUseVideoReceiverForCALayer) and that IOSurface doesn't blend into CMP's
+ * Metal scene. So instead we tap decoded frames via [AVPlayerItemVideoOutput],
+ * copy each [CVPixelBufferRef] into a Skia raster, and draw it as an ordinary
+ * Compose [Image] — zero interop, so there is no foreign layer to fail to
+ * composite. AVPlayer still owns decode, audio, timing and seeking.
+ *
+ * State flows are refreshed by [pollSync] on the same view-bound tick (AVPlayer's
+ * KVO is left unwired — polling is cheaper here).
  */
 actual class VideoPlayer internal constructor(
     internal val avPlayer: AVPlayer,
@@ -81,13 +107,20 @@ actual class VideoPlayer internal constructor(
     /** Current source URI, for the no-op-on-same-URI contract (see [setSource]). */
     private var currentUri: String? = null
 
-    /**
-     * End-of-item observer token. Scoped to THIS player's current item (not the
-     * global `object = null`, which fires for every player and cross-talks the
-     * loop/Ended logic) and re-installed per source so it never leaks across a
-     * swap; removed in [resetForPool].
-     */
     private var endObserver: NSObjectProtocol? = null
+
+    private var loggedFrame = false // TEMP DIAGNOSTIC (revert)
+    private var frameTick = 0L // TEMP DIAGNOSTIC (revert)
+
+    // Frame tap for the manual pump. Created fresh per item in [setSource] — an
+    // AVPlayerItemVideoOutput attaches to exactly one item.
+    private var videoOutput: AVPlayerItemVideoOutput? = null
+
+    // Decoded frames come back YUV / 10-bit (not BGRA, even when requested), so a
+    // raw byte read can't feed Skia. CIContext renders any input format into
+    // tightly-packed RGBA8. One context + colour space per player.
+    private val ciContext = CIContext()
+    private val rgbColorSpace = CGColorSpaceCreateDeviceRGB()
 
     actual var playWhenReady: Boolean
         get() = pendingPlay
@@ -100,7 +133,6 @@ actual class VideoPlayer internal constructor(
         get() = pendingRepeatOne
         set(value) {
             pendingRepeatOne = value
-            // Drive loop manually via NSNotificationCenter (see installEndObserver).
             avPlayer.actionAtItemEnd = AVPlayerActionAtItemEndNone
         }
 
@@ -150,11 +182,70 @@ actual class VideoPlayer internal constructor(
 
     internal fun markFirstFrame() { _firstFrameRendered.value = true }
 
+    /**
+     * Pull the freshest decoded frame as a Compose [ImageBitmap], or null if no new
+     * frame is ready since the last call. Runs off the main thread (see
+     * [VideoPlayerView]); the copy + raster is the per-frame cost.
+     */
+    internal fun copyFrameBitmap(): ImageBitmap? {
+        val output = videoOutput ?: return null
+        val itemTime = output.itemTimeForHostTime(CACurrentMediaTime())
+        // Try copy directly (no hasNewPixelBuffer gate, which can starve the first
+        // frames during diagnosis).
+        val pb = output.copyPixelBufferForItemTime(itemTime, null)
+        if (frameTick++ % 30L == 0L) {
+            println("[HORTAY] pump tcs=${avPlayer.timeControlStatus} buf=${pb != null} t=${CMTimeGetSeconds(itemTime)}")
+        }
+        if (pb == null) return null
+        val bmp = pixelBufferToBitmap(pb)
+        CVPixelBufferRelease(pb) // we own the +1 from copyPixelBuffer…
+        return bmp
+    }
+
+    private fun pixelBufferToBitmap(pb: CVPixelBufferRef): ImageBitmap? {
+        val width = CVPixelBufferGetWidth(pb).toInt()
+        val height = CVPixelBufferGetHeight(pb).toInt()
+        if (width <= 0 || height <= 0) return null
+        _videoAspect.value = width.toFloat() / height.toFloat()
+        val rowBytes = width * 4
+        val bytes = ByteArray(rowBytes * height)
+        // CIContext rasterises the (YUV/HDR) frame into the RGBA8 buffer we own,
+        // tightly packed (rowBytes = width×4), so Skia accepts it directly.
+        bytes.usePinned { pinned ->
+            ciContext.render(
+                CIImage.imageWithCVPixelBuffer(pb),
+                toBitmap = pinned.addressOf(0),
+                rowBytes = rowBytes.toLong(),
+                bounds = CGRectMake(0.0, 0.0, width.toDouble(), height.toDouble()),
+                format = kCIFormatRGBA8,
+                colorSpace = rgbColorSpace,
+            )
+        }
+        if (!loggedFrame) { loggedFrame = true; println("[HORTAY] first frame ${width}x$height via CIContext") }
+        val info = ImageInfo(width, height, ColorType.RGBA_8888, ColorAlphaType.OPAQUE)
+        return SkiaImage.makeRaster(info, bytes, rowBytes).toComposeImageBitmap()
+    }
+
     actual fun setSource(uri: String) {
         if (uri == currentUri) return // honour the documented no-op-on-same-URI contract
-        val url = NSURL.URLWithString(uri) ?: return
+        // Local TDLib files MUST go through fileURLWithPath — NSURL.URLWithString on a
+        // raw "file://<path>" mis-parses any path with spaces / unicode. Remote (https)
+        // web-mode streams use URLWithString.
+        val url = if (uri.startsWith("file://")) {
+            NSURL.fileURLWithPath(uri.removePrefix("file://"))
+        } else {
+            NSURL.URLWithString(uri)
+        } ?: return
         currentUri = uri
+        loggedFrame = false
         val item = AVPlayerItem.playerItemWithURL(url)
+        val output = AVPlayerItemVideoOutput(
+            pixelBufferAttributes = mapOf<Any?, Any>(
+                kCVPixelBufferPixelFormatTypeKey to kCVPixelFormatType_32BGRA,
+            ),
+        )
+        item.addOutput(output)
+        videoOutput = output
         avPlayer.replaceCurrentItemWithPlayerItem(item)
         installEndObserver(item)
         _firstFrameRendered.value = false
@@ -184,9 +275,9 @@ actual class VideoPlayer internal constructor(
     }
 
     /**
-     * Reset to a clean state for a pool handback (mirrors Android's). Removes
-     * the end observer so a pooled or dropped instance never leaks it, and
-     * clears [currentUri] so the next acquire re-loads even the same URI.
+     * Reset to a clean state for a pool handback (mirrors Android's). Removes the
+     * end observer so a pooled or dropped instance never leaks it, and clears
+     * [currentUri] so the next acquire re-loads even the same URI.
      */
     internal fun resetForPool() {
         avPlayer.pause()
@@ -207,9 +298,7 @@ actual class VideoPlayer internal constructor(
 /**
  * iOS actual for [VideoPlayerPool]. AVPlayer construction is cheap on iOS
  * (no MediaCodec analogue) so the pool is best-effort — sub-pools cap at
- * [DEFAULT_MAX_SIZE] and overflow just allocates fresh instances. The
- * `muted`-flag bookkeeping mirrors Android's API even though AVPlayer's
- * mute is a runtime flag (no audio-renderer split).
+ * [DEFAULT_MAX_SIZE] and overflow just allocates fresh instances.
  */
 actual class VideoPlayerPool {
     private val mutedAvailable = ArrayDeque<VideoPlayer>()
@@ -224,9 +313,6 @@ actual class VideoPlayerPool {
     }
 
     actual fun release(player: VideoPlayer, muted: Boolean) {
-        // resetForPool stops playback, clears the item and removes the end
-        // observer — so an overflow instance that isn't pooled is dropped
-        // clean (no leaked observer).
         player.resetForPool()
         val pool = if (muted) mutedAvailable else audioAvailable
         if (pool.size < DEFAULT_MAX_SIZE) pool.addLast(player)
@@ -242,43 +328,12 @@ actual class VideoPlayerPool {
 }
 
 /**
- * iOS actual for [VideoPlayerView]. Hosts an `AVPlayerLayer` inside a `UIView`
- * via `UIKitView`. The layer's `videoGravity` maps [VideoResizeMode] onto
- * `AVLayerVideoGravity.resizeAspect` / `resizeAspectFill`.
- *
- * A coroutine pumps [VideoPlayer.pollSync] every [POLL_INTERVAL_MS] while
- * attached — AVPlayer has no push updates wired (KVO deferred), so without it
- * every state flow (isPlaying / playbackState / duration / firstFrame) would
- * only refresh on a chance recomposition of THIS node, which never happens
- * during steady playback. The controls' slider, play/pause glyph, duration
- * label and buffering overlay all read those flows. First-frame is approximated
- * via `AVPlayerLayer.readyForDisplay` on the same tick.
+ * iOS actual for [VideoPlayerView] — a pure-Compose [Image] fed by the manual
+ * frame pump (see [VideoPlayer] KDoc for why no UIKit interop is used). A
+ * background coroutine ticks [VideoPlayer.pollSync] (state) and
+ * [VideoPlayer.copyFrameBitmap] (picture) at [FRAME_INTERVAL_MS]; the latter is a
+ * no-op while paused (no new pixel buffer), so the last frame simply persists.
  */
-/**
- * UIView whose **backing layer IS the AVPlayerLayer** (via the `+layerClass`
- * override). This is the canonical iOS video-view pattern and the robust choice
- * inside CMP interop:
- *
- *  - The system's CALayer video receiver (`FigUseVideoReceiverForCALayer`)
- *    targets the view's own backing layer, so the decoded frames actually
- *    composite — an AVPlayerLayer added as a *sublayer* of a generic UIView
- *    rendered transparent here.
- *  - A backing layer always tracks the view's bounds, so there's no manual
- *    frame-sync to get wrong (the deprecated UIKitView ignores `onResize`, and
- *    its `update` runs pre-layout — both dead ends we hit before).
- *
- * Kotlin/Native overrides the ObjC class method `+layerClass` by having the
- * companion extend [UIViewMeta].
- */
-@OptIn(BetaInteropApi::class)
-private class PlayerContainerView : UIView(frame = CGRectMake(0.0, 0.0, 1.0, 1.0)) {
-    companion object : UIViewMeta() {
-        override fun layerClass() = AVPlayerLayer
-    }
-
-    val playerLayer: AVPlayerLayer get() = layer as AVPlayerLayer
-}
-
 @Composable
 actual fun VideoPlayerView(
     player: VideoPlayer,
@@ -286,29 +341,35 @@ actual fun VideoPlayerView(
     aspectRatio: Float,
     resizeMode: VideoResizeMode,
 ) {
-    val view = remember(player) {
-        PlayerContainerView().apply {
-            playerLayer.player = player.avPlayer
-            playerLayer.videoGravity = when (resizeMode) {
-                VideoResizeMode.Fit -> AVLayerVideoGravityResizeAspect
-                VideoResizeMode.Zoom -> AVLayerVideoGravityResizeAspectFill
+    var frame by remember(player) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(player) {
+        // Off the main thread: the per-frame pixel copy + Skia raster would jank
+        // the UI at video frame rate. Compose snapshot-state writes are safe from
+        // a background thread.
+        withContext(Dispatchers.Default) {
+            while (isActive) {
+                player.pollSync()
+                player.copyFrameBitmap()?.let {
+                    frame = it
+                    player.markFirstFrame()
+                }
+                delay(FRAME_INTERVAL_MS)
             }
         }
     }
-    UIKitView(
-        modifier = modifier,
-        factory = { view },
-    )
-    LaunchedEffect(player) {
-        while (isActive) {
-            player.pollSync()
-            if (view.playerLayer.readyForDisplay) player.markFirstFrame()
-            delay(POLL_INTERVAL_MS)
-        }
+    val f = frame
+    if (f != null) {
+        Image(
+            bitmap = f,
+            contentDescription = null,
+            modifier = modifier,
+            contentScale = if (resizeMode == VideoResizeMode.Zoom) ContentScale.Crop else ContentScale.Fit,
+        )
+    } else {
+        Box(modifier)
     }
 }
 
-// 150 ms keeps the play/pause glyph, duration and buffering overlay visually
-// in step without waking the main queue 10×/s; the slider's position has its
-// own 100 ms loop in VideoPlayerControls.
-private const val POLL_INTERVAL_MS = 150L
+// ~30 fps. Drives both the picture pump and the state poll; copyFrameBitmap is a
+// cheap no-op when there's no new decoded frame (paused / between frames).
+private const val FRAME_INTERVAL_MS = 33L
